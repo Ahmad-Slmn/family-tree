@@ -60,6 +60,7 @@ const familiesData = {
         children: [
           { name: "آدام", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } },
           { name: "ابَكُرِى", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } },
+          { name: "أبَكُرِي", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } },
           { name: "مَلْ علي", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } },
           { name: "مَلْ سِنِّي", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } },
           { name: "محمد نور", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } },
