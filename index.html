@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>شجرة العائلة متعددة</title>
+    <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+    <!-- نافذة تسجيل الدخول -->
+    <div id="loginPopup" class="login-popup active">
+        <form id="loginForm" class="login-box">
+            <h2>تسجيل الدخول</h2>
+            <div class="password-wrapper" style="position: relative;">
+                <input type="password" id="passwordInput" placeholder="أدخل كلمة المرور" required />
+                <span id="togglePassword" class="toggle-password" title="إظهار/إخفاء كلمة المرور">👁️</span>
+                <div id="loginMessage"></div>
+            </div>
+
+            <button type="submit">دخول</button>
+        </form>
+    </div>
+
+    <!-- زر الخروج -->
+    <button id="logoutBtn" class="logout-btn" style="display: none;">خروج</button>
+
+    <!-- نافذة تأكيد الخروج -->
+    <div id="confirmLogout" class="confirm-logout">
+        <div class="confirm-box">
+            <p>هل أنت متأكد أنك تريد تسجيل الخروج؟</p>
+            <button id="yesLogout">نعم</button>
+            <button id="noLogout">لا</button>
+        </div>
+    </div>
+
+    <div id="themeButtons" class="theme-buttons">
+        <!-- أزرار الثيم -->
+        <button class="theme-button" data-theme="dark" title="الداكن" style="--color: #333;"></button>
+        <button class="theme-button" data-theme="minimal" title="الغروب" style="--color: #d81b60;"></button>
+        <button class="theme-button" data-theme="elegant" title="المحيط" style="--color: #0277bd;"></button>
+        <button class="theme-button" data-theme="corporate" title="الغابة" style="--color: #2e7d32;"></button>
+        <button class="theme-button active-theme" data-theme="default" title="النمط الرئيسي" style="--color: #f0c000;"></button>
+    </div>
+
+    <div id="familyButtons" class="family-buttons">
+        <!-- أزرار اختيار العائلة -->
+        <button class="family-button active-family" data-family="family1">عائلة سَيْدِنا</button>
+        <button class="family-button" data-family="family2">عائلة كُبُرَ زين</button>
+    </div>
+
+    <div class="container">
+        <header class="site-header">
+            <h1 class="site-title">شجرة العائلة</h1>
+            <p class="site-subtitle" id="treeTitle">عائلة سَيْدِنا</p>
+        </header>
+        <section id="familyTree" class="family-tree"></section>
+    </div>
+
+    <!-- نافذة السيرة الذاتية -->
+    <div id="bioModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h2 id="modalName"></h2>
+                    <span id="modalRole" class="role-label"></span>
+                </div>
+                <button class="close-button" aria-label="إغلاق" id="closeModal">×</button>
+            </div>
+            <div id="modalContent" class="modal-body"></div>
+        </div>
+    </div>
+
+
+    <script src="script.js"></script>
+</body>
+
+</html>
