@@ -549,7 +549,6 @@ section > div:last-of-type {
     flex-direction: column;
     align-items: center;
     padding: 2rem;
-    margin: 1rem;
     background: var(--card-bg);
     border-radius: 1rem;
     width: fit-content;
