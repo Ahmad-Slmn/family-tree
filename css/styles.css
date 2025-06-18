@@ -662,9 +662,13 @@ section > div:last-of-type {
 }
 
 /* == عدادات الأحفاد == */
-
+.grandson .wife-count{
+    right: -10px
+}
 .grandson .sibling-counter,
-.grandson .countBox {
+.grandson .wife-count,
+.grandson .Create_Children_CountBox
+{
     position: absolute;
     top: 0;
     padding: 6px 14px;
@@ -678,6 +682,28 @@ section > div:last-of-type {
     text-align: left;
 }
 
+.grandson .Create_Children_CountBox{
+    top: 23px
+}
+
+.grandson .Create_Children_CountBox {
+    right: -10px;
+    text-align: right;
+}
+
+.grandson .Create_Children_CountBox > p {
+    padding-bottom: 3px;
+}
+
+.grandson .Create_Children_CountBox > p .label {
+    color: var(--title-color);
+}
+
+.grandson .Create_Children_CountBox > p .value {
+    color: var(--text-main);
+}
+
+
 .grandson .sibling-counter > p {
     color: var(--title-color);
     padding-bottom: 3px;
@@ -686,24 +712,6 @@ section > div:last-of-type {
 .grandson .sibling-counter > p strong {
     color: var(--text-main);
 }
-
-.grandson .countBox {
-    right: -10px;
-    text-align: right;
-}
-
-.grandson .countBox > p {
-    padding-bottom: 3px;
-}
-
-.grandson .countBox > p .label {
-    color: var(--title-color);
-}
-
-.grandson .countBox > p .value {
-    color: var(--text-main);
-}
-
 /* ===========================
    نافذة معلومات السيرة (Modal)
    =========================== */

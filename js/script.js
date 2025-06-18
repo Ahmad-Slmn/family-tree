@@ -43,6 +43,13 @@ const familiesData = {
           { name: "زينفة" },
           { name: "مُرْمَ" },
           { name: "جُلّي" }
+        ],
+        
+        wives: [
+          { name: "مَرْ موسى رَوْ" },
+          { name: "زهرة عَسْبَلَّ بُلْجي" },
+          { name: "فاطمة علي عبد الكريم" },
+          { name: "كُري بَتُرَنْ" }
         ]
       }
     },
@@ -59,8 +66,7 @@ const familiesData = {
         },
         children: [
           { name: "آدام", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } },
-          { name: "ابَكُرِى", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } },
-          { name: "أبَكُرِي", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } },
+          { name: "أبَكُرِى", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } },
           { name: "مَلْ علي", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } },
           { name: "مَلْ سِنِّي", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } },
           { name: "محمد نور", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } },
@@ -146,7 +152,7 @@ const familiesData = {
       }
     },
     grandson: {
-      name: "محمد",
+      name: "كُبُرَ زين",
       role: "الحفيد",
       bio: {
         description: "مؤسس العائلة وحامل إرثها العريق",
@@ -167,6 +173,13 @@ const familiesData = {
           { name: "مَرْمَ فُلْجِى" },
           { name: "أمِنَة" },
           { name: "جَنّبَ" }
+        ],
+        
+         wives: [
+          { name: "أمِري علي دُو" },
+          { name: "زينفة مري" },
+          { name: "بِنْتِي آدم ميني" },
+          { name: "كُرِي بُكِنِّ كُبُرِي" }
         ]
       }
     },
@@ -302,16 +315,21 @@ function showDetails(person) {
     if (bio.achievements) html += `<div><h3>الإنجازات</h3><ul>${bio.achievements.map(a => `<li>${a}</li>`).join('')}</ul></div>`;
     if (bio.hobbies) html += `<div><h3>الهوايات</h3><div class="hobbies">${bio.hobbies.map(h => `<span class="hobby">${h}</span>`).join('')}</div></div>`;
 
-  ['siblingsBrothers', 'siblingsSisters'].forEach(key => {
-        if (bio[key]?.length) {
-            const label = key === 'siblingsBrothers' ? 'الإخوة' : 'الأخوات';
-            html += `
+['siblingsBrothers', 'siblingsSisters', 'wives'].forEach(key => {
+    if (bio[key]?.length) {
+        let label = '';
+        if (key === 'siblingsBrothers') label = 'الإخوة';
+        else if (key === 'siblingsSisters') label = 'الأخوات';
+        else if (key === 'wives') label = 'الزوجات';
+
+        html += `
         <div>
           <h3>${label}: <span class="count">(${bio[key].length})</span></h3>
           <ul>${bio[key].map(s => `<li>${s.name}</li>`).join('')}</ul>
         </div>`;
-        }
-    });
+    }
+});
+
 
     // أبناء وبنات الحفيد
     if (person.role === 'الحفيد') {
@@ -457,7 +475,8 @@ const countSiblings = () => {
     const g = familiesData[currentFamilyKey].grandson.bio;
     return {
         brothers: g.siblingsBrothers?.length || 0,
-        sisters: g.siblingsSisters?.length || 0
+        sisters: g.siblingsSisters?.length || 0,
+        wives: g.siblingsSisters?.length || 0
     };
 };
 
@@ -484,13 +503,13 @@ function countChildren(fam) {
 }
 
 // إنشاء صندوق عدد الأبناء
-const createCountBox = ({
+const Create_Children_CountBox = ({
     sons,
     daughters,
     total
 }) => {
     const b = document.createElement('div');
-    b.className = 'countBox';
+    b.className = 'Create_Children_CountBox';
     b.innerHTML = `
     <p><span class="label">الأبناء: </span><span class="value">${sons}</span></p>
     <p><span class="label">البنات: </span><span class="value">${daughters}</span></p>
@@ -534,8 +553,19 @@ function drawFamilyTree() {
         const card = createCard(person, cardClass);
 
         if (isGrandson) {
-            card.append(createCountBox(countChildren(fam)));
+          
+          // عداد الإخوة والأخوات
             card.append(createSiblingCounter(countSiblings()));
+           // إضافة عداد الزوجات
+            const wivesCount = fam.wives.length;
+            const wivesCounter = document.createElement('div');
+            wivesCounter.className = 'wife-count';
+            wivesCounter.innerHTML = `
+                <p><span class="label">الزوجات: </span><span class="value">${wivesCount}</span></p>
+            `;
+            card.append(wivesCounter);
+            // عداد الأبناء والبنات الإجمالي
+            card.append(Create_Children_CountBox(countChildren(fam)));
         }
 
         generation.append(card);
@@ -550,6 +580,7 @@ function drawFamilyTree() {
     tree.append(wivesSection);
 }
 
+
 // ==========================================
 // إدارة المودال
 // ==========================================
@@ -559,21 +590,28 @@ window.onclick = e => {
 };
 
 // ==========================================
-// إعدادات الدخول
+// إعدادات الدخول (مع تشفير كلمة المرور)
 // ==========================================
-const PASSWORD = '0055';
+const HASHED_PASSWORD = '44370fa6b87e60068a64f71bf6f3b251318cbf00df4b7d29bf740c3cc6fcfada';
 
-function checkLoginStatus() {
+// دالة التشفير باستخدام SHA-256
+async function hashPassword(password) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function checkLoginStatus() {
     const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
     const lastPassword = localStorage.getItem('loginPassword');
     const timestamp = parseInt(localStorage.getItem('loginTimestamp'), 10);
     const now = Date.now();
 
-    // تسجيل خروج تلقائي بعد 24 ساعة أو تغيير كلمة المرور
     if (isLoggedIn) {
         const hoursPassed = (now - timestamp) / (1000 * 60 * 60);
-        if (lastPassword !== PASSWORD || hoursPassed >= 24) {
-            // حذف بيانات تسجيل الدخول فقط، مع الاحتفاظ بالنمط المختار والبيانات الأخرى
+        if (lastPassword !== HASHED_PASSWORD || hoursPassed >= 24) {
             localStorage.removeItem('isLoggedIn');
             localStorage.removeItem('loginPassword');
             localStorage.removeItem('loginTimestamp');
@@ -587,10 +625,7 @@ function checkLoginStatus() {
     document.getElementById('logoutBtn').style.display = isLoggedIn ? 'block' : 'none';
 }
 
-// ==========================================
-// حدث تسجيل الدخول
-// ==========================================
-document.getElementById('loginForm').addEventListener('submit', e => {
+document.getElementById('loginForm').addEventListener('submit', async e => {
     e.preventDefault();
 
     const input = document.getElementById('passwordInput');
@@ -610,10 +645,12 @@ document.getElementById('loginForm').addEventListener('submit', e => {
         return;
     }
 
-    if (input.value === PASSWORD) {
+    const hashedInput = await hashPassword(input.value);
+
+    if (hashedInput === HASHED_PASSWORD) {
         localStorage.setItem('isLoggedIn', 'true');
         localStorage.setItem('loginTimestamp', Date.now().toString());
-        localStorage.setItem('loginPassword', PASSWORD);
+        localStorage.setItem('loginPassword', HASHED_PASSWORD);
         input.classList.remove('input-error');
         checkLoginStatus();
         drawFamilyTree?.();
@@ -627,6 +664,7 @@ document.getElementById('loginForm').addEventListener('submit', e => {
         }, 3000);
     }
 });
+
 
 // ==========================================
 // تسجيل الخروج
