@@ -1,4 +1,4 @@
-// بيانات عائلتين
+// بيانات العائلتين
 const familiesData = {
   family1: {
     grandfather: {
@@ -34,17 +34,8 @@ const familiesData = {
         description: "مؤسس العائلة وحامل إرثها العريق",
         education: "حافظ لكتاب الله",
         remark: "سَيْدِنا ومصطفى أشقاء",
-        siblingsBrothers: [
-          { name: "مصطفى" },
-          { name: "مَلْ لَمين" }
-        ],
-        siblingsSisters: [
-          { name: "رُوا" },
-          { name: "زينفة" },
-          { name: "مُرْمَ" },
-          { name: "جُلّي" }
-        ],
-        
+        siblingsBrothers: [{ name: "مصطفى" }, { name: "مَلْ لَمين" }],
+        siblingsSisters: [{ name: "رُوا" }, { name: "زينفة" }, { name: "مُرْمَ" }, { name: "جُلّي" }],
         wives: [
           { name: "مَرْ موسى رَوْ" },
           { name: "زهرة عَسْبَلَّ بُلْجي" },
@@ -54,30 +45,14 @@ const familiesData = {
       }
     },
     wives: [
-      // الزوجة الأولى
       {
         name: "مَرْ موسى رَوْ",
         role: "الزوجة الأولى",
-        bio: {
-          fatherName: "مصطفى",
-          motherName: "-",
-          tribe: "قٌرْعان",
-          clan: "كُشى"
-        },
+        bio: { fatherName: "مصطفى", motherName: "-", tribe: "قٌرْعان", clan: "كُشى" },
         children: [
-          { name: "آدام", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } },
-          { name: "أبَكُرِى", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } },
-          { name: "مَلْ علي", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } },
-          { name: "مَلْ سِنِّي", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } },
-          { name: "محمد نور", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } },
-          { name: "إدريس", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } },
-          { name: "زهرة", role: "بنت", bio: { birthYear: "-", birthPlace: "-" } },
-          { name: "لُكِي", role: "بنت", bio: { birthYear: "-", birthPlace: "-" } },
-          { name: "فاطمة", role: "بنت", bio: { birthYear: "-", birthPlace: "-" } }
-        ]
+          "آدام", "أبَكُرِى", "مَلْ علي", "مَلْ سِنِّي", "محمد نور", "إدريس", "زهرة", "لُكِي", "فاطمة"
+        ].map(name => ({ name, role: name === "زهرة" || name === "لُكِي" || name === "فاطمة" ? "بنت" : "ابن", bio: { birthYear: "-", birthPlace: "-" } }))
       },
-
-      // الزوجة الثانية
       {
         name: "زهرة عَسْبَلَّ بُلْجي",
         role: "الزوجة الثانية",
@@ -94,38 +69,21 @@ const familiesData = {
           { name: "أبكر", role: "ابن", bio: { birthYear: "-", birthPlace: "-", remark: "جدي من جهة الأم" } }
         ]
       },
-
-      // الزوجة الثالثة
       {
         name: "فاطمة علي عبد الكريم",
         role: "الزوجة الثالثة",
-        bio: {
-          fatherName: "علي",
-          motherName: "-",
-          tribe: "قٌرْعان",
-          clan: "مِلاَّ",
-          remark: "تزوجها أخوه مصطفى بعد وفاته"
-        },
+        bio: { fatherName: "علي", motherName: "-", tribe: "قٌرْعان", clan: "مِلاَّ", remark: "تزوجها أخوه مصطفى بعد وفاته" },
         children: [
           { name: "محمد", role: "ابن", bio: { birthYear: "-", birthPlace: "-" }, education: "حافظ لكتاب الله" },
           { name: "عبد الرحمن", role: "ابن", bio: { birthYear: "-", birthPlace: "-", cognomen: "أَدِّ" } },
           { name: "هرةَ شو", role: "بنت", bio: { birthYear: "-", birthPlace: "-" } }
         ]
       },
-
-      // الزوجة الرابعة
       {
         name: "كُري بَتُرَنْ",
         role: "الزوجة الرابعة",
-        bio: {
-          fatherName: "بَتُرَنْ",
-          motherName: "-",
-          tribe: "قٌرْعان",
-          clan: "بَرِيَ"
-        },
-        children: [
-          { name: "بشير", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } }
-        ]
+        bio: { fatherName: "بَتُرَنْ", motherName: "-", tribe: "قٌرْعان", clan: "بَرِيَ" },
+        children: [{ name: "بشير", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } }]
       }
     ]
   },
@@ -164,18 +122,9 @@ const familiesData = {
         motherClan: "ضولو",
         education: "حافظ لكتاب الله",
         remark: "هو وأبوه وجده وأبو جده كلهم حُفَّاظ لكتاب الله",
-        siblingsBrothers: [
-          { name: "سليمان" },
-          { name: "عمر شُوِي" }
-        ],
-        siblingsSisters: [
-          { name: "كُرِي" },
-          { name: "مَرْمَ فُلْجِى" },
-          { name: "أمِنَة" },
-          { name: "جَنّبَ" }
-        ],
-        
-         wives: [
+        siblingsBrothers: [{ name: "سليمان" }, { name: "عمر شُوِي" }],
+        siblingsSisters: [{ name: "كُرِي" }, { name: "مَرْمَ فُلْجِى" }, { name: "أمِنَة" }, { name: "جَنّبَ" }],
+        wives: [
           { name: "أمِري علي دُو" },
           { name: "زينفة مري" },
           { name: "بِنْتِي آدم ميني" },
@@ -184,38 +133,22 @@ const familiesData = {
       }
     },
     wives: [
-        
-    // الزوجة الأولى
       {
         name: "أمِري علي دُو",
         role: "الزوجة الأولى",
-        bio: {
-          fatherName: "علي",
-          motherName: "-",
-          tribe: "قٌرْعان",
-          clan: "ضولو"
-        },
+        bio: { fatherName: "علي", motherName: "-", tribe: "قٌرْعان", clan: "ضولو" },
         children: [
-          { name: "إيطار", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } },
-          { name: "مصطفى قوني", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } },
-          { name: "كُبُرى", role: "بنت", bio: { birthYear: "-", birthPlace: "-", remark: "ليس لها أبناء" } },
-          { name: "بِنْتِي", role: "بنت", bio: { birthYear: "-", birthPlace: "-" } },
-          { name: "ميمونة", role: "بنت", bio: { birthYear: "-", birthPlace: "-" } },
-          { name: "ديرو", role: "بنت", bio: { birthYear: "-", birthPlace: "-" } },
-          { name: "شُو", role: "بنت", bio: { birthYear: "-", birthPlace: "-", remark: "ليس لها أبناء" } }
-        ]
+          "إيطار", "مصطفى قوني", "كُبُرى", "بِنْتِي", "ميمونة", "ديرو", "شُو"
+        ].map(name => ({
+          name,
+          role: ["كُبُرى", "شُو"].includes(name) ? "بنت" : (name === "بِنْتِي" ? "بنت" : "ابن"),
+          bio: { birthYear: "-", birthPlace: "-", ...(name === "كُبُرى" || name === "شُو" ? { remark: "ليس لها أبناء" } : {}) }
+        }))
       },
-        
-    // الزوجة الثانية
       {
         name: "زينفة مري",
         role: "الزوجة الثانية",
-        bio: {
-          fatherName: "حسن",
-          motherName: "-",
-          tribe: "قٌرْعان",
-          clan: "كُدِرى"
-        },
+        bio: { fatherName: "حسن", motherName: "-", tribe: "قٌرْعان", clan: "كُدِرى" },
         children: [
           { name: "مَلْ لَمِين", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } },
           { name: "مَلْ حسن", role: "ابن", bio: { birthYear: "-", birthPlace: "-", remark: "هو أبو ما لا قا" } },
@@ -227,29 +160,20 @@ const familiesData = {
           { name: "أمِنَة", role: "بنت", bio: { birthYear: "-", birthPlace: "-", remark: "أمِنَة هي أم مَلْ علي" } }
         ]
       },
-        
-    // الزوجة الثالثة
       {
         name: "بِنْتِي آدم ميني",
         role: "الزوجة الثالثة",
-        bio: {
-          fatherName: "آدم",
-          motherName: "-",
-          tribe: "قٌرْعان",
-          clan: "مُوسَوْرَوْ"
-        },
+        bio: { fatherName: "آدم", motherName: "-", tribe: "قٌرْعان", clan: "مُوسَوْرَوْ" },
         children: [
           { name: "عمر", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } },
           { name: "آدم مِلي", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } },
           { name: "زهرة", role: "بنت", bio: { birthYear: "-", birthPlace: "-", remark: "ليس لها أبناء" } },
-          { name: "فاطمة", role: "بنت", bio: { birthYear: "-", birthPlace: "-", cognomen: "مشهورة ب لَبو", remark: "ليس لها أبناء"  } },
+          { name: "فاطمة", role: "بنت", bio: { birthYear: "-", birthPlace: "-", cognomen: "مشهورة ب لَبو", remark: "ليس لها أبناء" } },
           { name: "رُوا", role: "بنت", bio: { birthYear: "-", birthPlace: "-" } },
           { name: "بَتُل", role: "بنت", bio: { birthYear: "-", birthPlace: "-" } },
-          { name: "حمزةَ", role: "بنت", bio: { birthYear: "-", birthPlace: "-", remark: "ليس لها أبناء"  } },
+          { name: "حمزةَ", role: "بنت", bio: { birthYear: "-", birthPlace: "-", remark: "ليس لها أبناء" } }
         ]
       },
-        
-    // الزوجة الرابعة
       {
         name: "كُرِي بُكِنِّ كُبُرِي",
         role: "الزوجة الرابعة",
@@ -262,15 +186,29 @@ const familiesData = {
         },
         children: [
           { name: "بشير", role: "ابن", bio: { birthYear: "-", birthPlace: "-" } },
-          { name: "مريم", role: "بنت", bio: { birthYear: "-", birthPlace: "-", remark: "هي جدتي من جهة الأب" } },
+          { name: "مريم", role: "بنت", bio: { birthYear: "-", birthPlace: "-", remark: "هي جدتي من جهة الأب" } }
         ]
-      },
+      }
     ]
   }
 };
 
 // المفتاح الافتراضي للعائلة المختارة
 let currentFamilyKey = localStorage.getItem('selectedFamily') || 'family1';
+
+// تسميات الحقول للسيرة الذاتية
+const LABELS = {
+    fullName: 'الإسم',
+    cognomen: 'اللقب',
+    fatherName: 'اسم الأب',
+    tribe: 'القبيلة',
+    clan: 'العشيرة',
+    motherName: 'اسم الأم',
+    motherClan: 'عشيرة الأم',
+    birthYear: 'تاريخ الميلاد',
+    birthPlace: 'مكان الميلاد',
+    occupation: 'المهنة'
+};
 
 // إنشاء بطاقة عضو
 function createCard(person, className) {
@@ -292,109 +230,34 @@ function createConnector() {
     return line;
 }
 
-// عرض السيرة الذاتية
-function showDetails(person) {
-    const modal = document.getElementById('bioModal');
-    document.getElementById('modalName').textContent = person.name;
-    document.getElementById('modalRole').textContent = person.role;
+// إنشاء خط (رأسي أو أفقي) أو وصلات
+const createLine = (className) => {
+    const el = document.createElement('div');
+    el.className = className;
+    return el;
+};
 
-    const bio = person.bio;
-    let html = bio.description ? `<p class="bio-description">${bio.description}</p>` : '';
+// إنشاء خط رأسياً بين الزوجة والأبناء
+const createVerticalLineBetweenWifeAndChildren = () => createLine('vertical-line');
 
-    html += `<div class="bio-info">`;
-    const fields = ['fullName', 'cognomen', 'fatherName', 'tribe', 'clan', 'motherName', 'motherClan', 'birthYear', 'birthPlace', 'occupation'];
-    fields.forEach(field => {
-        if (bio[field]) {
-            html += `<div class="bio-field"><strong>${getLabel(field)}:</strong><span>${bio[field]}</span></div>`;
-        }
-    });
-    html += `</div><div class="bio-details">`;
+// إنشاء وصلات الأبناء تحت الزوجة
+function createWifeChildrenConnector(count) {
+    const wrap = document.createElement('div');
+    wrap.className = 'connector-wrapper';
+    wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;';
 
-    if (bio.remark) html += `<div><h3>ملاحظة:</h3><p>${bio.remark}</p></div>`;
-    if (bio.education) html += `<div><h3>التعليم:</h3><p>${bio.education}</p></div>`;
-    if (bio.achievements) html += `<div><h3>الإنجازات</h3><ul>${bio.achievements.map(a => `<li>${a}</li>`).join('')}</ul></div>`;
-    if (bio.hobbies) html += `<div><h3>الهوايات</h3><div class="hobbies">${bio.hobbies.map(h => `<span class="hobby">${h}</span>`).join('')}</div></div>`;
+    wrap.append(createLine('vertical-line arrow-down'));
 
-['siblingsBrothers', 'siblingsSisters', 'wives'].forEach(key => {
-    if (bio[key]?.length) {
-        let label = '';
-        if (key === 'siblingsBrothers') label = 'الإخوة';
-        else if (key === 'siblingsSisters') label = 'الأخوات';
-        else if (key === 'wives') label = 'الزوجات';
-
-        html += `
-        <div>
-          <h3>${label}: <span class="count">(${bio[key].length})</span></h3>
-          <ul>${bio[key].map(s => `<li>${s.name}</li>`).join('')}</ul>
-        </div>`;
+    const hLine = createLine('horizontal-children-line');
+    hLine.style.cssText = `display:grid;grid-template-columns:repeat(${count},1fr);width:100%;`;
+    for (let i = 0; i < count; i++) {
+        hLine.append(createLine('child-connector'));
     }
-});
-
-
-    // أبناء وبنات الحفيد
-    if (person.role === 'الحفيد') {
-        const fam = familiesData[currentFamilyKey];
-        const allChildren = fam.wives.flatMap(wife => wife.children || []);
-        const sons = allChildren.filter(c => c.role === 'ابن');
-        const daughters = allChildren.filter(c => c.role === 'بنت');
-
-        if (sons.length || daughters.length) {
-            html += `<div class="bio-children">`;
-            if (sons.length) {
-                html += `<div><h3>الأبناء: <span class="count">(${sons.length})</span></h3><ul>${sons.map(s => `<li>${s.name}</li>`).join('')}</ul></div>`;
-            }
-            if (daughters.length) {
-                html += `<div><h3>البنات: <span class="count">(${daughters.length})</span></h3><ul>${daughters.map(d => `<li>${d.name}</li>`).join('')}</ul></div>`;
-            }
-            html += `</div>`;
-        }
-    }
-
-    // أبناء وبنات الزوجة
-    if (Array.isArray(person.children)) {
-        const sons = person.children.filter(c => c.role === 'ابن');
-        const daughters = person.children.filter(c => c.role === 'بنت');
-
-        html += `<div>`;
-        html += `<h3><span class="label">الأبناء:</span> <span class="count">(${sons.length})</span></h3>`;
-        if (sons.length) html += `<ul>${sons.map(s => `<li>${s.name}</li>`).join('')}</ul>`;
-        html += `</div>`;
-
-        html += `<div>`;
-        html += `<h3><span class="label">البنات:</span> <span class="count">(${daughters.length})</span></h3>`;
-        if (daughters.length) html += `<ul>${daughters.map(d => `<li>${d.name}</li>`).join('')}</ul>`;
-        html += `</div>`;
-    }
-
-    html += `</div>`;
-    document.getElementById('modalContent').innerHTML = html;
-    modal.classList.add('active');
+    wrap.append(hLine);
+    return wrap;
 }
 
-function getLabel(field) {
-    const labels = {
-        fullName: 'الإسم',
-        cognomen: 'اللقب',
-        tribe: 'القبيلة',
-        clan: 'العشيرة',
-        motherName: 'اسم الأم',
-        motherClan: 'عشيرة الأم',
-        fatherName: 'اسم الأب',
-        birthYear: 'تاريخ الميلاد',
-        birthPlace: 'مكان الميلاد',
-        occupation: 'المهنة'
-    };
-    return labels[field] || field;
-}
-
-// خط رأسي بين الزوجة والأبناء
-function createVerticalLineBetweenWifeAndChildren() {
-    const line = document.createElement('div');
-    line.className = 'vertical-line';
-    return line;
-}
-
-// إنشاء قسم الزوجة
+// إنشاء قسم الزوجة مع عداد الأبناء والبنات
 function createWifeSection(wife, index) {
     const sec = document.createElement('div');
     sec.className = 'wife-section';
@@ -414,8 +277,8 @@ function createWifeSection(wife, index) {
     });
 
     const total = count.sons + count.daughters;
-
     const wifeCard = createCard(wife, 'wife');
+
     const counterBox = document.createElement('div');
     counterBox.className = 'wife-counter';
     counterBox.innerHTML = `
@@ -423,6 +286,7 @@ function createWifeSection(wife, index) {
     <p class="count-item"><span class="count-label">البنات:</span> <span class="count-value">${count.daughters}</span></p>
     <p class="count-item"><span class="count-label">الإجمال:</span> <span class="count-value">${total}</span></p>
   `;
+
     wifeCard.append(counterBox);
     sec.append(wifeCard);
     sec.append(createVerticalLineBetweenWifeAndChildren());
@@ -430,68 +294,117 @@ function createWifeSection(wife, index) {
 
     const grid = document.createElement('div');
     grid.className = 'children-grid';
-
-    wife.children.forEach(ch => {
+    wife.children.forEach(child => {
         const wrapper = document.createElement('div');
         wrapper.className = 'relative';
-        wrapper.append(createCard(ch, ch.role === 'ابن' ? 'son' : 'daughter'));
+        wrapper.append(createCard(child, child.role === 'ابن' ? 'son' : 'daughter'));
         grid.append(wrapper);
     });
-
     sec.append(grid);
     return sec;
 }
 
-// رسم خط الأبناء من الزوجة
-function createWifeChildrenConnector(count) {
-    const wrap = document.createElement('div');
-    wrap.className = 'connector-wrapper';
-    wrap.style.display = 'flex';
-    wrap.style.flexDirection = 'column';
-    wrap.style.alignItems = 'center';
+// عرض السيرة الذاتية في المودال
+function showDetails(person) {
+    const modal = document.getElementById('bioModal');
+    document.getElementById('modalName').textContent = person.name;
+    document.getElementById('modalRole').textContent = person.role;
 
-    const v = document.createElement('div');
-    v.className = 'vertical-line arrow-down';
-    wrap.append(v);
+    const bio = person.bio || {};
+    let html = bio.description ? `<p class="bio-description">${bio.description}</p>` : '';
 
-    const h = document.createElement('div');
-    h.className = 'horizontal-children-line';
-    h.style.display = 'grid';
-    h.style.gridTemplateColumns = `repeat(${count}, 1fr)`;
-    h.style.width = '100%';
+    // معلومات عامة
+    html += '<div class="bio-info">';
+    Object.keys(LABELS).forEach(field => {
+        if (bio[field]) {
+            html += `<div class="bio-field"><strong>${LABELS[field]}:</strong><span>${bio[field]}</span></div>`;
+        }
+    });
+    html += '</div><div class="bio-details">';
 
-    for (let i = 0; i < count; i++) {
-        const seg = document.createElement('div');
-        seg.className = 'child-connector';
-        h.append(seg);
+    // ملاحظات، تعليم، إنجازات، هوايات
+    if (bio.remark) html += `<div><h3>ملاحظة:</h3><p>${bio.remark}</p></div>`;
+    if (bio.education) html += `<div><h3>التعليم:</h3><p>${bio.education}</p></div>`;
+    if (bio.achievements?.length) {
+        html += `<div><h3>الإنجازات</h3><ul>${bio.achievements.map(a => `<li>${a}</li>`).join('')}</ul></div>`;
+    }
+    if (bio.hobbies?.length) {
+        html += `<div><h3>الهوايات</h3><div class="hobbies">${bio.hobbies.map(h => `<span class="hobby">${h}</span>`).join('')}</div></div>`;
     }
 
-    wrap.append(h);
-    return wrap;
+    // إخوة، أخوات، زوجات
+  ['siblingsBrothers', 'siblingsSisters', 'wives'].forEach(key => {
+        if (bio[key]?.length) {
+            const labelsMap = {
+                siblingsBrothers: 'الإخوة',
+                siblingsSisters: 'الأخوات',
+                wives: 'الزوجات'
+            };
+            html += `
+        <div>
+          <h3>${labelsMap[key]}: <span class="count">(${bio[key].length})</span></h3>
+          <ul>${bio[key].map(s => `<li>${s.name}</li>`).join('')}</ul>
+        </div>`;
+        }
+    });
+
+    // أبناء وبنات الحفيد من العائلة الحالية
+    if (person.role === 'الحفيد') {
+        const fam = familiesData[currentFamilyKey];
+        const allChildren = fam.wives.flatMap(w => w.children || []);
+        const sons = allChildren.filter(c => c.role === 'ابن');
+        const daughters = allChildren.filter(c => c.role === 'بنت');
+
+        if (sons.length || daughters.length) {
+            html += `<div class="bio-children">`;
+            if (sons.length) html += `<div><h3>الأبناء: <span class="count">(${sons.length})</span></h3><ul>${sons.map(s => `<li>${s.name}</li>`).join('')}</ul></div>`;
+            if (daughters.length) html += `<div><h3>البنات: <span class="count">(${daughters.length})</span></h3><ul>${daughters.map(d => `<li>${d.name}</li>`).join('')}</ul></div>`;
+            html += `</div>`;
+        }
+    }
+
+    // أبناء وبنات الزوجة
+    if (Array.isArray(person.children)) {
+        const sons = person.children.filter(c => c.role === 'ابن');
+        const daughters = person.children.filter(c => c.role === 'بنت');
+
+        html += `
+      <div>
+        <h3><span class="label">الأبناء:</span> <span class="count">(${sons.length})</span></h3>
+        ${sons.length ? `<ul>${sons.map(s => `<li>${s.name}</li>`).join('')}</ul>` : ''}
+      </div>
+      <div>
+        <h3><span class="label">البنات:</span> <span class="count">(${daughters.length})</span></h3>
+        ${daughters.length ? `<ul>${daughters.map(d => `<li>${d.name}</li>`).join('')}</ul>` : ''}
+      </div>`;
+    }
+
+    html += '</div>';
+    document.getElementById('modalContent').innerHTML = html;
+    modal.classList.add('active');
 }
 
-// عد الإخوة والأخوات
+// عداد الإخوة والأخوات
 const countSiblings = () => {
-    const g = familiesData[currentFamilyKey].grandson.bio;
+    const bio = familiesData[currentFamilyKey]?.grandson?.bio || {};
     return {
-        brothers: g.siblingsBrothers?.length || 0,
-        sisters: g.siblingsSisters?.length || 0,
-        wives: g.siblingsSisters?.length || 0
+        brothers: bio.siblingsBrothers?.length || 0,
+        sisters: bio.siblingsSisters?.length || 0,
+        wives: bio.wives?.length || 0
     };
 };
 
 // عد الأبناء والبنات في العائلة
-function countChildren(fam) {
-    if (!Array.isArray(fam.wives)) return {
+function countChildren(family) {
+    if (!Array.isArray(family.wives)) return {
         sons: 0,
         daughters: 0,
         total: 0
     };
-
-    return fam.wives.reduce((acc, wife) => {
-        (wife.children || []).forEach(child => {
-            if (child.role === 'ابن') acc.sons++;
-            else if (child.role === 'بنت') acc.daughters++;
+    return family.wives.reduce((acc, wife) => {
+        (wife.children || []).forEach(c => {
+            if (c.role === 'ابن') acc.sons++;
+            else if (c.role === 'بنت') acc.daughters++;
         });
         acc.total = acc.sons + acc.daughters;
         return acc;
@@ -508,14 +421,14 @@ const Create_Children_CountBox = ({
     daughters,
     total
 }) => {
-    const b = document.createElement('div');
-    b.className = 'Create_Children_CountBox';
-    b.innerHTML = `
+    const box = document.createElement('div');
+    box.className = 'Create_Children_CountBox';
+    box.innerHTML = `
     <p><span class="label">الأبناء: </span><span class="value">${sons}</span></p>
     <p><span class="label">البنات: </span><span class="value">${daughters}</span></p>
     <p><span class="label">الإجمال: </span><span class="value">${total}</span></p>
   `;
-    return b;
+    return box;
 };
 
 // إنشاء عداد الإخوة والأخوات
@@ -523,13 +436,13 @@ const createSiblingCounter = ({
     brothers,
     sisters
 }) => {
-    const d = document.createElement('div');
-    d.className = 'sibling-counter';
-    d.innerHTML = `
+    const div = document.createElement('div');
+    div.className = 'sibling-counter';
+    div.innerHTML = `
     <p>الإخوة: <strong>${brothers}</strong></p>
     <p>الأخوات: <strong>${sisters}</strong></p>
   `;
-    return d;
+    return div;
 };
 
 // ==========================================
@@ -542,49 +455,55 @@ function drawFamilyTree() {
     const fam = familiesData[currentFamilyKey];
     const ancestors = [fam.grandfather, fam.father, fam.grandson];
 
-    document.getElementById('treeTitle').textContent = currentFamilyKey === 'family1' ? 'عائلة: سَيْدِنا محمد إدريس بُقَرْ' : 'عائلة: كُبُرَ زين موسى قيلي أُبِي';
+    // تحديث عنوان الشجرة حسب العائلة المختارة
+    const titleMap = {
+        family1: 'عائلة: سَيْدِنا محمد إدريس بُقَرْ',
+        family2: 'عائلة: كُبُرَ زين موسى قيلي أُبِي'
+    };
+    document.getElementById('treeTitle').textContent = titleMap[currentFamilyKey] || 'عائلة';
 
-    ancestors.forEach((person, index) => {
+    ancestors.forEach((person, idx) => {
         const generation = document.createElement('div');
         generation.className = 'generation';
 
         const isGrandson = person.role === 'الحفيد';
-        const cardClass = 'ancestor' + (isGrandson ? ' grandson' : '');
-        const card = createCard(person, cardClass);
+        const card = createCard(person, `ancestor${isGrandson ? ' grandson' : ''}`);
 
         if (isGrandson) {
-          
-          // عداد الإخوة والأخوات
             card.append(createSiblingCounter(countSiblings()));
-           // إضافة عداد الزوجات
-            const wivesCount = fam.wives.length;
-            const wivesCounter = document.createElement('div');
-            wivesCounter.className = 'wife-count';
-            wivesCounter.innerHTML = `
-                <p><span class="label">الزوجات: </span><span class="value">${wivesCount}</span></p>
-            `;
-            card.append(wivesCounter);
-            // عداد الأبناء والبنات الإجمالي
+            card.append(createWivesCounter(fam.wives.length));
             card.append(Create_Children_CountBox(countChildren(fam)));
         }
 
         generation.append(card);
-        if (index < ancestors.length - 1) generation.append(createConnector());
+
+        // إضافة الخط الرابط بين الأجيال
+        if (idx < ancestors.length - 1) {
+            generation.append(createConnector());
+        }
+
         tree.append(generation);
     });
 
-    // قسم الزوجات
+    // عرض قسم الزوجات
     const wivesSection = document.createElement('div');
     wivesSection.className = 'generation';
     fam.wives.forEach((wife, i) => wivesSection.append(createWifeSection(wife, i)));
     tree.append(wivesSection);
 }
 
+function createWivesCounter(count) {
+    const div = document.createElement('div');
+    div.className = 'wife-count';
+    div.innerHTML = `<p><span class="label">الزوجات: </span><span class="value">${count}</span></p>`;
+    return div;
+}
 
 // ==========================================
 // إدارة المودال
 // ==========================================
 const closeModal = () => document.getElementById('bioModal').classList.remove('active');
+
 window.onclick = e => {
     if (e.target.classList.contains('modal')) closeModal();
 };
@@ -594,113 +513,94 @@ window.onclick = e => {
 // ==========================================
 const HASHED_PASSWORD = '44370fa6b87e60068a64f71bf6f3b251318cbf00df4b7d29bf740c3cc6fcfada';
 
-// دالة التشفير باستخدام SHA-256
 async function hashPassword(password) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(password);
+    const data = new TextEncoder().encode(password);
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return Array.from(new Uint8Array(hashBuffer))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
 }
 
 async function checkLoginStatus() {
-    const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
-    const lastPassword = localStorage.getItem('loginPassword');
-    const timestamp = parseInt(localStorage.getItem('loginTimestamp'), 10);
-    const now = Date.now();
+    const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true',
+          lastPassword = localStorage.getItem('loginPassword'),
+          timestamp = +localStorage.getItem('loginTimestamp'),
+          hoursPassed = (Date.now() - timestamp) / 36e5;
 
-    if (isLoggedIn) {
-        const hoursPassed = (now - timestamp) / (1000 * 60 * 60);
-        if (lastPassword !== HASHED_PASSWORD || hoursPassed >= 24) {
-            localStorage.removeItem('isLoggedIn');
-            localStorage.removeItem('loginPassword');
-            localStorage.removeItem('loginTimestamp');
-            location.reload();
-            return;
-        }
+    if (isLoggedIn && (lastPassword !== HASHED_PASSWORD || hoursPassed >= 24)) {
+        ['isLoggedIn', 'loginPassword', 'loginTimestamp'].forEach(localStorage.removeItem.bind(localStorage));
+        return location.reload();
     }
 
-    document.getElementById('loginPopup').classList.toggle('active', !isLoggedIn);
-    document.getElementById('familyTree').style.display = isLoggedIn ? 'flex' : 'none';
-    document.getElementById('logoutBtn').style.display = isLoggedIn ? 'block' : 'none';
+    const show = !isLoggedIn;
+    document.getElementById('loginPopup').classList.toggle('active', show);
+    document.getElementById('familyTree').style.display = show ? 'none' : 'flex';
+    document.getElementById('logoutBtn').style.display = show ? 'none' : 'block';
+}
+
+function showError(input, message) {
+    const msgElem = document.getElementById('loginMessage');
+    msgElem.textContent = message;
+    input.classList.add('shake', 'input-error');
+    clearTimeout(window.errorTimeout);
+    window.errorTimeout = setTimeout(() => {
+        msgElem.textContent = '';
+        input.classList.remove('shake', 'input-error');
+    }, 3000);
 }
 
 document.getElementById('loginForm').addEventListener('submit', async e => {
     e.preventDefault();
-
     const input = document.getElementById('passwordInput');
-    const message = document.getElementById('loginMessage');
-
-    message.textContent = '';
     input.classList.remove('shake', 'input-error');
 
     if (!input.value.trim()) {
-        message.textContent = 'يرجى إدخال كلمة المرور.';
-        input.classList.add('shake', 'input-error');
-        clearTimeout(window.errorTimeout);
-        window.errorTimeout = setTimeout(() => {
-            message.textContent = '';
-            input.classList.remove('shake', 'input-error');
-        }, 3000);
+        showError(input, 'يرجى إدخال كلمة المرور.');
         return;
     }
 
     const hashedInput = await hashPassword(input.value);
-
     if (hashedInput === HASHED_PASSWORD) {
         localStorage.setItem('isLoggedIn', 'true');
         localStorage.setItem('loginTimestamp', Date.now().toString());
         localStorage.setItem('loginPassword', HASHED_PASSWORD);
-        input.classList.remove('input-error');
         checkLoginStatus();
-        drawFamilyTree?.();
+        drawFamilyTree();
     } else {
-        message.textContent = 'كلمة المرور غير صحيحة.';
-        input.classList.add('shake', 'input-error');
-        clearTimeout(window.errorTimeout);
-        window.errorTimeout = setTimeout(() => {
-            message.textContent = '';
-            input.classList.remove('shake', 'input-error');
-        }, 3000);
+        showError(input, 'كلمة المرور غير صحيحة.');
     }
 });
-
 
 // ==========================================
 // تسجيل الخروج
 // ==========================================
+const confirmLogoutBox = document.getElementById('confirmLogout');
+const noLogoutBtn = document.getElementById('noLogout');
+
 document.getElementById('logoutBtn').addEventListener('click', () => {
-    const confirmBox = document.getElementById('confirmLogout');
-    const noBtn = document.getElementById('noLogout');
-    confirmBox.classList.add('active');
-    noBtn.focus();
-    noBtn.classList.add('shake');
-    noBtn.addEventListener('animationend', () => noBtn.classList.remove('shake'), {
+    confirmLogoutBox.classList.add('active');
+    noLogoutBtn.focus();
+    noLogoutBtn.classList.add('shake');
+    noLogoutBtn.addEventListener('animationend', () => noLogoutBtn.classList.remove('shake'), {
         once: true
     });
 });
 
 document.getElementById('yesLogout').addEventListener('click', () => {
-    // حذف بيانات تسجيل الدخول فقط، مع الاحتفاظ بالنمط المختار والبيانات الأخرى
-    localStorage.removeItem('isLoggedIn');
-    localStorage.removeItem('loginPassword');
-    localStorage.removeItem('loginTimestamp');
+    ['isLoggedIn', 'loginPassword', 'loginTimestamp'].forEach(key => localStorage.removeItem(key));
     location.reload();
 });
 
 document.getElementById('noLogout').addEventListener('click', () => {
-    document.getElementById('confirmLogout').classList.remove('active');
+    confirmLogoutBox.classList.remove('active');
 });
 
-document.getElementById('confirmLogout').addEventListener('click', e => {
-    const box = document.querySelector('.confirm-box');
-    if (!box.contains(e.target)) {
-        document.getElementById('confirmLogout').classList.remove('active');
-    }
+confirmLogoutBox.addEventListener('click', e => {
+    if (!e.target.closest('.confirm-box')) confirmLogoutBox.classList.remove('active');
 });
 
 // ==========================================
-// التعامل مع زر Enter في إدخال كلمة المرور
+// التعامل مع زر Enter في كلمة المرور
 // ==========================================
 document.getElementById('passwordInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') {
@@ -713,14 +613,12 @@ document.getElementById('passwordInput').addEventListener('keydown', e => {
 // عند تحميل الصفحة
 // ==========================================
 document.addEventListener('DOMContentLoaded', () => {
-    // زر تسجيل الدخول
+    // تفعيل زر الدخول
     const loginBtn = document.querySelector('#loginForm button[type="submit"]');
-    if (loginBtn) {
-        loginBtn.addEventListener('click', e => {
-            e.preventDefault();
-            document.getElementById('loginForm').dispatchEvent(new Event('submit'));
-        });
-    }
+    loginBtn?.addEventListener('click', e => {
+        e.preventDefault();
+        document.getElementById('loginForm').dispatchEvent(new Event('submit'));
+    });
 
     checkLoginStatus();
     applySavedTheme();
@@ -729,30 +627,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // تفعيل العائلة المختارة
     document.querySelectorAll('.family-button').forEach(btn => {
         btn.classList.toggle('active-family', btn.dataset.family === currentFamilyKey);
-    });
-
-    document.getElementById('closeModal')?.addEventListener('click', closeModal);
-
-    // تبديل الثيمات
-    document.querySelectorAll('.theme-button').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.body.classList.forEach(c => {
-                if (c.startsWith('theme-')) document.body.classList.remove(c);
-            });
-
-            if (btn.dataset.theme !== 'default') {
-                document.body.classList.add(`theme-${btn.dataset.theme}`);
-            }
-
-            localStorage.setItem('familyTreeTheme', btn.dataset.theme);
-            document.querySelectorAll('.theme-button').forEach(b => b.classList.remove('active-theme'));
-            btn.classList.add('active-theme');
-            btn.blur();
-        });
-    });
-
-    // اختيار عائلة
-    document.querySelectorAll('.family-button').forEach(btn => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('.family-button').forEach(b => b.classList.remove('active-family'));
             btn.classList.add('active-family');
@@ -762,16 +636,36 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // إظهار/إخفاء كلمة المرور
+    // إغلاق المودال
+    document.getElementById('closeModal')?.addEventListener('click', closeModal);
+
+    // تبديل الثيمات
+    document.querySelectorAll('.theme-button').forEach(btn => {
+        btn.addEventListener('click', () => {
+            [...document.body.classList]
+            .filter(c => c.startsWith('theme-'))
+                .forEach(c => document.body.classList.remove(c));
+
+            if (btn.dataset.theme !== 'default') {
+                document.body.classList.add(`theme-${btn.dataset.theme}`);
+            }
+
+            localStorage.setItem('familyTreeTheme', btn.dataset.theme);
+            document.querySelectorAll('.theme-button').forEach(b => b.classList.remove('active-theme'));
+            btn.classList.add('active-theme');
+            // إزالة التركيز من أي عنصر
+            btn.blur();
+
+        });
+    });
+    // إظهار / إخفاء كلمة المرور
     const togglePassword = document.getElementById('togglePassword');
     const passwordInput = document.getElementById('passwordInput');
-    if (togglePassword && passwordInput) {
-        togglePassword.addEventListener('click', () => {
-            const isHidden = passwordInput.getAttribute('type') === 'password';
-            passwordInput.setAttribute('type', isHidden ? 'text' : 'password');
-            togglePassword.textContent = isHidden ? '🙈' : '👁️';
-        });
-    }
+    togglePassword?.addEventListener('click', () => {
+        const hidden = passwordInput.getAttribute('type') === 'password';
+        passwordInput.setAttribute('type', hidden ? 'text' : 'password');
+        togglePassword.textContent = hidden ? '🙈' : '👁️';
+    });
 });
 
 // ==========================================
@@ -779,9 +673,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // ==========================================
 function applySavedTheme() {
     const theme = localStorage.getItem('familyTreeTheme') || 'default';
-    if (theme !== 'default') {
-        document.body.classList.add(`theme-${theme}`);
-    }
+    if (theme !== 'default') document.body.classList.add(`theme-${theme}`);
 
     document.querySelectorAll('.theme-button').forEach(btn => {
         btn.classList.toggle('active-theme', btn.dataset.theme === theme);

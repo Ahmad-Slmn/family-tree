@@ -18,7 +18,6 @@
                 <span id="togglePassword" class="toggle-password" title="إظهار/إخفاء كلمة المرور">👁️</span>
                 <div id="loginMessage"></div>
             </div>
-
             <button type="submit">دخول</button>
         </form>
     </div>
@@ -26,7 +25,7 @@
     <!-- زر الخروج -->
     <button id="logoutBtn" class="logout-btn" style="display: none;">خروج</button>
 
-    <!-- نافذة تأكيد الخروج -->
+    <!-- تأكيد الخروج -->
     <div id="confirmLogout" class="confirm-logout">
         <div class="confirm-box">
             <p>هل أنت متأكد أنك تريد تسجيل الخروج؟</p>
@@ -35,21 +34,22 @@
         </div>
     </div>
 
+    <!-- أزرار اختيار الثيم -->
     <div id="themeButtons" class="theme-buttons">
-        <!-- أزرار الثيم -->
-        <button class="theme-button" data-theme="dark" title="الداكن" style="--color: #333;"></button>
-        <button class="theme-button" data-theme="minimal" title="الغروب" style="--color: #d81b60;"></button>
-        <button class="theme-button" data-theme="elegant" title="المحيط" style="--color: #0277bd;"></button>
-        <button class="theme-button" data-theme="corporate" title="الغابة" style="--color: #2e7d32;"></button>
-        <button class="theme-button active-theme" data-theme="default" title="النمط الرئيسي" style="--color: #f0c000;"></button>
+        <button class="theme-button" data-theme="dark" title="الداكن" style="--color:#333;"></button>
+        <button class="theme-button" data-theme="minimal" title="الغروب" style="--color:#d81b60;"></button>
+        <button class="theme-button" data-theme="elegant" title="المحيط" style="--color:#0277bd;"></button>
+        <button class="theme-button" data-theme="corporate" title="الغابة" style="--color:#2e7d32;"></button>
+        <button class="theme-button active-theme" data-theme="default" title="النمط الرئيسي" style="--color:#f0c000;"></button>
     </div>
 
+    <!-- أزرار اختيار العائلة -->
     <div id="familyButtons" class="family-buttons">
-        <!-- أزرار اختيار العائلة -->
         <button class="family-button active-family" data-family="family1">عائلة سَيْدِنا</button>
         <button class="family-button" data-family="family2">عائلة كُبُرَ زين</button>
     </div>
 
+    <!-- عنوان وشجرة العائلة -->
     <div class="container">
         <header class="site-header">
             <h1 class="site-title">شجرة العائلة</h1>
@@ -71,7 +71,6 @@
             <div id="modalContent" class="modal-body"></div>
         </div>
     </div>
-
 
     <script src="js/script.js"></script>
 </body>
