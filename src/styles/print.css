@@ -1,0 +1,142 @@
+/* =========================
+   print.css — أنماط الطباعة
+========================= */
+
+/* اطلب من المتصفح طباعة الألوان كما هي (عند الدعم) */
+* { print-color-adjust: exact }
+
+/* تحسينات عامة للطباعة */
+@media print{
+  /* حماية العناوين من الانقسام بين الصفحات */
+  h1, h2, h3 { break-after: avoid; page-break-after: avoid; }
+  .section-title { break-after: avoid; }
+
+  /* تقليل الأيتام/الأرامل في بطاقات الأشخاص */
+  .member-card { orphans: 2; widows: 2; }
+
+  /* رفع دقة الصور وطريقة عرضها على الورق */
+  img { image-rendering: auto; }
+  .member-card img { max-width: 100% !important; height: auto !important; }
+}
+
+/* ====== وضع الطباعة ====== */
+@media print {
+
+  /* خلفية بيضاء نظيفة للورق */
+  html, body { background: #fff !important; }
+
+  /* إخفاء كل عناصر الشاشة غير الضرورية في النسخة الورقية */
+  .top-bar,
+  .theme-buttons,
+  #toastContainer,
+  .toast-container,
+  .suggestions,
+  .modal,
+  .confirm-modal,
+  .form-modal,
+  .btn,
+  .controls,
+  .tree-tools,
+  .screen-only,
+  .family-item .edit-family,
+  .family-item .del-family,
+  #searchSuggestions,
+  #addFamilyBtn,
+  #exportBtn,
+  #importInput,
+  #printBtn,
+  /* إستثناءات الشريط الجانبي */
+  #sideToggle,
+  #sideOverlay,
+  #sidePanel {
+    display: none !important;
+  }
+
+  /* تمديد الحاوية بعرض الصفحة */
+  .container {
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+  }
+
+  /* شجرة العائلة */
+  #familyTree {
+    justify-content: center !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+    padding: 0 !important;
+  }
+
+  /* شبكات تتجنب الانقسام بين الصفحات */
+  .generation,
+  .wives-section,
+  .children-results,
+  .children-grid {
+    justify-content: center !important;
+    align-items: flex-start !important;
+    justify-items: center !important;
+    gap: 12px !important;
+    flex-wrap: wrap !important;
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+
+  .children-grid { grid-auto-rows: min-content !important; }
+
+  /* بطاقات الأشخاص والزوجات: إطار واضح، بلا ظلال */
+  .member-card,
+  .wife-section {
+    background: #fff !important;
+    border: 1px solid #bbb !important;
+    box-shadow: none !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* خطوط وموصلات أوضح في الطباعة (تحسين الوضوح) */
+  .connector,
+  .vertical-line,
+  .horizontal-children-line,
+  .child-connector {
+    background: #444 !important; /* أدكن لزيادة التباين */
+    opacity: 1 !important;
+  }
+
+  /* منع انقسام أقسام رئيسية */
+  #familyTree > .generation:not(.wives-section) {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  #familyTree > .generation:not(.wives-section) + .wives-section {
+    page-break-before: always;
+  }
+  .wives-section .wife-section {
+    page-break-before: always;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .wives-section .wife-section:first-child {
+    page-break-before: auto;
+  }
+
+  /* إحصاءات لا تُطبع */
+  .statsModal { display: none !important; }
+
+  /* وضع مدمج: إخفاء الحقول الثانوية لتقليل الحِبر والمساحة */
+  body.print-compact .member-card .role,
+  body.print-compact .member-card .dob,
+  body.print-compact .member-card .counter-box,
+  body.print-compact .member-card .mini-strip {
+    display: none !important;
+  }
+}
+
+/* ====== إعدادات الصفحة (A4 عموديًا) ====== */
+@page {
+  size: A4 portrait; /* W3C CSS Paged Media */
+  margin: 1.5cm;
+}

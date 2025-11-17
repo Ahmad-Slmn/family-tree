@@ -1,0 +1,315 @@
+/* ---------- 1) القيم الافتراضية (Fallback) ---------- */
+:root{
+  
+  --bg-gradient:linear-gradient(135deg,#fffbeb,#fff);
+  --card-bg:#fff;--header-bg:rgba(255,255,255,.9);
+
+  --ancestor-border:#fde68a;--ancestor-bg:#fffbeb;
+  --wife-bg:#fff1f2;--son-bg:#f0f9ff;--daughter-bg:#faf5ff;
+
+  --connector-color:#fde68a;--arrow-color:#f0c000;
+
+  --text-main:#1a202c;--title-color:#d97706;--placeholder-fg:#9ca3af;
+--radius: .75rem;
+  --panel-bg:color-mix(in srgb,var(--ancestor-bg) 55%,#ffffff);
+  --chip-bg:var(--ancestor-bg);
+  --badge-bg:var(--ancestor-bg);
+ --list-item-bg: color-mix(in srgb, var(--modal-bg) 94%, #000 6%);
+  --list-item-hover:var(--arrow-color);
+  --list-item-hover-fg:#fff;
+  --section-divider: color-mix(in srgb, var(--text-main) 18%, transparent);
+  --section-divider-strong: color-mix(in srgb, var(--text-main) 32%, transparent);
+  --surface-border: var(--section-divider-strong);
+  --scroll-track:var(--ancestor-bg);
+  --scroll-thumb:var(--arrow-color);
+  --scroll-thumb-hover:color-mix(in srgb,var(--arrow-color) 50%,#fff);
+
+  --field-bg:#fff;--field-border:#d1d5db;
+  --focus-border:#3b82f6;
+  --focus-ring:color-mix(in srgb,var(--title-color) 60%,#fff);
+  --focus-ring-soft:rgba(59,130,246,.15);
+  --label-fg:#374151;
+
+  --role-bg:var(--bg-gradient);
+  --role-fg:var(--text-main);
+
+  --avatar-bg:#f3f3f3;
+  --side-overlay:rgba(0,0,0,.25);
+
+  /* Modal Tokens */
+  --modal-bg:#fff;--modal-fg:#1a202c;--modal-muted:#555;
+  --modal-overlay:rgba(0,0,0,.8);
+  --modal-border:transparent;
+  --modal-shadow:0 .375rem 1.25rem rgba(0,0,0,.3);
+
+  --modal-primary:#f0c000;--modal-primary-hover:#e6b700;--modal-primary-fg:#1a202c;
+  --modal-secondary:#fde68a;--modal-secondary-hover:#f9d768;--modal-secondary-fg:#1a202c;
+  --modal-danger:#dc3545;--modal-danger-hover:#c82333;--modal-danger-fg:#fff;
+
+  /* Success accent (جديد) */
+  --accent-success:#16a34a;            /* green-600 */
+  --accent-success-hover:#15803d;       /* green-700 */
+  --accent-success-fg:#fff;
+
+  --ctl-bg:var(--ancestor-bg);
+  --ctl-fg:var(--text-main);
+  --ctl-border:var(--ancestor-border);
+  --ctl-hover-bg:color-mix(in srgb,var(--title-color) 12%,var(--ancestor-bg));
+  --ctl-active-bg:color-mix(in srgb,var(--title-color) 20%,var(--ancestor-bg));
+  --ctl-ring:color-mix(in srgb,var(--title-color) 55%,#fff);
+
+  --toast-success-bg:linear-gradient(135deg,#22c55e,#34d399);
+  --toast-success-fg:#fff;
+  --toast-error-bg:linear-gradient(135deg,#dc2626,#ef4444);
+  --toast-error-fg:#fff;
+  --toast-info-bg:linear-gradient(135deg,#0ea5e9,#22d3ee);
+  --toast-info-fg:#fff;
+  --toast-warning-bg:linear-gradient(135deg,#f59e0b,#fbbf24);
+  --toast-warning-fg:#1f2937;
+
+  --shadow:0 .375rem 1.25rem rgba(0,0,0,.12);
+  
+    --chart-grid:#e5e7eb;
+  --chart-text:#111827;
+  --chart-bg:var(--card-bg);
+
+  --chart-son-1:#93c5fd;       /* أعلى */
+  --chart-son-2:#60a5fa;       /* أسفل */
+  --chart-daughter-1:#b794f4;  /* أعلى */
+  --chart-daughter-2:#a78bfa;  /* أسفل */
+}
+
+/* ---------- 2) Corporate ---------- */
+.theme-corporate{
+  --bg-gradient:linear-gradient(135deg,#e6f4ea,#f1fdf3);
+  --card-bg:#fff;--header-bg:rgba(240,255,240,.9);
+
+  --ancestor-border:#4caf50;--ancestor-bg:#e8f5e9;
+  --wife-bg:#f0fff4;--son-bg:#d0f0c0;--daughter-bg:#e6ffe6;
+
+  --connector-color:#4caf50;--arrow-color:#2e7d32;
+  --text-main:#1b5e20;--title-color:#2e7d32;
+
+  --panel-bg:#f3fbf5;--chip-bg:#ecf9ef;--badge-bg:#ecf9ef;
+--list-item-bg: color-mix(in srgb, var(--modal-bg) 94%, #000 6%);
+--list-item-hover:var(--arrow-color);--list-item-hover-fg:#1b5e20;
+  --surface-border:#e0f2f1;
+
+  --scroll-track:#ecf9ef;--scroll-thumb:#2e7d32;--scroll-thumb-hover:color-mix(in srgb,#2e7d32 50%,#fff);
+
+  --field-bg:#fff;--field-border:#cfe8d4;
+  --focus-border:#2e7d32;--focus-ring-soft:color-mix(in srgb,#2e7d32 20%,transparent);
+  --label-fg:#256c2c;
+
+  --role-bg:#ecf9ef;--role-fg:#1b5e20;--avatar-bg:#eef7f0;
+  --side-overlay:rgba(0,0,0,.22);
+
+  --modal-bg:#fff;--modal-fg:#1b5e20;--modal-muted:#2e7d32;--modal-overlay:rgba(0,0,0,.75);
+  --modal-border:#e0f2f1;--modal-shadow:0 .375rem 1.25rem rgba(0,0,0,.18);
+
+  --modal-primary:#2e7d32;--modal-primary-hover:#276a2b;--modal-primary-fg:#fff;
+  --modal-secondary:#4caf50;--modal-secondary-hover:#449b48;--modal-secondary-fg:#fff;
+  --modal-danger:#d32f2f;--modal-danger-hover:#b71c1c;--modal-danger-fg:#fff;
+
+  /* Success accent */
+  --accent-success:#2e7d32;
+  --accent-success-hover:#276a2b;
+  --accent-success-fg:#fff;
+
+  --ctl-bg:var(--ancestor-bg);--ctl-fg:var(--text-main);
+  --ctl-border:color-mix(in srgb,var(--connector-color) 35%,#fff);
+  --ctl-hover-bg:color-mix(in srgb,var(--arrow-color) 12%,var(--ancestor-bg));
+  --ctl-active-bg:color-mix(in srgb,var(--arrow-color) 20%,var(--ancestor-bg));
+  --ctl-ring:color-mix(in srgb,var(--arrow-color) 55%,#fff);
+
+  --toast-success-bg:linear-gradient(135deg,#2e7d32,#43a047);
+  --toast-error-bg:linear-gradient(135deg,#c62828,#e53935);
+  --toast-info-bg:linear-gradient(135deg,#0288d1,#26c6da);
+  --toast-warning-bg:linear-gradient(135deg,#f9a825,#fdd835);
+  
+    --chart-grid:#e0f2f1;
+  --chart-text:#1b5e20;
+  --chart-bg:var(--card-bg);
+
+  --chart-son-1:#9ad29f;     /* أخضر فاتح */
+  --chart-son-2:#4caf50;
+--chart-daughter-1:#A7F3D0; /* emerald-200 */
+--chart-daughter-2:#10B981; /* emerald-500 */
+
+}
+
+/* ---------- 3) Elegant ---------- */
+.theme-elegant{
+  --bg-gradient:linear-gradient(135deg,#e0f7fa,#e1f5fe);
+  --card-bg:#fff;--header-bg:rgba(224,247,250,.9);
+
+  --ancestor-border:#0288d1;--ancestor-bg:#e0f7fa;
+  --wife-bg:#b3e5fc;--son-bg:#b2ebf2;--daughter-bg:#e1f5fe;
+
+  --connector-color:#00acc1;--arrow-color:#0277bd;
+  --text-main:#01579b;--title-color:#0288d1;
+
+  --panel-bg:#eef9ff;--chip-bg:#e6f4ff;--badge-bg:#e6f4ff;
+  --list-item-bg: color-mix(in srgb, var(--modal-bg) 94%, #000 6%);
+--list-item-hover:var(--arrow-color);--list-item-hover-fg:#013b6b;
+  --surface-border:#e1f5fe;
+
+  --scroll-track:#e6f4ff;--scroll-thumb:#0277bd;--scroll-thumb-hover:color-mix(in srgb,#0277bd 50%,#fff);
+
+  --field-bg:#fff;--field-border:#cfe6fb;
+  --focus-border:#0277bd;--focus-ring-soft:color-mix(in srgb,#0277bd 20%,transparent);
+  --label-fg:#02598f;
+
+  --role-bg:#e6f4ff;--role-fg:#01579b;--avatar-bg:#edf7ff;
+  --side-overlay:rgba(0,0,0,.24);
+
+  --modal-bg:#fff;--modal-fg:#01579b;--modal-muted:#0277bd;--modal-overlay:rgba(0,0,0,.75);
+  --modal-border:#e1f5fe;
+
+  --modal-primary:#0277bd;--modal-primary-hover:#0267a4;--modal-primary-fg:#fff;
+  --modal-secondary:#00acc1;--modal-secondary-hover:#0097ab;--modal-secondary-fg:#fff;
+  --modal-danger:#d32f2f;--modal-danger-hover:#b71c1c;--modal-danger-fg:#fff;
+
+  /* Success accent */
+  --accent-success:#059669;           /* teal/emerald متناسق مع اللوحة */
+  --accent-success-hover:#047857;
+  --accent-success-fg:#fff;
+
+  --ctl-bg:var(--ancestor-bg);--ctl-fg:var(--text-main);
+  --ctl-border:color-mix(in srgb,var(--connector-color) 35%,#fff);
+  --ctl-hover-bg:color-mix(in srgb,var(--arrow-color) 12%,var(--ancestor-bg));
+  --ctl-active-bg:color-mix(in srgb,var(--arrow-color) 20%,var(--ancestor-bg));
+  --ctl-ring:color-mix(in srgb,var(--arrow-color) 55%,#fff);
+
+  --toast-success-bg:linear-gradient(135deg,#059669,#34d399);
+  --toast-error-bg:linear-gradient(135deg,#ef4444,#f87171);
+  --toast-info-bg:linear-gradient(135deg,#0284c7,#22d3ee);
+  --toast-warning-bg:linear-gradient(135deg,#f59e0b,#fbbf24);
+  
+    --chart-grid:#e1f5fe;
+  --chart-text:#01579b;
+  --chart-bg:var(--card-bg);
+
+  --chart-son-1:#7dd3fc;
+  --chart-son-2:#0284c7;
+  --chart-daughter-1:#a5f3fc;  /* teal/emerald متناغم */
+  --chart-daughter-2:#14b8a6;
+}
+
+/* ---------- 4) Minimal (Sunset) ---------- */
+.theme-minimal{
+  --bg-gradient:linear-gradient(135deg,#ff9a9e,#fecfef);
+  --card-bg:#fff0f5;--header-bg:rgba(255,182,193,.9);
+
+  --ancestor-border:#ff6f91;--ancestor-bg:#ffd6e8;
+  --wife-bg:#ffe4f0;--son-bg:#ffb3c6;--daughter-bg:#ffc1e3;
+
+  --connector-color:#ff6f91;--arrow-color:#d81b60;
+  --text-main:#5a2130;--title-color:#d81b60;
+
+  --panel-bg:#ffeaf2;--chip-bg:#ffe7ef;--badge-bg:#ffe7ef;
+  --list-item-bg: color-mix(in srgb, var(--modal-bg) 94%, #000 6%);
+--list-item-hover:var(--arrow-color);--list-item-hover-fg:#47111c;
+  --surface-border:#f6c9da;
+
+  --scroll-track:#ffe7ef;--scroll-thumb:#d81b60;--scroll-thumb-hover:color-mix(in srgb,#d81b60 50%,#fff);
+
+  --field-bg:#fff;--field-border:#f0b9ca;
+  --focus-border:#d81b60;--focus-ring-soft:color-mix(in srgb,#d81b60 20%,transparent);
+  --label-fg:#7a2a3d;
+
+  --role-bg:#ffe7ef;--role-fg:#5a2130;--avatar-bg:#ffedf4;
+  --side-overlay:rgba(0,0,0,.22);
+
+  --modal-bg:#fff0f5;--modal-fg:#5a2130;--modal-muted:#7a2a3d;--modal-overlay:rgba(0,0,0,.72);
+  --modal-border:#ffd6e8;
+
+  --modal-primary:#d81b60;--modal-primary-hover:#be164f;--modal-primary-fg:#fff;
+  --modal-secondary:#ff6f91;--modal-secondary-hover:#f35f83;--modal-secondary-fg:#fff;
+  --modal-danger:#e53935;--modal-danger-hover:#c62828;--modal-danger-fg:#fff;
+
+  /* Success accent */
+  --accent-success:#16a34a;
+  --accent-success-hover:#15803d;
+  --accent-success-fg:#fff;
+
+  --ctl-bg:var(--card-bg);--ctl-fg:var(--text-main);
+  --ctl-border:color-mix(in srgb,var(--ancestor-border) 40%,#fff);
+  --ctl-hover-bg:color-mix(in srgb,var(--arrow-color) 14%,var(--card-bg));
+  --ctl-active-bg:color-mix(in srgb,var(--arrow-color) 22%,var(--card-bg));
+  --ctl-ring:color-mix(in srgb,var(--arrow-color) 60%,#fff);
+
+  --toast-success-bg:linear-gradient(135deg,#22c55e,#86efac);
+  --toast-error-bg:linear-gradient(135deg,#e11d48,#fb7185);
+  --toast-info-bg:linear-gradient(135deg,#06b6d4,#67e8f9);
+  --toast-warning-bg:linear-gradient(135deg,#f59e0b,#fde68a);
+  
+    --chart-grid:#f6c9da;
+  --chart-text:#5a2130;
+  --chart-bg:var(--card-bg);
+
+  --chart-son-1:#ff9db5;      /* وردي فاتح للأبناء هنا */
+  --chart-son-2:#f5597e;
+  --chart-daughter-1:#ffc1e3;
+  --chart-daughter-2:#d81b60;
+}
+
+/* ---------- 5) Dark ---------- */
+.theme-dark{
+  --bg-gradient:linear-gradient(135deg,#0f1116,#1c1f26);
+  --card-bg:#1e222a;--header-bg:rgba(28,34,42,.95);
+
+  --ancestor-border:#4f9aff;--ancestor-bg:#12151c;
+  --wife-bg:#392053;--son-bg:#162544;--daughter-bg:#3a1e33;
+
+  --connector-color:#2d3748;--arrow-color:#fbbf24;
+
+  --text-main:#e5e7eb;--title-color:#fcd34d;--placeholder-fg:#94a3b8;
+
+  --panel-bg:#191c24;--chip-bg:#202533;--badge-bg:#202533;
+  --list-item-bg: color-mix(in srgb, var(--modal-bg) 80%, #000 20%);
+--list-item-hover:var(--arrow-color);--list-item-hover-fg:#0b1220;
+ --section-divider: color-mix(in srgb, #ffffff 22%, transparent);
+  --section-divider-strong: color-mix(in srgb, #ffffff 40%, transparent);
+  --surface-border: var(--section-divider-strong);
+
+  --scroll-track:#1c2230;--scroll-thumb:#fbbf24;--scroll-thumb-hover:color-mix(in srgb,#fbbf24 50%,#1e2230);
+
+  --field-bg:#151922;--field-border:#334155;
+  --focus-border:#4f9aff;--focus-ring-soft:color-mix(in srgb,#4f9aff 25%,transparent);
+  --label-fg:#cbd5e1;
+
+  --role-bg:#1c2330;--role-fg:#e5e7eb;--avatar-bg:#252a33;
+  --side-overlay:rgba(0,0,0,.45);
+
+  --modal-bg:#1e222a;--modal-fg:#e5e7eb;--modal-muted:#cbd5e1;--modal-overlay:rgba(0,0,0,.85);
+  --modal-border:#2d3748;--modal-shadow:0 .375rem 1.25rem rgba(0,0,0,.5);
+
+  --modal-primary:#fbbf24;--modal-primary-hover:#f59e0b;--modal-primary-fg:#1f2937;
+  --modal-secondary:#4f9aff;--modal-secondary-hover:#3f86e6;--modal-secondary-fg:#0b1220;
+  --modal-danger:#ef4444;--modal-danger-hover:#dc2626;--modal-danger-fg:#fff;
+
+  /* Success accent */
+  --accent-success:#22c55e;
+  --accent-success-hover:#16a34a;
+  --accent-success-fg:#0b1220;
+
+  --ctl-bg:#2a2f38;--ctl-fg:#e5e7eb;--ctl-border:#2d3748;
+  --ctl-hover-bg:color-mix(in srgb,var(--arrow-color) 18%,#2a2f38);
+  --ctl-active-bg:color-mix(in srgb,var(--arrow-color) 28%,#2a2f38);
+  --ctl-ring:#fbbf24;
+
+  --toast-success-bg:linear-gradient(135deg,#16a34a,#22c55e);
+  --toast-error-bg:linear-gradient(135deg,#b91c1c,#ef4444);
+  --toast-info-bg:linear-gradient(135deg,#2563eb,#38bdf8);
+  --toast-warning-bg:linear-gradient(135deg,#f59e0b,#fbbf24);
+  
+    --chart-grid:color-mix(in srgb,#ffffff 12%,transparent);
+  --chart-text:#e5e7eb;
+  --chart-bg:#12151c;
+
+  --chart-son-1:#60a5fa;
+  --chart-son-2:#2563eb;
+  --chart-daughter-1:#c084fc;
+  --chart-daughter-2:#a855f7;
+}

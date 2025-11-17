@@ -1,0 +1,703 @@
+/* =========================================================
+   0) أساسيات الوصولية/الأداء دون تغيير المظهر الافتراضي
+========================================================= */
+
+/* احترام تفضيل تقليل الحركة */
+@media (prefers-reduced-motion: reduce){
+  *{animation-duration:0.001ms !important;animation-iteration-count:1 !important;transition-duration:0.001ms !important;scroll-behavior:auto !important}
+}
+
+/* وضع التباين القسري (Windows High Contrast) */
+@media (forced-colors: active){
+  .btn,
+  .form-modal input,.form-modal select,
+  .meta-view,
+  .child-item,
+  .ancestor-row,
+  .modal-box,
+  .statsModal .modal-content,
+  .table-wrap,
+  .stats-table thead th{border:1px solid CanvasText}
+  .btn:focus-visible,
+  input:focus-visible, select:focus-visible, textarea:focus-visible{outline:2px solid CanvasText}
+}
+
+/* طبقة وصولية عامة */
+:where(.sr-only-live){
+  position:absolute!important;inline-size:1px!important;block-size:1px!important;margin:-1px!important;padding:0!important;overflow:hidden!important;
+  clip:rect(0 0 0 0)!important;clip-path:inset(50%)!important;white-space:nowrap!important;border:0!important
+}
+
+/* تركيز مرئي موحّد */
+:where(input,select,textarea):focus-visible{outline:2px solid currentColor;outline-offset:2px}
+
+/* =========================================================
+   1) السحب DnD
+========================================================= */
+.dnd-handle{cursor:grab;user-select:none}
+.dnd-drag .dnd-handle{cursor:grabbing}
+.dnd-ghost{
+  opacity:.45;
+  background:color-mix(in oklab,var(--modal-primary) 12%,transparent);
+  border-color:color-mix(in oklab,var(--modal-primary) 40%,transparent);
+  z-index:9999
+}
+.dnd-chosen{
+  box-shadow:0 0 0 .125rem color-mix(in oklab,var(--modal-primary) 20%,transparent);
+  background:color-mix(in oklab,var(--modal-bg) 92%,var(--card-bg))
+}
+.children-list-editor{position:relative;contain:layout paint}
+.move-rail,.anc-move-controls{display:flex;align-items:center;gap:.25rem}
+.move-rail button,.anc-move-controls button{
+  inline-size:2rem;block-size:2rem;display:inline-flex;align-items:center;justify-content:center;
+  font-size:.9rem;border:.0625rem solid transparent;border-radius:.375rem;cursor:pointer;
+  transition:background-color .2s,border-color .2s,transform .1s,color .2s
+}
+
+/* ↑ أخضر من الثيم */
+.move-up{
+  background:var(--accent-success);
+  color:var(--accent-success-fg);
+  border:.0625rem solid color-mix(in oklab,var(--accent-success) 55%,transparent);
+  transition:background .2s,border-color .2s
+}
+.move-up:hover{background:var(--accent-success-hover)}
+.move-up i{color:inherit}
+
+/* ↓ تحذيري */
+.move-rail .move-down,.anc-move-controls .move-down{
+  background:var(--modal-danger);
+  color:var(--modal-danger-fg);
+  border:.0625rem solid color-mix(in oklab,var(--modal-danger) 60%,transparent)
+}
+.move-rail .move-down:hover,.anc-move-controls .move-down:hover{background:var(--modal-danger-hover)}
+
+/* =========================================================
+   2) نافذة المودال
+========================================================= */
+.form-modal{
+  position:fixed;inset:0;background:var(--modal-overlay);
+  display:flex;justify-content:center;align-items:center;z-index:1100;
+  opacity:0;visibility:hidden;transition:all .35s;overflow:hidden
+}
+.form-modal.active{opacity:1;visibility:visible}
+.modal-inner{
+  background:var(--modal-bg);
+  width:85%;border-radius:.875rem;padding:2rem;
+  display:grid;grid-template-columns:1fr;gap:1.5rem;
+  box-shadow:var(--modal-shadow);
+  transform:translateY(-1rem) scale(.96);opacity:0;transition:.35s;
+  max-block-size:min(90svh,90vh);overflow-y:auto;scrollbar-gutter:stable both-edges;
+  contain:content
+}
+.form-modal.active .modal-inner{transform:translateY(0) scale(1);opacity:1}
+.modal-inner .close-btn{position:absolute;inset-block-start:.6rem;inset-inline-end:.6rem}
+.form-modal-header{
+  grid-column:1/-1;display:flex;justify-content:center;align-items:center;
+  position:relative;padding-block-end:.75rem;border-block-end:.0625rem solid color-mix(in oklab,var(--modal-fg) 10%,transparent)
+}
+.form-modal-header h2{font-size:1.35rem;color:var(--title-color);font-weight:700}
+
+/* =========================================================
+   3) أقسام النموذج
+========================================================= */
+.add-family-form{display:contents}
+.col{display:flex;flex-direction:column;gap:1rem}
+.section-title{
+  font-size:1.25rem;font-weight:600;color:var(--text-main);margin-block-end:1rem;
+  border-block-end:.125rem solid color-mix(in oklab,var(--modal-fg) 20%,transparent);
+  padding-block-end:.5rem;text-align:center
+}
+.left-section .left-col{display:grid;grid-template-columns:repeat(2,1fr);gap:1rem 1.2rem; max-height: 80rem; overflow-y: auto}
+.right-section .right-col{border: none;  padding-inline-start: 0;}
+.left-section,.right-section{min-block-size:0;display:flex;flex-direction:column;color:var(--modal-fg)}
+.left-col,.right-col{flex:1;min-block-size:0}
+.left-section .left-col .ancestors-area{grid-column:1/-1}
+.ancestors-header{display:flex;justify-content:space-between;align-items:center;margin:.5rem 0;}
+
+.ancestors-title{margin:0;}
+
+.text-muted.ancestors-hint{
+  font-size:.85rem;
+  opacity:.8;
+}
+
+.field-inline{display:flex;flex-direction:column;gap:.25rem}
+.label{font-size:.95rem;font-weight:600;color:var(--text-main);inline-size:fit-content}
+.req{color:var(--modal-danger);margin-inline-start:.125rem}
+.year-toggle-link{font-size:.8em;margin-inline-start:.5rem;padding:.05rem .5rem; display:inline-flex;align-items:center;gap:.25rem;
+  border-radius:999px;cursor:pointer;text-decoration:none;border:.0625rem solid color-mix(in srgb,var(--label-fg) 18%,transparent);
+  background:color-mix(in srgb,var(--field-bg) 80%,var(--panel-bg) 20%);color:color-mix(in srgb,var(--label-fg) 85%,var(--modal-muted) 15%);
+  transition:background-color .15s,border-color .15s,color .15s,transform .08s;}
+.year-toggle-link:hover{background:color-mix(in srgb,var(--modal-secondary) 20%,var(--field-bg));border-color:color-mix(in srgb,var(--modal-secondary) 60%,#fff);
+  color:var(--modal-secondary-fg);text-decoration:underline;transform:translateY(-.5px);}
+.year-toggle-link:active{transform:translateY(0);background:color-mix(in srgb,var(--modal-secondary-hover) 26%,var(--field-bg));}
+.year-toggle-link:focus-visible{outline:none;box-shadow:0 0 0 .12rem var(--focus-ring-soft),  0 0 0 .18rem var(--focus-border);border-color:var(--focus-border);}
+.year-toggle-link[disabled],.year-toggle-link[aria-disabled="true"]{cursor:default;opacity:.55;text-decoration:none;box-shadow:none;}
+
+/* حقول الإدخال */
+.form-modal input,.form-modal select{
+  padding:.55rem;border:.0625rem solid color-mix(in oklab,var(--modal-fg) 20%,transparent);
+  border-radius:.5rem;background:color-mix(in oklab,var(--modal-bg) 92%,var(--card-bg));
+  color:var(--modal-fg);font-size:.95rem;transition:.25s;inline-size:100%
+}
+.form-modal input::placeholder,.form-modal select::placeholder{color:color-mix(in oklab,var(--modal-fg) 45%,transparent)}
+.form-modal input:focus,.form-modal select:focus{
+  border-color:color-mix(in oklab,var(--modal-primary) 55%,transparent);
+  background:var(--modal-bg);outline:0
+}
+
+/* أخطاء فورية حتى مع التركيز */
+.form-modal :is(input,select,textarea).is-invalid,
+.form-modal :is(input,select,textarea)[aria-invalid="true"]{
+  background: color-mix(in oklab,var(--modal-danger) 8%,var(--modal-bg));
+  border-color: color-mix(in oklab,var(--modal-danger) 45%,transparent);
+  
+}
+
+/* عند التركيز لا نسمح لقواعد :focus بتغليب نمط الخطأ */
+.form-modal :is(input,select,textarea).is-invalid:focus,
+.form-modal :is(input,select,textarea)[aria-invalid="true"]:focus{
+  background: color-mix(in oklab,var(--modal-danger) 8%,var(--modal-bg));
+  border-color: var(--modal-danger);
+}
+
+
+/* =========================================================
+   4) إدارة الزوجات
+========================================================= */
+.wives-area{display:flex;flex-direction:column;gap:.8rem}
+.wives-header{display:flex;justify-content:space-between;align-items:center}
+.wife-header{
+  text-align:center;background:color-mix(in oklab,var(--wife-bg) 100%,var(--modal-bg));
+  padding:.5rem;border-radius:.375rem;margin-block-end:1rem;color:var(--text-main)
+}
+.wives-title{margin:0}
+
+.wives-list{display:flex;flex-direction:column;gap:.6rem;overflow-y:auto;max-block-size:80rem}
+.wives-note{font-size:.85rem;color:color-mix(in oklab,var(--modal-fg) 65%,transparent)}
+.wife-main .wife-actions{display:flex;gap:1rem;flex-wrap:wrap}
+.wife-block .wife-main .wife-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1rem 1.2rem;margin-block-end:1rem}
+
+/* =========================================================
+   5) العرض المشترك (أبناء/أجداد/أب)
+========================================================= */
+.meta-view{
+  position:relative;inline-size:100%;
+  background:color-mix(in oklab,var(--son-bg) 8%,var(--modal-bg));
+  border:.0625rem solid color-mix(in oklab,var(--modal-fg) 15%,transparent);
+  border-radius:.5rem;padding:1rem;display:flex;flex-direction:column;gap:1rem;color:var(--modal-fg)
+}
+
+/* شبكة الميتاداتا */
+.meta-view .child-grid,
+.meta-view .ancestor-grid,
+.meta-view .father-grid,
+.meta-view .mother-grid,
+.meta-view .wife-father-grid,
+.meta-view .wife-mother-grid{
+  display:grid;
+  grid-template-columns:4.5rem repeat(3,minmax(0,1fr));
+  gap:.8rem 1rem;
+  align-items:center;
+}
+
+/* أعمدة المعلومة */
+.meta-view .meta-col{display:flex;flex-direction:column; align-items: center; justify-content: center;align-self:flex-start}
+.meta-view .meta-col .label{
+  font-size:.82rem;font-weight:600;color:color-mix(in oklab,var(--modal-fg) 80%,transparent);margin-block-end:.2rem;opacity:.9
+}
+.meta-val .meta-list{margin: .25rem 0 0;padding-inline-start: 1.25rem;}
+.meta-val .meta-list li{margin-block: .15rem;}
+.meta-view .meta-col .meta-val{font-size:.9rem;color:var(--modal-fg);word-wrap:break-word}
+
+
+/* سكة الحركة */
+.meta-view .meta-rail{display:flex;align-items:center;justify-content:center;grid-column:-1;}
+.meta-view .meta-rail .move-rail{inline-size:4.5rem;display:flex;align-items:center;justify-content:center}
+
+/* زر طي/بسط */
+.meta-view .meta-toggle-btn{
+  align-self:flex-start;margin-block-end:-.5rem;
+  background:color-mix(in oklab,var(--modal-secondary) 10%,var(--modal-bg));
+  color:var(--modal-fg);
+  border:.0625rem solid color-mix(in oklab,var(--modal-secondary) 30%,transparent);
+  padding:.35rem .75rem;border-radius:.3125rem;font-size:.85rem;transition:background .2s,border-color .2s
+}
+.meta-view .meta-toggle-btn:hover{background:color-mix(in oklab,var(--modal-secondary) 18%,var(--modal-bg))}
+
+/* ===== خصوصي الأبناء ===== */
+
+.child-view .child-toolbar{display:grid;grid-template-columns:auto auto;justify-content:space-between;align-items:center;gap:.5rem}
+.child-view .child-actions{display:flex;align-items:center;justify-content:flex-end;gap:.5rem;margin:0}
+.child-view .child-actions .edit-child-btn{
+  background:var(--modal-primary);color:var(--modal-primary-fg);
+  border:.0625rem solid color-mix(in oklab,var(--modal-primary) 60%,transparent);
+  padding:.35rem .75rem;border-radius:.3125rem;font-size:.85rem
+}
+.child-view .child-actions .edit-child-btn:hover{background:var(--modal-primary-hover)}
+.child-view .child-actions .remove-child{
+  background:var(--modal-danger);color:var(--modal-danger-fg);
+  border:.0625rem solid color-mix(in oklab,var(--modal-danger) 60%,transparent);
+  padding:.35rem .75rem;border-radius:.3125rem;font-size:.85rem
+}
+.child-view .child-actions .remove-child:hover{background:var(--modal-danger-hover)}
+
+.child-view .child-head{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.35rem}
+
+.child-view .child-head-main{display:flex;align-items:center;justify-content:center;gap: .5rem}
+
+.children-count{display:flex;align-items:center;gap:.5rem;margin-block-start:.5rem;font-weight:600;color:var(--modal-fg)}
+.children-count .num{
+display:inline-block;min-inline-size:2ch;padding:.15rem .55rem;border-radius:999px;font-weight:700;line-height:1.3;
+  background:color-mix(in oklab,var(--son-bg) 35%,var(--modal-bg));
+  color:var(--title-color);border:.0625rem solid color-mix(in oklab,var(--title-color) 40%,transparent)
+}
+/* ===== خصوصي الأب ===== */
+.father-view .father-toolbar, .mother-view .mother-toolbar, .wife-father-toolbar, .wife-mother-toolbar{display:grid;grid-template-columns:auto auto;justify-content:space-between;align-items:center;gap:.5rem}
+.father-view .father-actions, .mother-view .mother-actions, .wife-father-actions, .wife-mother-actions{display:flex;align-items:center;justify-content:flex-end;gap:.5rem;margin:0}
+.father-view .father-actions .edit-father-btn,
+.mother-view .mother-actions .edit-mother-btn,
+.wife-father-actions .edit-wife-father-btn,
+.wife-mother-actions .edit-wife-mother-btn{
+  background:var(--modal-primary);color:var(--modal-primary-fg);
+  border:.0625rem solid color-mix(in oklab,var(--modal-primary) 60%,transparent);
+  padding:.35rem .75rem;border-radius:.3125rem;font-size:.85rem
+}
+.father-view .father-actions .edit-father-btn:hover,
+.wife-father-actions .edit-wife-father-btn:hover,
+.mother-view .mother-actions .edit-mother-btn:hover,
+.wife-mother-actions .edit-wife-mother-btn:hover{background:var(--modal-primary-hover)}
+.father-area,
+.mother-area{
+  grid-column:1 / -1;
+  margin:.5rem 0;
+}
+
+/* ===== خصوصي الأجداد ===== */
+.ancestor-view .ancestor-toolbar{display:grid;grid-template-columns:auto auto;justify-content:space-between;align-items:center;gap:.5rem}
+.ancestor-view .ancestor-actions{display:flex;align-items:center;justify-content:flex-end;gap:.5rem;margin:0}
+.ancestor-view .ancestor-actions .edit-ancestor-btn{
+  background:var(--modal-primary);color:var(--modal-primary-fg);
+  border:.0625rem solid color-mix(in oklab,var(--modal-primary) 60%,transparent);
+  padding:.35rem .75rem;border-radius:.3125rem;font-size:.85rem
+}
+.ancestor-view .ancestor-actions .edit-ancestor-btn:hover{background:var(--modal-primary-hover)}
+.ancestor-view .ancestor-actions .remove-ancestor{
+  background:var(--modal-danger);color:var(--modal-danger-fg);
+  border:.0625rem solid color-mix(in oklab,var(--modal-danger) 60%,transparent);
+  padding:.35rem .75rem;border-radius:.3125rem;font-size:.85rem
+}
+.ancestor-view .ancestor-actions .remove-ancestor:hover{background:var(--modal-danger-hover)}
+
+/* =========================================================
+   6) محرر الأبناء/الأجداد (نفس المظهر)
+========================================================= */
+.child-item{
+  position:relative;display:flex;justify-content:space-between;align-items:center;background:var(--ancestor-bg);
+  padding:.4rem .6rem;border-radius:.4rem;border:.0625rem solid var(--ancestor-border);
+  font-size:.95rem;margin:.5rem 0;color:var(--modal-fg)
+}
+.child-index-badge{
+  min-inline-size:1.6rem;block-size:1.6rem;
+  border-radius:999px;display:inline-flex;align-items:center;justify-content:center;
+  font:600 .8rem/1 var(--ui-font,inherit);
+  background:color-mix(in oklab,var(--daughter-bg) 40%,var(--modal-bg));
+  color:var(--title-color);
+  box-shadow:0 0 0 .0625rem color-mix(in oklab,var(--title-color) 45%,transparent) inset;
+  pointer-events:auto;cursor:grab
+}
+.dnd-drag .child-index-badge{cursor:grabbing}
+
+.children-editor{
+  margin-block-start:.8rem;padding:.8rem;border-radius:.375rem;background:color-mix(in oklab,var(--modal-bg) 96%,var(--card-bg));
+  box-shadow:0 .125rem .375rem rgba(0,0,0,.05);transition:.3s;text-align:center;color:var(--modal-fg)
+}
+.children-controls{display:grid;grid-template-columns:repeat(2,1fr);gap:.6rem 1rem;align-items:end}
+.add-child-inline-btn{grid-column:1/-1;margin-block-start:.5rem;justify-self:start}
+
+/* نموذج التحرير */
+.meta-edit{
+  width: 100%;
+  display:grid;grid-template-columns:repeat(2,1fr);
+  gap:.5rem 1rem;align-items:end
+}
+.meta-edit input,.meta-edit select{
+  inline-size:100%;padding:.4rem .5rem;
+  border:.0625rem solid color-mix(in oklab,var(--modal-fg) 20%,transparent);
+  border-radius:.25rem;font-size:.9rem;color:var(--modal-fg);
+  background:color-mix(in oklab,var(--modal-bg) 94%,var(--card-bg))
+}
+
+/* أزرار التحرير */
+.meta-edit-actions{
+  grid-column:1/-1;display:flex;justify-content:flex-end;
+  gap:.6rem;margin-block-start:.8rem
+}
+.meta-edit-actions button{
+  padding:.45rem 1rem;border-radius:.375rem;font-size:.9rem;border:.0625rem solid transparent;cursor:pointer;
+  transition:background-color .2s,border-color .2s,color .2s;outline:none
+}
+
+/* =========================================================
+   7) أزرار الحفظ والإلغاء
+========================================================= */
+.form-actions button[type="submit"],
+.meta-edit-actions .save-child-btn,
+.meta-edit-actions .save-ancestor-btn,
+.meta-edit-actions .save-father-btn,
+.meta-edit-actions .save-mother-btn,
+.wife-block .add-child-inline-btn{
+  background-color:var(--modal-primary);
+  border-color:color-mix(in oklab,var(--modal-primary) 60%,transparent);
+  color:var(--modal-primary-fg)
+}
+.meta-edit-actions .save-child-btn:hover,
+.meta-edit-actions .save-ancestor-btn:hover,
+.meta-edit-actions .save-father-btn:hover,
+.meta-edit-actions .save-mother-btn:hover,
+.wife-block .add-child-inline-btn:hover{background-color:var(--modal-primary-hover)}
+
+.form-actions button[type="submit"].save-dirty,
+.changed{
+  background-color:var(--modal-secondary) !important;
+  border-color:color-mix(in oklab,var(--modal-secondary) 60%,transparent) !important;
+  color:var(--modal-secondary-fg) !important
+}
+
+.form-actions button[type="submit"].save-dirty:hover,
+.changed:hover {background-color:var(--modal-secondary-hover) !important}
+
+.meta-edit-actions .cancel-child-btn,
+.meta-edit-actions .cancel-ancestor-btn,
+.meta-edit-actions .cancel-father-btn,
+.meta-edit-actions .cancel-mother-btn{
+  background-color:color-mix(in oklab,var(--modal-fg) 8%,var(--modal-bg));
+  color:var(--modal-fg);
+  border-color:color-mix(in oklab,var(--modal-fg) 20%,transparent)
+}
+.meta-edit-actions .cancel-child-btn:hover,
+.meta-edit-actions .cancel-ancestor-btn:hover,
+.meta-edit-actions .cancel-mother-btn:hover,
+.meta-edit-actions .cancel-father-btn:hover{background-color:color-mix(in oklab,var(--modal-fg) 14%,var(--modal-bg))}
+
+.form-actions{
+  grid-column: 1 / -1;
+  position: sticky;
+  bottom: 0;
+  display:flex;
+  justify-content:flex-end;
+  gap:.6rem;
+  padding:.75rem 0 .25rem;
+  margin-block-start:.75rem;
+  background: linear-gradient(180deg, transparent,
+              color-mix(in oklab, var(--modal-bg) 96%, transparent));
+  border-top:.0625rem solid color-mix(in oklab, var(--modal-fg) 12%, transparent);
+  z-index:1;
+}
+
+/* زر عام */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;
+  padding:.55rem 1rem;font-size:.95rem;font-weight:600;
+  border:.0625rem solid transparent;border-radius:.5rem;cursor:pointer;
+  transition:background-color .2s,border-color .2s,color .2s,filter .2s;
+  background:color-mix(in oklab,var(--modal-bg) 98%,var(--card-bg));
+  color:var(--modal-fg)
+}
+.btn:hover{filter:brightness(.96)}
+.btn.small{padding:.4rem .75rem;font-size:.85rem}
+.btn.primary{
+  background:var(--modal-primary);color:var(--modal-primary-fg);
+  border-color:color-mix(in oklab,var(--modal-primary) 60%,transparent)
+}
+.btn.primary:hover{background:var(--modal-primary-hover)}
+.btn.secondary,.add-children-btn,#addWifeBtn{
+  background:var(--modal-secondary);color:var(--modal-secondary-fg);
+  border-color:color-mix(in oklab,var(--modal-secondary) 60%,transparent)
+}
+.btn.secondary:hover,.add-children-btn:hover,#addWifeBtn:hover{background:var(--modal-secondary-hover)}
+.btn.danger{
+  background:var(--modal-danger);color:var(--modal-danger-fg);
+  border-color:color-mix(in oklab,var(--modal-danger) 60%,transparent)
+}
+.btn.danger:hover{background:var(--modal-danger-hover)}
+/* زر الصورة مع قائمة منسدلة بسيطة */
+.photo-menu-wrap{
+  position:relative;
+  display:inline-flex;
+  align-items:stretch;
+}
+
+.photo-menu-wrap .caret-icon{
+  margin-inline-start:.35rem;
+  font-size:.8rem;
+  opacity:.85;
+}
+
+/* القائمة المنسدلة لخيارات الصورة */
+.photo-menu{
+  position:absolute;
+  inset-inline-end:0;
+  inset-block-start:100%;
+  margin-block-start:.25rem;
+  min-inline-size:9.5rem;
+  padding:.3rem;
+  border-radius:.5rem;
+  background:color-mix(in oklab,var(--modal-bg) 98%,var(--card-bg));
+  border:.0625rem solid color-mix(in oklab,var(--modal-fg) 18%,transparent);
+  box-shadow:0 .6rem 1.4rem rgba(15,23,42,.18);
+  display:flex;
+  flex-direction:column;
+  gap:.15rem;
+  z-index:1300;
+}
+.photo-menu[hidden]{display:none;}
+
+.photo-menu button{
+  border:0;
+  background:transparent;
+  padding:.35rem .55rem;
+  border-radius:.4rem;
+  font-size:.85rem;
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  gap:.4rem;
+  inline-size:100%;
+  cursor:pointer;
+  color:var(--modal-fg);
+}
+.photo-menu button:hover{
+  background:color-mix(in oklab,var(--modal-fg) 8%,var(--modal-bg));
+}
+
+/* =========================================================
+   8) نافذة التأكيد
+========================================================= */
+.confirm-modal{display:none;position:fixed;inset:0;background:var(--modal-overlay);align-items:center;justify-content:center;z-index:2000}
+.confirm-modal.show{display:flex}
+.confirm-modal[aria-hidden="true"]{display:none}
+.modal-box{
+  background:var(--modal-bg);color:var(--modal-fg);border:.0625rem solid var(--modal-border);
+  padding:1.875rem 1.5625rem;border-radius:var(--radius);text-align:center;
+  inline-size:min(25rem,92vw);box-shadow:var(--modal-shadow);position:relative;animation:popup .25s ease-out
+}
+.modal-box h2{margin:0 0 .75rem;font-size:1.25rem;font-weight:600;color:var(--title-color)}
+.modal-box p{color:var(--modal-muted);font-size:.95rem}
+.modal-box .reset-options{display:flex;flex-direction:column;align-items:flex-start;gap:.5rem;margin:1rem 0}
+.modal-box .buttons{display:flex;gap:.625rem}
+.modal-box .buttons button{
+  flex:1;padding:.625rem 0;border:0;border-radius:.375rem;cursor:pointer;font-size:.9375rem;
+  transition:filter .2s,transform .06s;outline:none
+}
+.modal-box .buttons .yes-btn{background:var(--modal-primary);color:var(--modal-primary-fg)}
+.modal-box .buttons .yes-btn:hover{filter:brightness(.95);background:var(--modal-primary-hover)}
+.modal-box .buttons .no-btn{background:var(--modal-secondary);color:var(--modal-secondary-fg)}
+.modal-box .buttons .no-btn:hover{filter:brightness(.95);background:var(--modal-secondary-hover)}
+.confirm-modal.danger .buttons .yes-btn{background:var(--modal-danger);color:var(--modal-danger-fg)}
+.confirm-modal.danger .buttons .yes-btn:hover{background:var(--modal-danger-hover)}
+.modal-box .buttons button:focus-visible{outline:2px solid currentColor;outline-offset:2px;filter:brightness(.97)}
+.modal-box .buttons button:active{transform:translateY(.0625rem)}
+.danger-box{
+  text-align:start;border-radius:.5rem;padding:.75rem 1.5rem .875rem;margin:.25rem 0 1rem;
+  background:color-mix(in oklab,var(--modal-danger) 12%,transparent);
+  border:.0625rem solid color-mix(in oklab,var(--modal-danger) 45%,transparent)
+}
+.danger-box p{margin:.25rem 0 .75rem}
+.danger-box .confirm-type{display:block;font-size:.9rem}
+.danger-box input[type="text"]{
+  inline-size:100%;margin-block-start:.4rem;padding:.5rem .6rem;border:.0625rem solid color-mix(in oklab,var(--modal-danger) 35%,#ccc);
+  border-radius:.375rem;background:var(--modal-bg);color:var(--modal-fg);
+  outline:none
+}
+.danger-box input[type="text"]:focus{
+  outline:.125rem solid color-mix(in oklab,var(--modal-danger) 35%, transparent);
+  outline-offset:0;
+}
+
+/* =========================================================
+   9) نافذة الإحصاءات + الأدوات
+========================================================= */
+@keyframes popup{from{transform:scale(.96);opacity:0}to{transform:scale(1);opacity:1}}
+
+.statsModal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:var(--modal-overlay);z-index:1000;padding:1.25rem}
+.statsModal.show{display:flex}
+.statsModal .modal-content{
+  inline-size:min(60rem,100%);background:var(--card-bg);border:.0625rem solid var(--ancestor-border);border-radius:.75rem;
+  box-shadow:0 .625rem 1.875rem rgba(0,0,0,.25);overflow:hidden;transform:scale(.98);opacity:0;animation:statsModalIn .28s ease-out forwards
+}
+.statsModal.hide .modal-content{animation:statsModalOut .25s ease-in forwards}
+.statsModal .modal-header{
+  display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.9rem 1rem;
+  background:var(--ancestor-bg);border-block-end:.0625rem solid var(--ancestor-border)
+}
+#statsTitle{font-size:1.1rem;line-height:1.4;margin:0;color:var(--title-color)}
+.close-button{
+  display:inline-flex;align-items:center;justify-content:center;inline-size:2.25rem;block-size:2.25rem;
+  border:.0625rem solid color-mix(in oklab,var(--modal-fg) 20%,transparent);border-radius:999px;background:transparent;cursor:pointer;
+  transition:transform .12s,background-color .12s,border-color .12s;color:var(--modal-fg);font-size: 1.1rem;
+}
+.close-button:hover{background:color-mix(in oklab,var(--modal-fg) 10%,transparent);transform:scale(1.04)}
+.close-button:focus{outline:2px solid var(--title-color);outline-offset:2px}
+.statsModal .modal-body{padding:1rem;max-block-size:min(72vh,40rem);overflow:auto;color:var(--modal-fg)}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:.75rem}
+.stat-card{background:var(--card-bg);border:.0625rem solid color-mix(in oklab,var(--modal-fg) 15%,transparent);border-radius:.75rem;padding:.9rem;color:var(--modal-fg)}
+.stat-card h4{margin:0 0 .35rem 0;font-size:1rem;color:var(--text-main)}
+.stat-value{font-weight:700;font-size:1.25rem;color:var(--title-color)}
+@keyframes statsModalIn{from{opacity:0;transform:scale(.98)}to{opacity:1;transform:scale(1)}}
+@keyframes statsModalOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.96)}}
+
+.filters-wrap{margin-block-start:.75rem}
+.stats-toolbar{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));gap:.75rem;align-items:end;padding:.75rem;
+  border:.0625rem solid var(--ancestor-border);border-radius:.5rem;background:var(--card-bg)
+}
+.stats-field{display:flex;flex-direction:column;gap:.25rem}
+.stats-field label{font-size:.95rem;font-weight:600;color:var(--text-main)}
+.stats-input,.stats-select{
+  inline-size:100%;block-size:2.5rem;padding:.35rem .6rem;border:.0625rem solid color-mix(in oklab,var(--modal-fg) 20%,transparent);
+  border-radius:.5rem;background:var(--accent-success-fg);color:var(--text-main);font-size:.95rem;font-weight:600
+}
+.stats-input:focus,.stats-select:focus{outline:2px solid color-mix(in oklab,var(--title-color) 40%,transparent);outline-offset:2px}
+#btnExportCsv{justify-self:start;align-self:end;block-size:2.5rem}
+
+/* =========================================================
+   10) المخطط والجداول
+========================================================= */
+.chart-wrap{
+  background:linear-gradient(180deg,#ffffff 0%,#fbfdfb 100%);
+  border:1px solid #e5efe5;border-radius:18px;box-shadow:0 6px 18px rgba(16, 94, 16, .06);
+  padding:14px 16px 18px;margin-block-start:.9rem
+}
+.chart-header{
+  background:#eef9ee;color:#115e11;border:1px solid #d7efd7;border-radius:14px;
+  padding:8px 14px;margin:2px 2px 14px;display:flex;align-items:center;justify-content:space-between
+}
+.chart-header h4{margin:0;font-size:1rem}
+.canvas-resp{display:block;inline-size:100%;block-size:220px;border-radius:12px;background:#fff}
+.canvas-resp.tall{block-size:320px}
+
+.table-wrap{margin-block-start:.9rem;border:.0625rem solid var(--ancestor-border);border-radius:.5rem;background:var(--card-bg);overflow:hidden}
+.table-wrap>h4{margin:0;padding:.6rem .75rem;border-block-end:.0625rem solid var(--ancestor-border);font-size:1rem;color:var(--text-main)}
+.table-scroll{max-block-size:260px;overflow:auto}
+.stats-table{inline-size:100%;border-collapse:collapse;font-size:.95rem}
+.stats-table thead th{position:sticky;inset-block-start:0;background:var(--ancestor-bg);color:var(--text-main);text-align:right;padding:.5rem;border-block-end:.0625rem solid var(--ancestor-border)}
+.stats-table tbody td{padding:.45rem .5rem;border-block-end:.0625rem solid color-mix(in oklab,var(--modal-fg) 12%,transparent)}
+.stats-table tbody tr:hover{background:color-mix(in oklab,var(--modal-fg) 5%,transparent)}
+.stats-table .empty{text-align:center;opacity:.7}
+
+/* =========================================================
+   11) إدارة الأجداد
+========================================================= */
+.ancestor-row{
+  margin:.5rem 0;border:.0625rem solid var(--ancestor-border);padding:.6rem;border-radius:.375rem;
+  display:flex;flex-direction:column;gap:.4rem;background:var(--ancestor-bg);
+  transition:box-shadow .15s ease,border-color .15s ease,background .15s ease;color:var(--modal-fg)
+}
+.ancestor-grid{display:flex;align-items:center;gap:.5rem}
+.ancestor-name{flex:1 1 auto;min-inline-size:0;cursor:text}
+.ancestor-grid .remove-ancestor{white-space:nowrap}
+.dirty-dot{display:inline-block;inline-size:.5rem;block-size:.5rem;border-radius:50%;margin-inline-start:.4rem;margin-inline-end: .4rem;opacity:0;transition:.2s}
+.dirty-on .dirty-dot{opacity:1}
+.dirty-on.dot-ok .dirty-dot{background:var(--modal-secondary)}
+.dirty-on.dot-pending .dirty-dot{background:color-mix(in oklab,var(--modal-primary) 70%,var(--modal-secondary))}
+.dirty-on.dot-invalid .dirty-dot{background:var(--modal-danger)}
+.ancestors-list.drag-disabled .ancestor-label{cursor:default;opacity:.8}
+
+
+/* =========================================================
+   13) تجاوب
+========================================================= */
+@media (max-width:23.9rem){
+  .modal-inner{grid-template-columns:1fr;padding:.6rem;margin-block:1rem}
+  .right-section,.right-col{border:none;padding-inline-start:0}
+  .wives-list{max-block-size:none}
+  .child-view .child-grid{grid-template-columns:1fr auto}
+  .meta-edit-actions{flex-direction:column;align-items:stretch}
+
+  .meta-view .child-grid,
+  .meta-view .ancestor-grid,
+  .meta-view .father-grid,
+  .meta-view .mother-grid,
+  .meta-view .wife-father-grid,
+  .meta-view .wife-mother-grid{
+    grid-template-columns:minmax(0,1fr);
+  }
+  .meta-view .meta-col{
+    align-items:flex-start;
+  }
+
+}
+
+@media (min-width:24rem) and (max-width:29.9rem){
+  .modal-inner{grid-template-columns:1fr;padding:.8rem;margin-block:1.5rem}
+  .left-section .left-col{grid-template-columns:1fr}
+  .right-section .right-col{border:none;padding-inline-start:0}
+  .wives-list{max-block-size:none}
+
+  .meta-view .child-grid,
+  .meta-view .ancestor-grid,
+  .meta-view .father-grid,
+  .meta-view .mother-grid,
+  .meta-view .wife-father-grid,
+  .meta-view .wife-mother-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+
+}
+
+@media (min-width:30rem) and (max-width:39.9rem){
+  .modal-inner{grid-template-columns:1fr;padding:1rem;margin-block:2rem}
+  .right-section,.right-col{border:none;padding-inline-start:0}
+  .wives-list{max-block-size:none}
+
+  .meta-view .child-grid,
+  .meta-view .ancestor-grid,
+  .meta-view .father-grid,
+  .meta-view .mother-grid,
+  .meta-view .wife-father-grid,
+  .meta-view .wife-mother-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+
+@media (min-width:40rem) and (max-width:47.9rem){
+  .modal-inner{grid-template-columns:1fr;gap:.8rem}
+  .left-section .left-col{grid-template-columns:repeat(2,1fr)}
+
+  .meta-view .child-grid,
+  .meta-view .ancestor-grid,
+  .meta-view .father-grid,
+  .meta-view .mother-grid,
+  .meta-view .wife-father-grid,
+  .meta-view .wife-mother-grid{
+    grid-template-columns:4.5rem repeat(3,minmax(0,1fr));
+  }
+
+}
+
+@media (min-width:48rem) and (max-width:63.9rem){
+  .modal-inner{grid-template-columns:1fr;gap:1rem}
+  .left-section .left-col{grid-template-columns:repeat(2,1fr)}
+
+  .meta-view .child-grid,
+  .meta-view .ancestor-grid,
+  .meta-view .father-grid,
+  .meta-view .mother-grid,
+  .meta-view .wife-father-grid,
+  .meta-view .wife-mother-grid{
+    grid-template-columns:4.5rem repeat(3,minmax(0,1fr));
+  }
+
+}
+
+
+@media (min-width:64rem){
+  .modal-inner{grid-template-columns:1fr 1fr}
+  .left-section .left-col{grid-template-columns:repeat(2,1fr)}
+  .right-section .right-col{
+    border-inline-start:.0625rem solid color-mix(in oklab,var(--modal-fg) 10%,transparent);
+    padding-inline-start:1rem;
+  }
+}
