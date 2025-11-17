@@ -728,11 +728,18 @@ header>p{color:var(--text-main); width: fit-content; display: inline-block}
 
 /* ================== تخطيط شجرة العائلة ================== */
 .family-tree{display:flex;flex-direction:column;align-items:center;gap:3rem;padding:2rem}
-.generation{display:flex;justify-content:center;gap:2rem;position:relative;width:100%}
-.wife-section{
-  display:flex;flex-direction:column;align-items:center;padding:1rem;background:var(--card-bg);
-  border:1px solid var(--surface-border);border-radius:1rem;width:fit-content;height:fit-content
+.generation{
+  display:flex;flex-wrap:wrap;justify-content:center;gap:2rem;
+  position:relative;width:100%
 }
+/* الزوجة ككرت مرن يتجاوب مع العرض */
+.wife-section{
+  display:flex;flex-direction:column;align-items:center;
+  padding:1rem;background:var(--card-bg);
+  border:1px solid var(--surface-border);border-radius:1rem;
+  flex:1 1 16rem;max-width:18rem;height:fit-content
+}
+
 .children-grid{margin-top:2rem;display:grid;gap:1.5rem}
 
 /* عدادات */
@@ -1168,36 +1175,51 @@ input[type="search"]::-webkit-search-cancel-button{ -webkit-appearance:none; }
 /* اختياري: إخفاء الزر عندما الحقل فارغ */
 .clear-btn[hidden]{ display: none !important; }
 
-/* ================== تجاوبية إضافية ================== */
-/* استجابة الشريط العلوي */
+/* ================== تجاوب الشاشات ================== */
 @media (max-width:23.9rem){
   .top-bar{flex-wrap:wrap;gap:.6rem;align-items:center}
   .search-wrap{flex:1 1 100%;min-width:0}
   .family-button,#filtersToggle,.date-time-display{flex:0 0 auto}
   .btn,input,select{font-size:.8rem;padding:.4rem .6rem}
+
+  .generation{flex-direction:column;align-items:stretch;gap:1.5rem}
+  .wife-section{flex:1 1 100%;max-width:100%}
 }
 
 @media (min-width:24rem) and (max-width:29.9rem){
   .top-bar{flex-wrap:wrap;gap:.8rem}
   .search-wrap{flex:1 1 100%;min-width:0}
+
+  .generation{justify-content:center;gap:1.75rem}
+  .wife-section{flex:1 1 calc(50% - 1rem);max-width:20rem}
 }
 
 @media (min-width:30rem) and (max-width:39.9rem){
   .top-bar{flex-wrap:nowrap;gap:1rem}
   .search-wrap{flex:1 1 clamp(240px,45vw,500px)}
+
+  .generation{justify-content:center;gap:2rem}
+  .wife-section{flex:1 1 calc(50% - 1.2rem);max-width:21rem}
 }
 
 @media (min-width:40rem) and (max-width:47.9rem){
   .top-bar{gap:1rem}
   .search-wrap{flex:1 1 clamp(260px,48vw,520px)}
+
+  .generation{justify-content:center;gap:2.25rem}
+  .wife-section{flex:1 1 calc(50% - 1.5rem);max-width:22rem}
 }
 
 @media (min-width:48rem) and (max-width:63.9rem){
   .top-bar{gap:1rem}
   .search-wrap{flex:1 1 clamp(280px,42vw,540px)}
+
+  .generation{justify-content:center;gap:2.5rem}
+  .wife-section{flex:1 1 calc(33.333% - 1.5rem);max-width:22rem}
 }
 
 @media (min-width:64rem){
   .search-wrap{flex:1 1 clamp(320px,36vw,560px)}
   .generation{flex-wrap:wrap;justify-content:center;gap:4rem}
+  .wife-section{flex:0 1 18rem;max-width:18rem}
 }

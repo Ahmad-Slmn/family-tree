@@ -4,15 +4,13 @@
 import { byId } from '../utils.js';
 import * as Model from '../model/families.js';
 import * as TreeUI from '../ui/tree.js';
-import { getState } from '../stateManager.js';
 import * as Lineage from './lineage.js';
 
-function hexToRgba(hex, a=0.18){
-  const m = hex.replace('#','');
-  const n = parseInt(m.length===3 ? m.split('').map(x=>x+x).join('') : m, 16);
-  const r=(n>>16)&255, g=(n>>8)&255, b=n&255;
+function hexToRgba(hex, a = 0.18){
+  const { r, g, b } = hexToRgb(hex);
   return `rgba(${r},${g},${b},${a})`;
 }
+
 
 /* =========================
    1) حساب الإحصاءات (عدّ آمن)
@@ -22,7 +20,20 @@ function hexToRgba(hex, a=0.18){
 function computeStats(onlyFamilyKey = null){
   const fams    = Model.getFamilies();
   const visible = Object.keys(fams).filter(k => fams[k] && fams[k].hidden !== true);
-  const keys    = onlyFamilyKey ? visible.filter(k => k === onlyFamilyKey) : visible;
+
+  // دعم:
+  // - null / undefined  → كل العائلات المرئية
+  // - string            → عائلة واحدة
+  // - Array<string>     → مجموعة عائلات مخصّصة (نستخدمها مع الفلتر)
+  let keys;
+  if (Array.isArray(onlyFamilyKey) && onlyFamilyKey.length){
+    const set = new Set(onlyFamilyKey);
+    keys = visible.filter(k => set.has(k));
+  } else if (typeof onlyFamilyKey === 'string' && onlyFamilyKey){
+    keys = visible.filter(k => k === onlyFamilyKey);
+  } else {
+    keys = visible;
+  }
 
   const s = {
     familiesCount: keys.length,
@@ -604,6 +615,22 @@ function downloadCSV(filename, text){
    6) واجهة العرض + الفلاتر
 ========================= */
 const pct = (x, n)=>{ n = Math.max(1, +n||0); x = Math.max(0, +x||0); return (Math.round((x/n)*1000)/10).toFixed(1); };
+// تطبيع بسيط للاسم العربي لبحث الإحصاءات
+const ST_AR_DIAC  = /[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]/g; // الحركات
+const ST_AR_TATWL = /\u0640/g;                                          // التطويل
+const ST_ALIF_ALL = /[اأإآ]/g;                                          // الألف بأشكالها
+const ST_YA_MAQ   = /\u0649/g;                                          // الألف المقصورة
+
+function normArStats(s = ''){
+  return String(s)
+    .normalize('NFKC')
+    .replace(ST_AR_DIAC, '')
+    .replace(ST_AR_TATWL, '')
+    .replace(ST_ALIF_ALL, 'ا')
+    .replace(ST_YA_MAQ, 'ي')
+    .trim()
+    .toLowerCase();
+}
 
 function renderStats(){
   const body = byId('statsBody'); if (!body) return;
@@ -726,8 +753,8 @@ if (selScope){
     return (scopeVal !== 'all') ? computeStats(scopeVal) : sAll;
   };
 
-  // بطاقات الملخص + شريط أبناء/بنات + جدول العشائر
-  const renderSummaryAndClans = (stats)=>{
+  // بطاقات الملخص + شريط أبناء/بنات (لا تتأثر بالبحث النصي، فقط بالنطاق)
+  const renderSummary = (stats)=>{
     const grid = byId('stGrid');
     grid.innerHTML = [
       ['عدد العائلات', stats.familiesCount],
@@ -747,43 +774,36 @@ if (selScope){
       { label:'أبناء',  value:stats.sons },
       { label:'بنات',  value:stats.daughters }
     ]));
-
-    // قائمة العشائر + جدولها
-    selClan.innerHTML = `<option value="">الكل</option>`;
-    const clans = Array.from(stats.perClan.entries())
-      .map(([clan,v])=>({ clan, persons:v.persons }))
-      .sort((a,b)=> b.persons - a.persons);
-
-    for (const c of clans){
-      const opt = document.createElement('option');
-      opt.value = c.clan; opt.textContent = `${c.clan} (${c.persons})`;
-      selClan.appendChild(opt);
-    }
-
-    const top = clans.slice(0, 12);
-    tbClan.innerHTML = top.length ? top.map(c=>{
-      const v = stats.perClan.get(c.clan) || { persons:0, sons:0, daughters:0 };
-      return `<tr><td>${c.clan}</td><td>${v.persons}</td><td>${v.sons}</td><td>${v.daughters}</td></tr>`;
-    }).join('') : `<tr><td colspan="4" class="empty">لا بيانات</td></tr>`;
   };
 
-  // تطبيق الفلاتر + رسم المكدّس + جدول العائلات
+  // تطبيق الفلاتر + رسم المكدّس + جدول العائلات + تفاصيل العشائر
   const applyFilters = ()=>{
-    const s = getScopedStats();
-    const q    = String(inpSearch.value||'').trim().toLowerCase();
-    const min  = Math.max(0, parseInt(inpMin.value||'0',10) || 0);
-    const sort = selSort.value;
-    const topN = Math.max(1, parseInt(selTopN.value||'20',10) || 20);
+    const s      = getScopedStats();              // إحصاءات النطاق (ثابتة للبطاقات)
+    const qRaw   = String(inpSearch.value || '');
+    const qNorm  = normArStats(qRaw);
+    const min    = Math.max(0, parseInt(inpMin.value||'0',10) || 0);
+    const sort   = selSort.value;
+    const topN   = Math.max(1, parseInt(selTopN.value||'20',10) || 20);
 
     let rows = s.perFamily.slice();
-    if (q)   rows = rows.filter(r => r.label.toLowerCase().includes(q));
-    if (min) rows = rows.filter(r => (r.persons||0) >= min);
-    // ملاحظة: فلتر العشيرة التفصيلي لكل عائلة غير مُنفّذ بعد
 
+    // فلتر اسم العائلة بتطبيع عربي (إزالة الحركات والتطويل وتوحيد الألف)
+    if (qNorm){
+      rows = rows.filter(r => normArStats(r.label).includes(qNorm));
+    }
+
+    // حد أدنى لعدد الأشخاص
+    if (min){
+      rows = rows.filter(r => (r.persons || 0) >= min);
+    }
+    // ملاحظة: فلتر العشيرة التفصيلي لكل عائلة يمكن إضافته لاحقًا
+
+    // 1) مخطط مكدّس لكل عائلة (يتأثر بالفلتر)
     requestAnimationFrame(()=> drawStackedFamilies(cvStack, rows, { sort, topN }));
 
+    // 2) جدول "تفصيل حسب العائلة" (يتأثر بالفلتر)
     const sorters = {
-      total:     (a,b)=> (b.sons+b.daughters) - (a.sons+a.daughters),
+      total:     (a,b)=> (b.sons + b.daughters) - (a.sons + a.daughters),
       sons:      (a,b)=> b.sons - a.sons,
       daughters: (a,b)=> b.daughters - a.daughters
     };
@@ -792,17 +812,76 @@ if (selScope){
     tbFam.innerHTML = rows.length ? rows.map(f =>
       `<tr><td>${f.label}</td><td>${f.persons}</td><td>${f.sons}</td><td>${f.daughters}</td><td>${f.wives}</td><td>${f.unknown}</td></tr>`
     ).join('') : `<tr><td colspan="6" class="empty">لا بيانات</td></tr>`;
+
+    // 3) تفاصيل العشائر (تُعاد من العائلات المفلترة فقط)
+    const filteredKeys = Array.from(new Set(
+      rows.map(r => r.familyKey).filter(Boolean)
+    ));
+
+    let clanStats;
+    if (!qNorm && !min){
+      // لا يوجد فلتر → استخدم إحصاءات النطاق كما هي
+      clanStats = s;
+    } else if (filteredKeys.length){
+      // فلتر مفعّل → أعِد حساب الإحصاءات لهذه العائلات فقط
+      clanStats = computeStats(filteredKeys);
+    } else {
+      // لا توجد عائلات بعد الفلتر
+      clanStats = { perClan: new Map() };
+    }
+
+    selClan.innerHTML = `<option value="">الكل</option>`;
+    const clansArr = Array.from((clanStats.perClan || new Map()).entries())
+      .map(([clan, v]) => ({ clan, persons: v.persons }))
+      .sort((a,b)=> b.persons - a.persons);
+
+    for (const c of clansArr){
+      const opt = document.createElement('option');
+      opt.value = c.clan;
+      opt.textContent = `${c.clan} (${c.persons})`;
+      selClan.appendChild(opt);
+    }
+
+    const top = clansArr.slice(0, 12);
+    tbClan.innerHTML = top.length ? top.map(c=>{
+      const v = clanStats.perClan.get(c.clan) || { persons:0, sons:0, daughters:0 };
+      return `<tr><td>${c.clan}</td><td>${v.persons}</td><td>${v.sons}</td><td>${v.daughters}</td></tr>`;
+    }).join('') : `<tr><td colspan="4" class="empty">لا بيانات</td></tr>`;
+  };
+  
+    // دالة موحدة لإعادة رسم المخططات حسب النطاق الحالي + الفلاتر الحالية
+  const redrawCharts = () => {
+    if (!cvBar.isConnected || !cvStack.isConnected) return;
+    const statsNow = getScopedStats();
+
+    // ملخص الأبناء/البنات في الشريط العلوي (لا يعتمد على البحث النصي)
+    drawBars(cvBar, [
+      { label: 'أبناء', value: statsNow.sons },
+      { label: 'بنات',  value: statsNow.daughters }
+    ]);
+
+    // المكدّس + جدول العائلات + جدول العشائر وفق الفلاتر الحالية
+    applyFilters();
   };
 
   // الرسم الأولي
-  renderSummaryAndClans(getScopedStats());
-  applyFilters();
+  renderSummary(getScopedStats());  // البطاقات + الشريط (مرّة واحدة للنطاق الحالي)
+  applyFilters();                   // أول تطبيق للفلاتر
+
+  // ربط الفلاتر بدالة التحديث
+  inpSearch?.addEventListener('input', applyFilters);
+  inpMin?.addEventListener('input', applyFilters);
+  selSort?.addEventListener('change', applyFilters);
+  selTopN?.addEventListener('change', applyFilters);
+  // (اختياري لاحقًا عند تنفيذ فلتر العشيرة):
+  // selClan?.addEventListener('change', applyFilters);
 
   // تبديل النطاق
   selScope?.addEventListener('change', ()=>{
-    renderSummaryAndClans(getScopedStats());
+    renderSummary(getScopedStats());
     applyFilters();
   });
+
 
   // تصدير CSV
   byId('btnExportCsv')?.addEventListener('click', ()=>{
@@ -811,27 +890,13 @@ if (selScope){
   });
 
   // إعادة الرسم عند تغير الحجم
-  const ro = new ResizeObserver(()=> requestAnimationFrame(()=>{
-    if (!cvBar.isConnected || !cvStack.isConnected) return;
-    const statsNow = getScopedStats();
-    drawBars(cvBar, [
-      { label:'أبناء', value: statsNow.sons },
-      { label:'بنات',  value: statsNow.daughters }
-    ]);
-    applyFilters();
-  }));
+  const ro = new ResizeObserver(()=> requestAnimationFrame(redrawCharts));
+
     // ——— إعادة الرسم عند تغيّر النمط/الثيم ———
   const redrawAll = () => {
-    if (!cvBar.isConnected || !cvStack.isConnected) return;
-    const statsNow = getScopedStats();
-    // ملخص الأبناء/البنات
-    drawBars(cvBar, [
-      { label: 'أبناء', value: statsNow.sons },
-      { label: 'بنات',  value: statsNow.daughters }
-    ]);
-    // المكدّس + الجدول وفق الفلاتر الحالية
-    applyFilters();
+    redrawCharts();
   };
+
 
   // 1) تبدّل نظام الجهاز (فاتح/داكن)
   const mql = window.matchMedia?.('(prefers-color-scheme: dark)');
