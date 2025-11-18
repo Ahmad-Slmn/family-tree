@@ -1,6 +1,4 @@
-/* =========================================================
-   معرض الصور الجاهزة (Photo Gallery)
-========================================================= */
+/*================== photoGallery.css معرض الصور ================== */
 
 /* طبقة المودال */
 .photoGalleryModal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:1.25rem;background:color-mix(in oklab,var(--modal-overlay) 80%,transparent);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);z-index:1200}
@@ -20,22 +18,36 @@
 
 /* رأس المعرض */
 .photoGalleryModal .modal-header{
-  display:flex;align-items:center;justify-content:space-between;gap:.75rem;
-  padding:.6rem .9rem;margin-block-end:.35rem;border-radius:999px;
-  background:color-mix(in oklab,var(--accent-success) 10%,var(--modal-bg));
+  display:flex;align-items:center;gap:.8rem;
+  padding:.65rem 1rem .7rem;margin-block-end:.4rem;
+  border-radius:1.75rem;
+  background:color-mix(in oklab,var(--accent-success) 12%,var(--modal-bg));
   border:.0625rem solid color-mix(in oklab,var(--accent-success) 35%,transparent);
   box-shadow:0 .05rem .3rem color-mix(in oklab,var(--modal-fg) 12%,transparent) inset
 }
-.modal-header-text{display:flex;flex-direction:column;gap:.15rem}
-.gallery-subtitle{margin:0;font-size:.78rem;color:color-mix(in oklab,var(--text-main) 70%,transparent);opacity:.9}
+.photoGalleryModal .modal-header .close-button{flex:0 0 auto}
+.modal-header-text{
+  flex:1;display:flex;flex-direction:column;gap:.2rem;
+  text-align:center
+}
 .photoGalleryModal #galleryTitle{margin:0;font-size:1rem;color:var(--title-color);font-weight:700}
+.gallery-subtitle{margin:0;font-size:.78rem;color:color-mix(in oklab,var(--text-main) 70%,transparent);opacity:.9}
 
 /* جسم المعرض */
 .photoGalleryModal .modal-body{padding:0;flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable both-edges}
 
 /* شريط الأدوات أعلى الشبكة */
-.photo-gallery-toolbar{display:flex;align-items:center;gap:.6rem;padding:.1rem .3rem .6rem;flex-wrap:nowrap}
-.photo-gallery-meta{margin-inline-start:auto;font-size:.78rem;color:var(--placeholder-fg);white-space:nowrap}
+.photo-gallery-toolbar{
+  display:flex;align-items:center;gap:.6rem;
+  padding:.25rem .25rem .7rem;
+  flex-wrap:wrap
+}
+.photo-gallery-cat{flex:1 1 8rem;min-inline-size:0;display:flex;justify-content:flex-start; max-height: fit-content}
+.photo-gallery-meta{
+  flex:0 0 auto;margin-inline-start:auto;
+  font-size:.78rem;color:var(--placeholder-fg);white-space:nowrap
+}
+
 
 /* قائمة التصنيف */
 #photoGalleryCategory{
@@ -51,13 +63,16 @@
 #photoGalleryCategory:focus-visible{outline:none;border-color:var(--accent-success);box-shadow:0 0 0 .12rem color-mix(in oklab,var(--accent-success) 28%,transparent);background-color:#fff}
 #photoGalleryCategory:hover{border-color:color-mix(in oklab,var(--accent-success) 45%,transparent)}
 
-/* حقل البحث داخل المعرض + الأيقونات */
-.photo-gallery-search{position:relative;inline-size:min(18rem,100%)}
+/* البحث */
+.photo-gallery-search{flex:2 1 10rem;min-inline-size:0;position:relative; max-height: fit-content}
 .photo-gallery-search-ico{
-  position:absolute;inset-inline-start:.65rem;inset-block:50%;transform:translateY(-50%);
-  display:inline-flex;align-items:center;justify-content:center;block-size:1.15rem;line-height:1;
-  font-size:.9rem;color:color-mix(in oklab,var(--modal-fg) 60%,transparent);pointer-events:none;opacity:.85
+  position:absolute;inset-inline-start:.65rem;inset-block-start:50%;transform:translateY(-50%);
+  display:inline-flex;align-items:center;justify-content:center;
+  block-size:1.15rem;line-height:1;font-size:.9rem;
+  color:color-mix(in oklab,var(--modal-fg) 60%,transparent);
+  pointer-events:none;opacity:.85
 }
+
 .photo-gallery-search input{
   inline-size:100%;padding:.5rem 2.1rem .5rem 2.05rem;
   border-radius:999px;border:.0625rem solid color-mix(in oklab,var(--modal-fg) 18%,transparent);
@@ -85,7 +100,7 @@
   border-bottom:.05rem solid color-mix(in oklab,var(--modal-fg) 12%,transparent);opacity:.9
 }
 
-/* شبكة العناصر */
+/* الشبكة */
 .photo-gallery-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:1rem 1.1rem;padding-inline:.1rem}
 
 /* بطاقة الصورة */
@@ -134,7 +149,7 @@
 /* حركة الوميض */
 @keyframes gallerySkeleton{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
 
-/* الصورة في أعلى البطاقة + طبقة المعاينة */
+/* الصورة في أعلى البطاقة */
 .photo-gallery-thumb-wrap{
   position:relative;inline-size:100%;aspect-ratio:3/4;
   overflow:hidden;border-radius:1rem 1rem 0 0;
@@ -148,10 +163,10 @@
   text-align:center;padding:.55rem .45rem .6rem;white-space:nowrap
 }
 
-/* رسالة لا توجد نتائج */
+/* لا توجد نتائج */
 .photo-gallery-empty{grid-column:1/-1;text-align:center;padding:1.2rem .6rem;font-size:.9rem;color:var(--placeholder-fg)}
 
-/* أيقونة المعاينة أسفل يمين الصورة */
+/* أيقونة المعاينة */
 .photo-gallery-preview-ico{
   position:absolute;inset-block-end:.25rem;inset-inline-end:.25rem;
   display:inline-flex;align-items:center;justify-content:center;
@@ -165,7 +180,7 @@
 .photo-gallery-item:hover .photo-gallery-preview-ico,
 .photo-gallery-item:focus-visible .photo-gallery-preview-ico{opacity:1;transform:scale(1)}
 
-/* طبقة معاينة الصورة فوق المعرض */
+/* طبقة معاينة الصورة */
 .photo-gallery-preview-layer{
   position:fixed;inset:0;z-index:1300;
   display:flex;align-items:center;justify-content:center;
@@ -191,34 +206,97 @@
    تجاوب خاص بمعرض الصور الجاهزة
 ========================================================= */
 
-/* شاشات صغيرة جدًا */
+/* 1) شاشات صغيرة جدًا max-width:23.9rem */
 @media (max-width:23.9rem){
   .photoGalleryModal{padding:.6rem;align-items:flex-end}
   .photoGalleryModal .modal-content{
     inline-size:95vw;max-inline-size:95vw;max-block-size:85vh;
     border-radius:1rem 1rem 0 0
   }
+  .photoGalleryModal .modal-header{padding:.55rem .8rem .6rem;border-radius:1.4rem}
+  .photo-gallery-toolbar{
+    flex-direction:column;align-items:stretch;
+    gap:.35rem;padding:.25rem .15rem .5rem
+  }
+  .photo-gallery-search input{
+    font-size:.8rem;
+    padding:.42rem 2rem .42rem 1.8rem
+  }
+  .photo-gallery-cat{width:100%}
+  #photoGalleryCategory{
+    inline-size:100%;font-size:.8rem;
+    padding:.34rem 1.6rem
+  }
+
+  .photo-gallery-meta{
+    margin-inline-start:0;align-self:flex-start;
+    font-size:.76rem
+  }
   .photo-gallery-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 
-/* موبايل عادي */
-@media (min-width:24rem) and (max-width:39.9rem){
+/* 2) موبايل صغير min-width:24rem and max-width:29.9rem */
+@media (min-width:24rem) and (max-width:29.9rem){
+  .photoGalleryModal{padding:.7rem}
+  .photoGalleryModal .modal-content{
+    inline-size:94vw;max-inline-size:94vw;max-block-size:85vh;
+    border-radius:1.05rem
+  }
+  .photo-gallery-toolbar{
+    flex-direction:column;align-items:stretch;
+    gap:.35rem;padding:.3rem .2rem .55rem
+  }
+  .photo-gallery-search input{
+    font-size:.82rem;
+    padding:.44rem 2rem .44rem 1.9rem
+  }
+  .photo-gallery-cat{width:100%}
+  #photoGalleryCategory{
+    inline-size:100%;font-size:.82rem;
+    padding:.36rem 1.7rem
+  }
+
+  .photo-gallery-meta{margin-inline-start:0;align-self:flex-start}
+  .photo-gallery-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
+/* 3) موبايل عادي min-width:30rem and max-width:39.9rem */
+@media (min-width:30rem) and (max-width:39.9rem){
   .photoGalleryModal{padding:.8rem}
   .photoGalleryModal .modal-content{
     inline-size:92vw;max-inline-size:92vw;max-block-size:85vh;
     border-radius:1.1rem
   }
+  .photo-gallery-toolbar{flex-wrap:wrap}
   .photo-gallery-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
 
-/* تابلت / لابتوب صغير */
-@media (min-width:40rem) and (max-width:63.9rem){
-  .photoGalleryModal .modal-content{inline-size:86vw;max-inline-size:56rem}
+/* 4) تابلت صغير min-width:40rem and max-width:47.9rem */
+@media (min-width:40rem) and (max-width:47.9rem){
+  .photoGalleryModal{padding:1rem}
+  .photoGalleryModal .modal-content{
+    inline-size:88vw;max-inline-size:52rem;max-block-size:85vh;
+    border-radius:1.15rem
+  }
   .photo-gallery-grid{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
 }
 
-/* ديسكتوب واسع */
+/* 5) تابلت / لابتوب صغير min-width:48rem and max-width:63.9rem */
+@media (min-width:48rem) and (max-width:63.9rem){
+  .photoGalleryModal{padding:1.1rem}
+  .photoGalleryModal .modal-content{
+    inline-size:86vw;max-inline-size:56rem;max-block-size:85vh;
+    border-radius:1.2rem
+  }
+  .photo-gallery-grid{grid-template-columns:repeat(auto-fit,minmax(135px,1fr))}
+}
+
+/* 6) ديسكتوب واسع min-width:64rem */
 @media (min-width:64rem){
-  .photoGalleryModal .modal-content{inline-size:80vw;max-inline-size:64rem}
+  .photoGalleryModal{padding:1.25rem}
+  .photoGalleryModal .modal-content{
+    inline-size:80vw;max-inline-size:64rem;max-block-size:80vh;
+    border-radius:1.25rem
+  }
   .photo-gallery-grid{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
 }

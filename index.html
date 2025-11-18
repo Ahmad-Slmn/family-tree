@@ -248,46 +248,43 @@
     </div>
 
     <!-- 🖼️ معرض الصور -->
-    <div class="photoGalleryModal" id="photoGalleryModal" role="dialog" aria-modal="true" aria-labelledby="galleryTitle" tabindex="-1">
-        <div class="modal-content">
-            <div class="modal-header">
-                <div class="modal-header-text">
-                    <h2 id="galleryTitle">اختيار صورة من المعرض</h2>
-                    <p class="gallery-subtitle">اختر صورة تقريبية من جميع التصنيفات (أفراد الأسرة، الفئات العمرية، صور محايدة) لتحسين شكل الشجرة.</p>
+<div class="photoGalleryModal" id="photoGalleryModal" role="dialog" aria-modal="true" aria-labelledby="galleryTitle" tabindex="-1">
+    <div class="modal-content">
+        <div class="modal-header">
+            <button class="close-button" aria-label="إغلاق" id="closeGallery">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <div class="modal-header-text">
+                <h2 id="galleryTitle">اختيار صورة من المعرض</h2>
+                <p class="gallery-subtitle">
+                    اختر صورة تقريبية من جميع التصنيفات (أفراد الأسرة، الفئات العمرية، صور محايدة) لتحسين شكل الشجرة.
+                </p>
+            </div>
+        </div>
+
+        <div class="modal-body">
+            <div class="photo-gallery-toolbar">
+                <div class="photo-gallery-search">
+                    <i class="fa-solid fa-magnifying-glass photo-gallery-search-ico" aria-hidden="true"></i>
+                    <input id="photoGallerySearch" type="search" placeholder="ابحث بالاسم أو الوصف (جد، أب، شاب، مولود، صورة محايدة...)" aria-label="البحث في صور المعرض">
+                    <button type="button" id="photoGalleryClear" class="photo-gallery-clear-btn" aria-label="مسح البحث" hidden>
+                        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                    </button>
                 </div>
-                <button class="close-button" aria-label="إغلاق" id="closeGallery">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
+
+                <div class="photo-gallery-cat">
+                    <select id="photoGalleryCategory" aria-label="تصنيف الصور"></select>
+                </div>
+
+                <div class="photo-gallery-meta" id="photoGalleryMeta" aria-live="polite"></div>
             </div>
 
-            <div class="modal-body">
-                <div class="photo-gallery-toolbar">
-
-                    <div class="photo-gallery-search">
-                        <i class="fa-solid fa-magnifying-glass photo-gallery-search-ico" aria-hidden="true"></i>
-
-                        <input id="photoGallerySearch" type="search" placeholder="ابحث بالاسم أو الوصف (جد، أب، شاب، مولود، صورة محايدة...)" aria-label="البحث في صور المعرض">
-
-                        <button type="button" id="photoGalleryClear" class="photo-gallery-clear-btn" aria-label="مسح البحث" hidden>
-                            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-                        </button>
-                    </div>
-
-                    <div class="photo-gallery-cat">
-                        <select id="photoGalleryCategory" aria-label="تصنيف الصور"></select>
-                    </div>
-
-                    <!-- عدّاد عدد النتائج -->
-                    <div class="photo-gallery-meta" id="photoGalleryMeta" aria-live="polite"></div>
-
-                </div>
-
-                <div class="photo-gallery-grid" id="photoGalleryGrid" role="listbox" aria-label="صور جاهزة">
-                    <!-- تُملأ برمجيًا بصور المعرض -->
-                </div>
+            <div class="photo-gallery-grid" id="photoGalleryGrid" role="listbox" aria-label="صور جاهزة">
+                <!-- تُملأ برمجيًا بصور المعرض -->
             </div>
         </div>
     </div>
+</div>
 
 
     <!-- ───── نافذة التأكيد العامة ───── -->
