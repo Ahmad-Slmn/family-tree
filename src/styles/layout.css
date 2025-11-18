@@ -718,13 +718,69 @@ body{background:var(--bg-gradient);min-height:100vh;color:var(--text-main); over
 }
 .close-button:hover{background:color-mix(in oklab,var(--modal-fg) 10%,transparent);transform:scale(1.04)}
 .close-button:focus{outline:2px solid var(--title-color);outline-offset:2px}
+
 /* ================== رأس الصفحة ================== */
-header{
-  text-align:center;margin:2rem 1rem 4rem;padding:2rem;background:var(--header-bg);
-  border:1px solid var(--surface-border);border-radius:1rem;box-shadow:0 .25rem .375rem rgba(0,0,0,.1)
+.site-header{
+  margin:2.5rem auto 3.5rem;padding:1.75rem 2.25rem;max-width:60rem;
+  background:color-mix(in oklab,var(--header-bg)88%,transparent);
+  border-radius:var(--radius);border:1px solid var(--surface-border);
+  box-shadow:var(--shadow);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:.6rem;
+  text-align:center;position:relative;overflow:hidden;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
 }
-h1{font-size:3rem;color:var(--title-color);margin-bottom:1rem}
-header>p{color:var(--text-main); width: fit-content; display: inline-block}
+.site-header::before{
+content:"";position:absolute;inset-inline:2rem;inset-block-start:.75rem;
+  height:.15rem;border-radius:999px;
+  background:linear-gradient(90deg,var(--arrow-color),color-mix(in srgb,var(--title-color)70%,#fff));
+  opacity:.75;
+}
+.site-title{
+  font-size:clamp(2.1rem,3vw,2.8rem);color:var(--title-color);
+  letter-spacing:.03em;margin:0 0 .1rem;
+  text-shadow:0 .12rem .28rem color-mix(in srgb,var(--title-color)40%,transparent);
+}
+.site-tagline{
+  margin:0;max-width:45rem;font-size:1.1rem;line-height:1.85;
+  color:color-mix(in srgb,var(--text-main)85%,var(--placeholder-fg));
+  position:relative;padding-inline-start:2.2rem;display:inline-block;min-height:3.2rem;
+}
+
+/* أيقونة قبل النص (Emoji) */
+.site-tagline::before{
+  content: var(--tag-icon, "🌿");position:absolute;inset-inline-start:0;top:.05rem;
+  font-size:1.4rem;opacity:.9;transform:translateY(0);animation:iconPulse 2.4s ease-in-out infinite;
+}
+
+/* مؤشر الكتابة */
+.site-tagline::after{
+  content:"";display:inline-block;inline-size:0.11rem;block-size:1.2em;margin-inline-start:.25rem;
+  background:var(--arrow-color);border-radius:999px;animation:blinkCaret 1s steps(1,end) infinite;
+}
+
+.site-subtitle{
+  margin-top:.35rem;font-size:.98rem;font-weight:600;color:var(--title-color);
+  padding:.35rem .9rem;border-radius:999px;
+  border:.0625rem solid color-mix(in srgb,var(--title-color)35%,transparent);
+  background:color-mix(in srgb,var(--ancestor-bg)75%,#fff);
+  display:inline-flex;align-items:center;gap:.35rem;
+}
+.site-subtitle::before{
+  content:"";inline-size:.45rem;block-size:.45rem;border-radius:999px;
+  background:var(--arrow-color);
+}
+
+/* نبض خفيف للأيقونة */
+@keyframes taglinePulse{
+  0%,100%{transform:translateY(0);opacity:.85}
+  50%{transform:translateY(-1px);opacity:1}
+}
+
+/* وميض مؤشّر الكتابة */
+@keyframes blinkCaret{
+  0%,49%{opacity:1}
+  50%,100%{opacity:0}
+}
 
 /* ================== تخطيط شجرة العائلة ================== */
 .family-tree{display:flex;flex-direction:column;align-items:center;gap:3rem;padding:2rem}

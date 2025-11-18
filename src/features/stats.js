@@ -127,15 +127,29 @@ function computeStats(onlyFamilyKey = null){
     bumpMissing(p, ctx);
 
     const rg = TreeUI.roleGroup(p);
+
     if (rg === 'زوجة'){
-      s.wives += 1; famAcc.wives += 1; bumpClan(p, undefined, ctx);
+      // زوجة → تُحتسب في الزوجات + تُنسب للعشيرة (بدون تمييز أبناء/بنات)
+      s.wives += 1;
+      famAcc.wives += 1;
+      bumpClan(p, undefined, ctx);
     } else if (rg === 'ابن'){
-      s.sons += 1; famAcc.sons += 1; bumpClan(p, 'sons', ctx);
+      // ابن → أبناء + عشيرة (أبناء)
+      s.sons += 1;
+      famAcc.sons += 1;
+      bumpClan(p, 'sons', ctx);
     } else if (rg === 'بنت'){
-      s.daughters += 1; famAcc.daughters += 1; bumpClan(p, 'daughters', ctx);
+      // بنت → بنات + عشيرة (بنات)
+      s.daughters += 1;
+      famAcc.daughters += 1;
+      bumpClan(p, 'daughters', ctx);
     } else {
-      s.unknown += 1; famAcc.unknown += 1;
+      // أي دور آخر (جد، رب الأسرة، غير محدد...) → يُحتسب في unknown + تُنسب عشيرته إن وُجدت
+      s.unknown += 1;
+      famAcc.unknown += 1;
+      bumpClan(p, undefined, ctx);
     }
+
 
     const wives = Array.isArray(p.wives) ? p.wives : [];
     const kids  = Array.isArray(p.children) ? p.children : [];

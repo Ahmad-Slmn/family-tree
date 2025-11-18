@@ -24,6 +24,59 @@ import * as FeatureStats from './features/stats.js';
 import * as FeatureIO from './features/io.js';
 import * as FeaturePrint from './features/print.js';
 
+// تدوير عبارات رأس الشجرة (كتابة/مسح حرفيًا)
+const rotatingItems=[
+ {text:"تتبَّع جذور عائلتك، وتعرَّف على الأجداد والأحفاد في شجرة واحدة واضحة وسهلة التصفّح.",icon:"🌿"},
+ {text:"منصة تفاعلية لاستعراض أفراد العائلة، الأجداد والأحفاد، مع تفاصيلهم وصورهم في شجرة واحدة.",icon:"🖼️"},
+ {text:"هنا تلتقي أجيال العائلة في مخطط واحد؛ من الجذور إلى أحدث فرع في الشجرة.",icon:"🌳"},
+ {text:"اكتشف تاريخ عائلتك، واحفظ معلومات الآباء والأجداد للأبناء والأحفاد بطريقة أنيقة ومنظّمة.",icon:"📖"},
+ {text:"شجرتك العائلية… قصة تمتد عبر الزمن، تتشكل من أسماء ووجوه وذكريات.",icon:"🕰️"},
+ {text:"كل فرد في العائلة هو غصن جديد يضيف جمالًا وامتدادًا لهذه الشجرة المباركة.",icon:"🌱"},
+ {text:"هنا تحفظ أسماء من رحلوا، وتُكتب حكايات من سيأتون… في شجرة تجمع الماضي والحاضر.",icon:"✨"},
+ {text:"تعرف على علاقاتك الأسرية بسهولة: الآباء، الأبناء، الأزواج، الإخوة… كلهم في لوحة واحدة.",icon:"🧩"},
+ {text:"الأسرة جذور ثابتة وفروع نامية… وهذه الشجرة تحفظ تلك الروابط بوضوح تام.",icon:"🌼"},
+ {text:"كل اسم داخل الشجرة له قصة… وكل قصة تستحق أن تروى.",icon:"📜"},
+ {text:"من هنا تبدأ رحلتك لتوثيق تاريخ عائلتك، جيلاً بعد جيل.",icon:"🧭"},
+ {text:"أضف أفراد عائلتك، نظّم الأنساب، واحفظ التفاصيل قبل أن تنساها الأيام.",icon:"💾"}
+];
+
+// سرعات الكتابة/المسح والوقوف
+let taglineTimer=null;
+const TAG_WRITE_DELAY=55,TAG_ERASE_DELAY=45,TAG_HOLD_FULL=5000,TAG_HOLD_EMPTY=700;
+
+function startRotatingTagline(){
+  const el=document.getElementById("treeTagline"); if(!el) return;
+  let index=(+localStorage.getItem('treeTaglineIndex')||0)%rotatingItems.length,i=0,dir=1;
+
+  const tick=()=>{
+    const {text,icon}=rotatingItems[index];
+    el.style.setProperty('--tag-icon',`"${icon}"`);
+
+    if(dir===1){
+      if(++i>=text.length){
+        i=text.length; el.textContent=text; dir=-1;
+        taglineTimer=setTimeout(tick,TAG_HOLD_FULL); return;
+      }
+      el.textContent=text.slice(0,i);
+      taglineTimer=setTimeout(tick,TAG_WRITE_DELAY);
+    }else{
+      if(--i<=0){
+        i=0; el.textContent=""; dir=1;
+        index=(index+1)%rotatingItems.length;
+        localStorage.setItem('treeTaglineIndex',index);
+        taglineTimer=setTimeout(tick,TAG_HOLD_EMPTY); return;
+      }
+      el.textContent=text.slice(0,i);
+      taglineTimer=setTimeout(tick,TAG_ERASE_DELAY);
+    }
+  };
+
+  clearTimeout(taglineTimer); tick();
+}
+
+
+window.addEventListener("DOMContentLoaded",startRotatingTagline);
+
 // أدوات غطاء التحميل (Logo + Progress + حركة الشجرة)
 let currentSplashProgress = 0;
 let splashHasError        = false; // هل الغطاء في وضع خطأ حاليًا؟
