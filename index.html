@@ -93,8 +93,6 @@
 
     </div>
 
-
-
     <!-- ───── الشريط الجانبي (يسار) ───── -->
     <div id="sideOverlay" class="side-overlay" hidden></div>
     <aside id="sidePanel" class="side-panel" aria-hidden="true" aria-label="لوحة الإعدادات">
@@ -142,11 +140,12 @@
         <section class="side-section">
             <h4>اختيار المظهر</h4>
             <div id="themeButtons" class="theme-buttons" role="group" aria-label="اختيار النمط">
-                <button class="theme-button" type="button" data-theme="default" title="النمط الرئيسي" aria-label="تبديل إلى النمط الرئيسي" tabindex="0" style="--color:#f0c000;"></button>
-                <button class="theme-button" type="button" data-theme="dark" title="الداكن" aria-label="تبديل إلى النمط الداكن" tabindex="0" style="--color:#333;"></button>
-                <button class="theme-button" type="button" data-theme="minimal" title="الغروب" aria-label="تبديل إلى الغروب" tabindex="0" style="--color:#d81b60;"></button>
-                <button class="theme-button" type="button" data-theme="elegant" title="المحيط" aria-label="تبديل إلى المحيط" tabindex="0" style="--color:#0277bd;"></button>
-                <button class="theme-button" type="button" data-theme="corporate" title="الغابة" aria-label="تبديل إلى الغابة" tabindex="0" style="--color:#2e7d32;"></button>
+                <button class="theme-button" data-theme="default" data-label="ذهبي • رئيسي" aria-label="تبديل إلى اللون الذهبي – النمط الرئيسي" tabindex="0" style="--color:#f0c000;"></button>
+                <button class="theme-button" data-theme="elegant" data-label="أزرق • محيط" aria-label="تبديل إلى اللون الأزرق المحيطي – النمط الأنيق" tabindex="0" style="--color:#0277bd;"></button>
+                <button class="theme-button" data-theme="corporate" data-label="أخضر • غابة" aria-label="تبديل إلى اللون الأخضر الغامق – نمط الغابة" tabindex="0" style="--color:#2e7d32;"></button>
+                <button class="theme-button" data-theme="minimal" data-label="وردي • غروب" aria-label="تبديل إلى اللون الوردي الغامق – نمط الغروب" tabindex="0" style="--color:#d81b60;"></button>
+                <button class="theme-button" data-theme="royal" data-label="بنفسجي • ملكي" aria-label="تبديل إلى اللون البنفسجي الملكي – النمط الملكي" tabindex="0" style="--color:#8b5cf6;"></button>
+                <button class="theme-button" data-theme="dark" data-label="فحمي • داكن" aria-label="تبديل إلى اللون الفحمي – النمط الداكن" tabindex="0" style="--color:#333;"></button>
             </div>
         </section>
 
@@ -173,12 +172,15 @@
     <div class="container">
         <header class="site-header">
             <h1 class="site-title">شجرة العائلة</h1>
-            <p class="site-tagline" id="treeTagline"></p>
+            <div class="site-tagline">
+                <span class="tag-icon" id="treeTagIcon"></span>
+                <span class="tag-text" id="treeTagline"></span>
+            </div>
             <p class="site-subtitle" id="treeTitle"></p>
         </header>
+
         <section id="familyTree" class="family-tree" aria-live="polite"></section>
     </div>
-
 
     <!-- ───── نافذة السيرة  ───── -->
     <div id="bioModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalName" aria-describedby="modalContent" tabindex="-1">
@@ -326,10 +328,7 @@
     <script src="./src/vendor/compressor/compressor.min.js" defer></script>
 
     <!-- Pixelmatch: لمقارنة صورتين بكسل-ببكسل واكتشاف الفروق -->
-    <script type="module">
-        import pixelmatch from './src/vendor/pixelmatch/pixelmatch.min.js';
-        window.pixelmatch = pixelmatch;
-    </script>
+    <script type="module">import pixelmatch from './src/vendor/pixelmatch/pixelmatch.min.js'; window.pixelmatch = pixelmatch;</script>
 
     <!-- نقطة دخول واحدة للتطبيق -->
     <script type="module" src="src/app.js"></script>

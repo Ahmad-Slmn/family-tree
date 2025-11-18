@@ -1441,23 +1441,21 @@ let _drawnTotal = 0;
   const setMotherVisibility = (on) => {
     tree.querySelectorAll('.mini-strip.mother-strip').forEach(e => { e.style.display = on ? '' : 'none'; });
   };
-  if (q){
-    tools = el('div','generation tree-tools');
-    const wrap = el('div','tree-tools-wrap');
-    wrap.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:.5rem;align-items:center;justify-content:space-between;text-align:center;margin-bottom:.6rem;';
-    const motherWrap = el('div'); motherWrap.id='motherToggleWrap';
-    motherWrap.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:.5rem;border:1px solid #ccc;padding:.4rem .6rem;border-radius:8px;background:#f8f8f8;';
-    const chk = document.createElement('input'); chk.type='checkbox'; chk.id='toggleMotherName'; chk.checked = true;
-    const lbl = textEl('span','إظهار اسم الأم');
-    motherWrap.append(chk,lbl);
-    const res = el('div','results-count');
-    res.style.cssText = 'background:#f2f2f2;padding:.4rem .6rem;border-radius:8px;font-weight:500;';
-    const strongQ = textEl('strong', String(q));
-    const strongNum = textEl('strong','0','resultsNum'); strongNum.id = 'resultsNum'; strongNum.setAttribute('aria-live','polite');
-    res.append(textEl('span','نتائج البحث عن "'), strongQ, textEl('span','": '), strongNum);
-    wrap.append(motherWrap,res); tools.appendChild(wrap); tree.appendChild(tools);
-    toggle = chk; toggle.addEventListener('change', () => setMotherVisibility(!!toggle.checked));
-  }
+if(q){
+  tools=el('div','generation tree-tools');
+  const wrap=el('div','tree-tools-wrap');
+  const motherWrap=el('div','mother-toggle'); motherWrap.id='motherToggleWrap';
+  const chk=document.createElement('input'); chk.type='checkbox'; chk.id='toggleMotherName'; chk.checked=true;
+  const lbl=textEl('span','إظهار اسم الأم');
+  motherWrap.append(chk,lbl);
+  const res=el('div','results-count');
+  const strongQ=textEl('strong',String(q));
+  const strongNum=textEl('strong','0','resultsNum'); strongNum.id='resultsNum'; strongNum.setAttribute('aria-live','polite');
+  res.append(textEl('span','نتائج البحث عن "'),strongQ,textEl('span','": '),strongNum);
+  wrap.append(motherWrap,res); tools.appendChild(wrap); tree.appendChild(tools);
+  toggle=chk; toggle.addEventListener('change',()=>setMotherVisibility(!!toggle.checked));
+}
+
   const showMotherHint = !!q;
 
   // عنوان الشجرة

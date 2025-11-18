@@ -45,13 +45,14 @@ let taglineTimer=null;
 const TAG_WRITE_DELAY=55,TAG_ERASE_DELAY=45,TAG_HOLD_FULL=5000,TAG_HOLD_EMPTY=700;
 
 function startRotatingTagline(){
-  const el=document.getElementById("treeTagline"); if(!el) return;
+  const el=document.getElementById("treeTagline");
+  const iconEl=document.getElementById("treeTagIcon");
+  if(!el) return;
   let index=(+localStorage.getItem('treeTaglineIndex')||0)%rotatingItems.length,i=0,dir=1;
 
   const tick=()=>{
     const {text,icon}=rotatingItems[index];
-    el.style.setProperty('--tag-icon',`"${icon}"`);
-
+    if(iconEl) iconEl.textContent=icon;
     if(dir===1){
       if(++i>=text.length){
         i=text.length; el.textContent=text; dir=-1;
@@ -245,14 +246,15 @@ function updateSplashLogo(theme){
   const img = document.getElementById('appSplashLogo');
   if (!img) return;
 
-  // خريطة بسيطة: يمكن تعديلها لاحقًا بسهولة
-  const LOGO_BY_THEME = {
-    default:   'default-logo-gold.png',     // النمط الرئيسي (teal)
-    elegant:   'elegant-logo-ocean-blue.png',     // المحيط – يبقى teal
-    corporate: 'corporate-logo-forest-green.png',     // الغابة – ذهبي
-    minimal:   'minimal-logo-rose-crimson.png',     // الغروب – ذهبي
-    dark:      'dark-logo-amber-gold-glow.png'  // الداكن – رمادي غامق
-  };
+// خريطة شعارات الأنماط
+const LOGO_BY_THEME = {
+  default:   'default-logo-gold.png',            // ذهبي • رئيسي
+  elegant:   'elegant-logo-ocean-blue.png',      // أزرق • محيط
+  corporate: 'corporate-logo-forest-green.png',  // أخضر • غابة
+  minimal:   'minimal-logo-rose-crimson.png',    // وردي • غروب
+  royal:     'royal-logo-purple-gold.png',       // بنفسجي • ملكي
+  dark:      'dark-logo-amber-gold-glow.png'     // فحمي • داكن
+};
 
   const file = LOGO_BY_THEME[theme] || LOGO_BY_THEME.default;
   img.src = `src/assets/images/${file}`;
