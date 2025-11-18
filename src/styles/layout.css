@@ -741,14 +741,14 @@ content:"";position:absolute;inset-inline:2rem;inset-block-start:.75rem;
   text-shadow:0 .12rem .28rem color-mix(in srgb,var(--title-color)40%,transparent);
 }
 .site-tagline{
-  margin:0;max-width:45rem;font-size:1.1rem;line-height:1.85;
+  margin:0;max-width:fit-content;font-size:1.1rem;line-height:1.85;
   color:color-mix(in srgb,var(--text-main)85%,var(--placeholder-fg));
   position:relative;padding-inline-start:2.2rem;display:inline-block;min-height:3.2rem;
 }
 
 /* أيقونة قبل النص (Emoji) */
 .site-tagline::before{
-  content: var(--tag-icon, "🌿");position:absolute;inset-inline-start:0;top:.05rem;
+  content: var(--tag-icon, "🌿");position:absolute;inset-inline-start:0;bottom:0.80rem;
   font-size:1.4rem;opacity:.9;transform:translateY(0);animation:iconPulse 2.4s ease-in-out infinite;
 }
 

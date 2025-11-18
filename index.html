@@ -170,14 +170,14 @@
     </aside>
 
     <!-- ───── العنوان والشجرة ───── -->
-<div class="container">
-  <header class="site-header">
-    <h1 class="site-title">شجرة العائلة</h1>
-    <p class="site-tagline" id="treeTagline"></p>
-    <p class="site-subtitle" id="treeTitle"></p>
-  </header>
-  <section id="familyTree" class="family-tree" aria-live="polite"></section>
-</div>
+    <div class="container">
+        <header class="site-header">
+            <h1 class="site-title">شجرة العائلة</h1>
+            <p class="site-tagline" id="treeTagline"></p>
+            <p class="site-subtitle" id="treeTitle"></p>
+        </header>
+        <section id="familyTree" class="family-tree" aria-live="polite"></section>
+    </div>
 
 
     <!-- ───── نافذة السيرة  ───── -->
@@ -326,7 +326,10 @@
     <script src="./src/vendor/compressor/compressor.min.js" defer></script>
 
     <!-- Pixelmatch: لمقارنة صورتين بكسل-ببكسل واكتشاف الفروق -->
-    <script type="module">import pixelmatch from './src/vendor/pixelmatch/pixelmatch.min.js'; window.pixelmatch = pixelmatch;</script>
+    <script type="module">
+        import pixelmatch from './src/vendor/pixelmatch/pixelmatch.min.js';
+        window.pixelmatch = pixelmatch;
+    </script>
 
     <!-- نقطة دخول واحدة للتطبيق -->
     <script type="module" src="src/app.js"></script>
