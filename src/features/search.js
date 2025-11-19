@@ -2,6 +2,7 @@
 import { byId, el, textEl, showWarning } from '../utils.js';
 import * as Model from '../model/families.js';
 import * as TreeUI from '../ui/tree.js';
+import { roleGroup, ROLE_FILTER_VALUES } from '../model/roles.js';
 import * as Lineage from '../features/lineage.js';
 import { setState, getState } from '../stateManager.js';
 
@@ -168,7 +169,7 @@ function buildSuggestions(q){
   const pass = (p)=>{
     const ref = p.ref || p;
 
-    if (filters.role && TreeUI.roleGroup(ref) !== filters.role) return false;
+ if (filters.role && roleGroup(ref) !== filters.role) return false;
 
     if (filters.clan){
       // نص العشيرة كما أدخله المستخدم (بعد التطبيع)
@@ -305,14 +306,10 @@ function mountAdvancedFilters(){
 
         <div class="form-field">
           <label for="fltRole">الدور</label>
-          <select id="fltRole">
-            <option value="">الكل</option>
-            <option value="ابن">ابن</option>
-            <option value="بنت">بنت</option>
-            <option value="الأب">الأب</option>
-            <option value="جد">جد</option>
-            <option value="زوجة">زوجة</option>
-          </select>
+       <select id="fltRole">
+  <option value="">الكل</option>
+</select>
+
         </div>
 
         <div class="form-field clan-field">
@@ -339,6 +336,17 @@ function mountAdvancedFilters(){
     </div>
   `;
   topBar.after(box);
+  const roleSelect = byId('fltRole');
+  if (roleSelect){
+    const existing = new Set(Array.from(roleSelect.options).map(o => o.value));
+    ROLE_FILTER_VALUES.forEach(v => {
+      if (!v || existing.has(v)) return;
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = v;
+      roleSelect.appendChild(opt);
+    });
+  }
 
   // تحميل حالة الفلاتر من state (يحافظ على نفس المصدر)
   const s = getState().filters || {};

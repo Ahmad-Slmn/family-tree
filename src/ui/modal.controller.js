@@ -144,6 +144,7 @@ export function wireFamilyModal({ modal, initialData, editKey, onSave, onCancel 
   const wivesList   = modal.querySelector('.wives-list');
   const addWifeBtn  = modal.querySelector('#addWifeBtn');
   const formEl      = modal.querySelector('#addFamilyForm');
+    const closeBtn   = modal.querySelector('#closeAddFamily');
 const fatherMount = formEl.querySelector('#fatherBlockMount');
 const fatherBlock = createFatherBlock(); fatherMount.appendChild(fatherBlock);
 
@@ -1164,12 +1165,20 @@ addWifeBtn.addEventListener('click', ()=>{
   // Hook للـ Escape داخل ModalManager: إن وُجد يُستدعى بدل الإغلاق المباشر
   modal.__onEscapeHook = requestClose;
 
-  modal.addEventListener('click', e=>{ if (e.target === modal) requestClose(); });
+  // الإغلاق بالخلفية الداكنة فقط (تفويض أحداث)
+  modal.addEventListener('click', e => {
+    if (e.target === modal) {
+      requestClose();
+    }
+  });
 
-  const closeBtn = modal.querySelector('#closeAddFamily');
-  closeBtn.addEventListener('click', requestClose);
-  closeBtn.addEventListener('mousedown', (e)=>{ e.preventDefault(); });
-  closeBtn.addEventListener('touchstart', (e)=>{ e.preventDefault(); }, { passive:false });
+  // زر × أعلى المودال
+  closeBtn?.addEventListener('click', e => {
+    e.preventDefault();
+    requestClose();
+  });
+
+  // زر "إلغاء"
   modal.querySelector('#cancelAddFamily').addEventListener('click', requestClose);
 
   /* ========= 11) قراءة واجهة → بيانات نقية ========= */

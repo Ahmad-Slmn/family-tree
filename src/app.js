@@ -819,15 +819,23 @@ setSplashProgress(85, 'تهيئة البحث والإحصاءات والطباع
       document.addEventListener(ev, stopIfEditableName, true)
     );
 
-    // أزرار الثيم + تحديث الشعار
-    dom.themeButtons?.addEventListener('click', e => {
-      const btn = e.target.closest('.theme-button');
-      if (!btn) return;
-
-      const theme = btn.dataset.theme;
-      setState({ theme });
+    // أزرار الثيم + تحديث الشعار + رسائل توضيحية
+    dom.themeButtons?.addEventListener('click',e=>{
+      const btn=e.target.closest('.theme-button');if(!btn)return;
+      const theme=btn.dataset.theme;
+      const prevTheme=getState().theme||currentTheme;
+      if(theme===prevTheme){
+        const curLabel=btn.dataset.label||theme;
+        showInfo(`النمط ${highlight(curLabel)} مُفعَّل حاليًا بالفعل.`);
+        return;
+      }
+      const prevBtn=dom.themeButtons.querySelector(`.theme-button[data-theme="${prevTheme}"]`);
+      const prevLabel=prevBtn?.dataset.label||prevTheme||'السابق';
+      const newLabel=btn.dataset.label||theme;
+      setState({theme});
       applySavedTheme(theme);
       updateSplashLogo(theme);
+      showSuccess(`تم تغيير النمط من ${highlight(prevLabel)} إلى ${highlight(newLabel)}.`);
     });
 
 

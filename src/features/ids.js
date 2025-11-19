@@ -2,7 +2,7 @@
 
 // ===== استيرادات =====
 import * as Model from '../model/families.js';
-import * as TreeUI from '../ui/tree.js';
+import { roleGroup } from '../model/roles.js';
 
 // =======================================
 // 1) أدوات مساعدة (تطبيع + سياق + بصمة)
@@ -69,12 +69,13 @@ function _findContext(fam, ref){
 // بصمة مرنة للمطابقة
 function _fingerprint(p){
   const name  = _normAr(p?.name||'');
-  const group = TreeUI.roleGroup(p)||'';
+  const group = roleGroup(p) || '';
   const birth = String(p?.bio?.birthDate || p?.bio?.birthYear || '').trim();
   const mother= _normAr(p?.bio?.motherName||'');
   const clan  = _normAr(p?.bio?.clan||'');
   return { name, group, birth, mother, clan };
 }
+
 
 // =======================================
 // 2) نشر مُعرّف موحّد عبر كل المراجع المطابقة
@@ -96,7 +97,7 @@ export function assignIdEverywhere(fam, targetRef, newId){
     const fp = _fingerprint(p);
     if (!fp.name || !tfp.name) return false;
     if (fp.name !== tfp.name) return false;
-    if ((TreeUI.roleGroup(p)||'') !== (tfp.group||'')) return false;
+        if ((roleGroup(p) || '') !== (tfp.group || '')) return false;
     const extra =
       (fp.birth  && fp.birth  === tfp.birth) ||
       (fp.mother && fp.mother === tfp.mother) ||

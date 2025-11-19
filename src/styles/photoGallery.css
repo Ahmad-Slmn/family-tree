@@ -45,7 +45,7 @@
 .photo-gallery-cat{flex:1 1 8rem;min-inline-size:0;display:flex;justify-content:flex-start; max-height: fit-content}
 .photo-gallery-meta{
   flex:0 0 auto;margin-inline-start:auto;
-  font-size:.78rem;color:var(--placeholder-fg);white-space:nowrap
+  font-size:.78rem;color:var(--text-main);white-space:nowrap
 }
 
 
@@ -53,14 +53,14 @@
 #photoGalleryCategory{
   appearance:none;-webkit-appearance:none;-moz-appearance:none;
   inline-size:min(14rem,100%);padding:.38rem 1.9rem .38rem .75rem;
-  border-radius:999px;border:.0625rem solid color-mix(in oklab,var(--modal-fg) 18%,transparent);
-  background:color-mix(in oklab,var(--modal-bg) 92%,#fff)
+  border-radius:999px;border:.0625rem solid .0625rem solid color-mix(in oklab,var(--accent-success) 35%,transparent);
+  background:var(--card-bg)
     url("data:image/svg+xml,%3Csvg width='14' height='10' viewBox='0 0 14 10' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2 2L7 7L12 2' stroke='%23999' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E")
     no-repeat right .7rem center/14px;
   font-size:.86rem;font-weight:600;color:var(--text-main);cursor:pointer;
   transition:border-color .15s,box-shadow .15s,background-color .15s
 }
-#photoGalleryCategory:focus-visible{outline:none;border-color:var(--accent-success);box-shadow:0 0 0 .12rem color-mix(in oklab,var(--accent-success) 28%,transparent);background-color:#fff}
+#photoGalleryCategory:focus-visible{outline:none;border-color:var(--accent-success);box-shadow:0 0 0 .12rem color-mix(in oklab,var(--accent-success) 28%,transparent)}
 #photoGalleryCategory:hover{border-color:color-mix(in oklab,var(--accent-success) 45%,transparent)}
 
 /* البحث */
@@ -76,12 +76,12 @@
 .photo-gallery-search input{
   inline-size:100%;padding:.5rem 2.1rem .5rem 2.05rem;
   border-radius:999px;border:.0625rem solid color-mix(in oklab,var(--modal-fg) 18%,transparent);
-  background:color-mix(in oklab,var(--modal-bg) 92%,#fff);
+  background:var(--card-bg);
   font-size:.85rem;color:var(--text-main);outline:none;
   transition:border-color .15s,box-shadow .15s,background-color .15s
 }
 .photo-gallery-search input::placeholder{color:var(--placeholder-fg)}
-.photo-gallery-search input:focus-visible{border-color:var(--accent-success);box-shadow:0 0 0 .12rem color-mix(in oklab,var(--accent-success) 28%,transparent);background:#fff}
+.photo-gallery-search input:focus-visible{border-color:var(--accent-success);box-shadow:0 0 0 .12rem color-mix(in oklab,var(--accent-success) 28%,transparent)}
 .photo-gallery-clear-btn{
   position:absolute;inset-inline-end:.45rem;inset-block:50%;transform:translateY(-50%);
   inline-size:1.35rem;block-size:1.35rem;border-radius:999px;border:none;

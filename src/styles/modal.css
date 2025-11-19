@@ -93,7 +93,7 @@
   contain:content
 }
 .form-modal.active .modal-inner{transform:translateY(0) scale(1);opacity:1}
-.modal-inner .close-btn{position:absolute;inset-block-start:.6rem;inset-inline-end:.6rem}
+.modal-inner .close-btn{position:absolute;inset-block-start:.6rem;inset-inline-end:.6rem; z-index: 20}
 .form-modal-header{
   grid-column:1/-1;display:flex;justify-content:center;align-items:center;
   position:relative;padding-block-end:.75rem;border-block-end:.0625rem solid color-mix(in oklab,var(--modal-fg) 10%,transparent)
@@ -349,7 +349,8 @@ display:inline-block;min-inline-size:2ch;padding:.15rem .55rem;border-radius:999
 .meta-edit-actions .save-ancestor-btn,
 .meta-edit-actions .save-father-btn,
 .meta-edit-actions .save-mother-btn,
-.wife-block .add-child-inline-btn{
+.wife-block .add-child-inline-btn,
+.wife-block .save-wife-mother-btn{
   background-color:var(--modal-primary);
   border-color:color-mix(in oklab,var(--modal-primary) 60%,transparent);
   color:var(--modal-primary-fg)
@@ -358,6 +359,7 @@ display:inline-block;min-inline-size:2ch;padding:.15rem .55rem;border-radius:999
 .meta-edit-actions .save-ancestor-btn:hover,
 .meta-edit-actions .save-father-btn:hover,
 .meta-edit-actions .save-mother-btn:hover,
+.wife-block .save-wife-mother-btn:hover,
 .wife-block .add-child-inline-btn:hover{background-color:var(--modal-primary-hover)}
 
 .form-actions button[type="submit"].save-dirty,
@@ -373,7 +375,8 @@ display:inline-block;min-inline-size:2ch;padding:.15rem .55rem;border-radius:999
 .meta-edit-actions .cancel-child-btn,
 .meta-edit-actions .cancel-ancestor-btn,
 .meta-edit-actions .cancel-father-btn,
-.meta-edit-actions .cancel-mother-btn{
+.meta-edit-actions .cancel-mother-btn,
+.meta-edit-actions .cancel-wife-mother-btn{
   background-color:color-mix(in oklab,var(--modal-fg) 8%,var(--modal-bg));
   color:var(--modal-fg);
   border-color:color-mix(in oklab,var(--modal-fg) 20%,transparent)
@@ -381,6 +384,7 @@ display:inline-block;min-inline-size:2ch;padding:.15rem .55rem;border-radius:999
 .meta-edit-actions .cancel-child-btn:hover,
 .meta-edit-actions .cancel-ancestor-btn:hover,
 .meta-edit-actions .cancel-mother-btn:hover,
+.meta-edit-actions .cancel-wife-mother-btn:hover,
 .meta-edit-actions .cancel-father-btn:hover{background-color:color-mix(in oklab,var(--modal-fg) 14%,var(--modal-bg))}
 
 .form-actions{

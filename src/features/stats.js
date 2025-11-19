@@ -1,9 +1,9 @@
 // features/stats.js — إحصاءات + مخططات + فلاتر + CSV
-// يعتمد على: utils.byId ، model/families.getFamilies ، ui/tree.roleGroup
+// يعتمد على: utils.byId ، model/families.getFamilies ، model/roles.roleGroup
 
 import { byId } from '../utils.js';
 import * as Model from '../model/families.js';
-import * as TreeUI from '../ui/tree.js';
+import { roleGroup } from '../model/roles.js';
 import * as Lineage from './lineage.js';
 
 function hexToRgba(hex, a = 0.18){
@@ -58,7 +58,7 @@ function computeStats(onlyFamilyKey = null){
     return [
       'fp', String(famKey||'').trim(),
       String(p?.name||'').trim(),
-      TreeUI.roleGroup(p),
+      roleGroup(p),
       String(b.birthDate||b.birthYear||'').trim(),
       String(b.fatherName||'').trim(),
       String(resolvedClan).trim(),
@@ -125,8 +125,7 @@ function computeStats(onlyFamilyKey = null){
     s.persons += 1;
     famAcc.persons += 1;
     bumpMissing(p, ctx);
-
-    const rg = TreeUI.roleGroup(p);
+const rg = roleGroup(p);
 
     if (rg === 'زوجة'){
       // زوجة → تُحتسب في الزوجات + تُنسب للعشيرة (بدون تمييز أبناء/بنات)

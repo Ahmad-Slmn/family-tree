@@ -364,6 +364,7 @@ body{background:var(--bg-gradient);min-height:100vh;color:var(--text-main); over
   font-weight: 600;
   line-height: 1;
   box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  cursor: pointer
 }
 .family-button i{ font-size: .95rem; opacity: .8; }
 
