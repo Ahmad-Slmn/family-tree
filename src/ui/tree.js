@@ -1278,6 +1278,44 @@ function collectPersonsForSearch(fam){
   return out;
 }
 
+/* ===== ترتيب هرمي ثابت مطابق للشجرة (لبطاقات نتائج البحث) ===== */
+function buildHierarchyIndex(fam){
+  const order = new Map();
+  let i = 0;
+
+  const put = (p)=>{
+    if(!p) return;
+    const id = p._id || p.id || p.__tempId;
+    if(id && !order.has(id)) order.set(id, i++);
+  };
+
+  const walk = (p)=>{
+    if(!p) return;
+    put(p);
+
+    const wives = Array.isArray(p.wives) ? p.wives : [];
+    wives.forEach(w=>{
+      put(w);
+      (w?.children||[]).forEach(walk);
+    });
+
+    (p.children||[]).forEach(walk);
+  };
+
+  (Array.isArray(fam?.ancestors) ? fam.ancestors : []).forEach(walk);
+  if(fam?.father) walk(fam.father);
+  if(fam?.rootPerson) walk(fam.rootPerson);
+  (fam?.wives||[]).forEach(walk);
+
+  return order;
+}
+
+function getHierarchyRank(orderMap, p){
+  const id = p?._id || p?.id || p?.__tempId;
+  if(id && orderMap.has(id)) return orderMap.get(id);
+  return Number.MAX_SAFE_INTEGER;
+}
+
 
 // ===== رسم الشجرة الرئيسية (بحث/فلاتر/زوجات/أبناء) =====
 export function drawFamilyTree(families = {}, selectedKey = null, domRefs = {}, handlers = {}){
@@ -1476,12 +1514,22 @@ const tokensRaw = String(q || '').trim().split(/\s+/).filter(Boolean);
   }
 
   const coll = new Intl.Collator('ar', { usage:'search', sensitivity:'base', ignorePunctuation:true });
+  const hierarchyOrder = buildHierarchyIndex(fam);
+
   results.sort((a,b)=>{
+    const ra = getHierarchyRank(hierarchyOrder, a);
+    const rb = getHierarchyRank(hierarchyOrder, b);
+    if (ra !== rb) return ra - rb;
+
+    // داخل نفس الرتبة حافظ على "الأفضل مطابقة" (اختياري)
     const sa = scoreForSearch(a, tokens);
     const sb = scoreForSearch(b, tokens);
     if (sb !== sa) return sb - sa;
+
+    const coll = new Intl.Collator('ar', { usage:'search', sensitivity:'base', ignorePunctuation:true });
     return coll.compare(String(a.name||''), String(b.name||''));
   });
+
 
   const wrap = el('div','generation search-results');
   const grid = el('div','children-grid');

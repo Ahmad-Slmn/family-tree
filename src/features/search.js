@@ -82,11 +82,65 @@ function listPersonsOfFamily(fam){
   return acc;
 }
 
+/* ===== ترتيب هرمي ثابت مطابق للشجرة (للترتيب في البحث/الاقتراحات) ===== */
+function buildHierarchyIndex(fam){
+  const order = new Map();
+  let i = 0;
+
+  const put = (p)=>{
+    if(!p) return;
+    const id = p._id || p.id || p.__tempId;
+    if(id && !order.has(id)) order.set(id, i++);
+  };
+
+  // preorder traversal مشابه لترتيب الرسم
+  const walk = (p)=>{
+    if(!p) return;
+    put(p);
+
+    // زوجات الشخص (إن لم يكن rootPerson سيتم إدراجهن هنا)
+    const wives = Array.isArray(p.wives) ? p.wives : [];
+    wives.forEach(w=>{
+      put(w);
+      (w?.children||[]).forEach(walk);
+    });
+
+    // الأبناء
+    (p.children||[]).forEach(walk);
+  };
+
+  // 1) الأجداد بالترتيب التسلسلي
+  (Array.isArray(fam?.ancestors) ? fam.ancestors : []).forEach(walk);
+
+  // 2) الأب
+  if(fam?.father) walk(fam.father);
+
+  // 3) صاحب الشجرة
+  if(fam?.rootPerson) walk(fam.rootPerson);
+
+  // 4) الزوجات الأعلى (إن كانت مخزنة بمستوى العائلة)
+  (fam?.wives||[]).forEach(walk);
+
+  return order;
+}
+
+function getHierarchyRank(orderMap, p){
+  const ref = p?.ref || p;
+  const id = ref?._id || ref?.id || ref?.__tempId;
+  if(id && orderMap.has(id)) return orderMap.get(id);
+  return Number.MAX_SAFE_INTEGER; // أي شيء غير معروف يأتي آخرًا
+}
+
+
 /* ===== بناء قائمة الاقتراحات ===== */
 function buildSuggestions(q){
-  const fam=Model.getFamilies()[getState().selectedFamily];
-  const lineageCtx=Lineage.buildLineageContext(fam);
-  const all=listPersonsOfFamily(fam);
+const fam=Model.getFamilies()[getState().selectedFamily];
+const lineageCtx=Lineage.buildLineageContext(fam);
+const all=listPersonsOfFamily(fam);
+
+// خريطة ترتيب هرمي ثابت
+const hierarchyOrder = buildHierarchyIndex(fam);
+
   const rawQ=String((q||'').trim()); if(!rawQ) return [];
 
   const filters=getState().filters||{};
@@ -138,14 +192,25 @@ function buildSuggestions(q){
       const hitInCog=tokens.some(tk=>cogNorm.includes(tk));
       return {...p,_matchField:(!hitInNameRole&&hitInCog)?'cognomen':'nameRole'};
     })
-    .sort((a,b)=>{
-      const pa=a.ref||a,pb=b.ref||b;
-      const sa=TreeUI.scoreForSearch?TreeUI.scoreForSearch(pa,tokens):0;
-      const sb=TreeUI.scoreForSearch?TreeUI.scoreForSearch(pb,tokens):0;
-      const sa2=sa-(a._matchField==='cognomen'?2:0);
-      const sb2=sb-(b._matchField==='cognomen'?2:0);
-      return sb2!==sa2?sb2-sa2:coll.compare(String(pa.name||''),String(pb.name||''));
-    })
+.sort((a,b)=>{
+  const pa=a.ref||a, pb=b.ref||b;
+
+  // 1) الترتيب الهرمي أولًا
+  const ra = getHierarchyRank(hierarchyOrder, pa);
+  const rb = getHierarchyRank(hierarchyOrder, pb);
+  if(ra !== rb) return ra - rb;
+
+  // 2) داخل نفس المستوى: الأفضل مطابقة (اختياريًا)
+  const sa=TreeUI.scoreForSearch?TreeUI.scoreForSearch(pa,tokens):0;
+  const sb=TreeUI.scoreForSearch?TreeUI.scoreForSearch(pb,tokens):0;
+  const sa2=sa-(a._matchField==='cognomen'?2:0);
+  const sb2=sb-(b._matchField==='cognomen'?2:0);
+  if(sb2 !== sa2) return sb2 - sa2;
+
+  // 3) ثم الاسم
+  return coll.compare(String(pa.name||''), String(pb.name||''));
+})
+
     .slice(0,12);
 }
 
