@@ -2,13 +2,59 @@
 <html lang="ar" dir="rtl">
 
 <head>
+    <!-- ترميز الصفحة -->
     <meta charset="utf-8" />
+
+    <!-- ضبط العرض للهواتف والأجهزة -->
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>شجرة العائلة متعددة</title>
+
+    <!-- عنوان الموقع في المتصفح ومحركات البحث -->
+    <title>شجرة العائلة – منصة تفاعلية لتوثيق الأنساب وروابط الأسرة</title>
+
+    <!-- وصف مختصر يظهر في نتائج البحث -->
+    <meta name="description" content="منصة تفاعلية لعرض شجرة العائلة واستكشاف الأنساب من الأجداد إلى الأحفاد، مع دعم الصور والبيانات والعلاقات الأسرية بطريقة منظمة وسهلة الاستخدام.">
+
+    <!-- كلمات مفتاحية لتحسين الظهور في محركات البحث -->
+    <meta name="keywords" content="شجرة العائلة, الأنساب, العائلة, الأقارب, العشيرة, الأجداد, الأحفاد, توثيق العائلة, genealogy, family tree">
+
+    <!-- عنوان الصفحة عند مشاركتها في وسائل التواصل -->
+    <meta property="og:title" content="شجرة العائلة – منصة تفاعلية لتوثيق الأنساب">
+
+    <!-- الوصف المخصص للمشاركة في منصات التواصل -->
+    <meta property="og:description" content="تتبّع جذور عائلتك وتعرّف على العلاقات الأسرية بوضوح تام.">
+
+    <!-- نوع المحتوى في بطاقة المشاركة -->
+    <meta property="og:type" content="website">
+
+    <!-- الصورة التي تظهر عند مشاركة الرابط -->
+    <meta property="og:image" content="./src/assets/images/og-preview.png">
+
+    <!-- تحديد اللغة / المنطقة لصياغة المحتوى -->
+    <meta property="og:locale" content="ar_AR">
+
+    <!-- أيقونة الموقع (favicon) -->
+    <link rel="icon" href="./src/assets/images/favicon.png" type="image/png">
+
+    <!-- لون شريط المتصفح في الهواتف (الثيم) -->
+    <meta name="theme-color" content="#3f5a3c">
 
     <!-- تحسين تحميل الخطوط (Font Awesome) -->
     <link rel="preload" href="src/assets/icons/fontawesome/webfonts/fa-solid-900.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="src/assets/icons/fontawesome/webfonts/fa-regular-400.woff2" as="font" type="font/woff2" crossorigin>
+
+    <!-- تفعيل الثيم مبكرًا + حفظه للإقلاع لمنع الوميض -->
+    <script>
+        (() => {
+            try {
+                const t = (localStorage.getItem("theme") || localStorage.getItem("appTheme") || "default").trim(),
+                    r = document.documentElement;
+                r.classList.remove("theme-corporate", "theme-elegant", "theme-minimal", "theme-royal", "theme-dark");
+                t !== "default" && r.classList.add("theme-" + t);
+                window.__bootTheme = t
+            } catch {}
+        })();
+    </script>
+
     <!-- CSS الأساسي للتطبيق -->
     <link rel="stylesheet" href="src/styles/theme.css">
     <link rel="stylesheet" href="src/styles/layout.css">
@@ -52,14 +98,7 @@
 
 
     <!-- 🔔 Toast -->
-  <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
-
-
-    <!-- ───── الشريط العلوي ───── -->
-    <!-- زر فتح الشريط الجانبي خارج top-bar -->
-    <button id="sideToggle" class="side-toggle" type="button" aria-label="فتح لوحة الإعدادات" aria-controls="sidePanel" aria-expanded="false">
-        <i class="fa-solid fa-sliders"></i>
-    </button>
+    <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
 
     <!-- ───── الشريط العلوي ───── -->
     <div class="top-bar">
@@ -71,8 +110,11 @@
         <!-- 🔎 البحث السريع -->
         <div class="search-wrap">
             <div class="input-wrap search-box">
-                <i class="fa-solid fa-magnifying-glass search-icon" aria-hidden="true"></i>
-                <input id="quickSearch" type="search" placeholder="ابحث بالاسم أو الدور" autocomplete="off" aria-label="بحث" role="searchbox" aria-expanded="false" aria-controls="searchSuggestions" />
+                <button id="searchBtn" class="search-icon-btn" type="button" aria-label="تركيز البحث">
+                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                </button>
+                <input id="quickSearch" type="search" placeholder="ابحث بالاسم أو الدور أو اللقب" autocomplete="off" aria-label="بحث" role="searchbox" aria-expanded="false" aria-controls="searchSuggestions" />
+
                 <button id="clearQuick" type="button" class="clear-btn" aria-label="مسح" title="مسح" hidden>
                     <i class="fa-solid fa-xmark" aria-hidden="true"></i>
                 </button>
@@ -95,6 +137,10 @@
     </div>
 
     <!-- ───── الشريط الجانبي (يسار) ───── -->
+    <button id="sideToggle" class="side-toggle" type="button" aria-label="فتح لوحة الإعدادات" aria-controls="sidePanel" aria-expanded="false">
+        <i class="fa-solid fa-sliders"></i>
+    </button>
+
     <div id="sideOverlay" class="side-overlay" hidden></div>
     <aside id="sidePanel" class="side-panel" aria-hidden="true" aria-label="لوحة الإعدادات">
         <header class="side-header">
@@ -249,43 +295,43 @@
     </div>
 
     <!-- 🖼️ معرض الصور -->
-<div class="photoGalleryModal" id="photoGalleryModal" role="dialog" aria-modal="true" aria-labelledby="galleryTitle" tabindex="-1">
-    <div class="modal-content">
-        <div class="modal-header">
-            <button class="close-button" aria-label="إغلاق" id="closeGallery">
-                <i class="fa-solid fa-xmark"></i>
-            </button>
-            <div class="modal-header-text">
-                <h2 id="galleryTitle">اختيار صورة من المعرض</h2>
-                <p class="gallery-subtitle">
-                    اختر صورة تقريبية من جميع التصنيفات (أفراد الأسرة، الفئات العمرية، صور محايدة) لتحسين شكل الشجرة.
-                </p>
-            </div>
-        </div>
-
-        <div class="modal-body">
-            <div class="photo-gallery-toolbar">
-                <div class="photo-gallery-search">
-                    <i class="fa-solid fa-magnifying-glass photo-gallery-search-ico" aria-hidden="true"></i>
-                    <input id="photoGallerySearch" type="search" placeholder="ابحث بالاسم أو الوصف (جد، أب، شاب، مولود، صورة محايدة...)" aria-label="البحث في صور المعرض">
-                    <button type="button" id="photoGalleryClear" class="photo-gallery-clear-btn" aria-label="مسح البحث" hidden>
-                        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-                    </button>
+    <div class="photoGalleryModal" id="photoGalleryModal" role="dialog" aria-modal="true" aria-labelledby="galleryTitle" tabindex="-1">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button class="close-button" aria-label="إغلاق" id="closeGallery">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+                <div class="modal-header-text">
+                    <h2 id="galleryTitle">اختيار صورة من المعرض</h2>
+                    <p class="gallery-subtitle">
+                        اختر صورة تقريبية من جميع التصنيفات (أفراد الأسرة، الفئات العمرية، صور محايدة) لتحسين شكل الشجرة.
+                    </p>
                 </div>
-
-                <div class="photo-gallery-cat">
-                    <select id="photoGalleryCategory" aria-label="تصنيف الصور"></select>
-                </div>
-
-                <div class="photo-gallery-meta" id="photoGalleryMeta" aria-live="polite"></div>
             </div>
 
-            <div class="photo-gallery-grid" id="photoGalleryGrid" role="listbox" aria-label="صور جاهزة">
-                <!-- تُملأ برمجيًا بصور المعرض -->
+            <div class="modal-body">
+                <div class="photo-gallery-toolbar">
+                    <div class="photo-gallery-search">
+                        <i class="fa-solid fa-magnifying-glass photo-gallery-search-ico" aria-hidden="true"></i>
+                        <input id="photoGallerySearch" type="search" placeholder="ابحث بالاسم أو الوصف (جد، أب، شاب، مولود، صورة محايدة...)" aria-label="البحث في صور المعرض">
+                        <button type="button" id="photoGalleryClear" class="photo-gallery-clear-btn" aria-label="مسح البحث" hidden>
+                            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                        </button>
+                    </div>
+
+                    <div class="photo-gallery-cat">
+                        <select id="photoGalleryCategory" aria-label="تصنيف الصور"></select>
+                    </div>
+
+                    <div class="photo-gallery-meta" id="photoGalleryMeta" aria-live="polite"></div>
+                </div>
+
+                <div class="photo-gallery-grid" id="photoGalleryGrid" role="listbox" aria-label="صور جاهزة">
+                    <!-- تُملأ برمجيًا بصور المعرض -->
+                </div>
             </div>
         </div>
     </div>
-</div>
 
 
     <!-- ───── نافذة التأكيد العامة ───── -->
@@ -326,7 +372,11 @@
     <script src="./src/vendor/compressor/compressor.min.js" defer></script>
 
     <!-- Pixelmatch: لمقارنة صورتين بكسل-ببكسل واكتشاف الفروق -->
-    <script type="module">import pixelmatch from './src/vendor/pixelmatch/pixelmatch.min.js'; window.pixelmatch = pixelmatch;</script>
+    <script type="module">
+        import pixelmatch from './src/vendor/pixelmatch/pixelmatch.min.js';
+        window.pixelmatch = pixelmatch;
+    </script>
+
     <!-- نقطة دخول واحدة للتطبيق -->
     <script type="module" src="src/app.js"></script>
 

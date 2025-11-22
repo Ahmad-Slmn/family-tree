@@ -17,31 +17,33 @@ export const SCHEMA_VERSION = 4;
 // =======================================
 
 // تطبيع عربي عام
-function _norm(s = '') {
-  return String(s)
+const AR_DIAC = /[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]/gu;
+const AR_TATWEEL = /\u0640/gu;
+
+// تطبيع عربي عام
+function _norm(s = '', { keepPunct = false } = {}) {
+  let out = String(s)
     .normalize('NFKD')
-    .replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]/gu, '') // حركات
-    .replace(/\u0640/gu, '') // تطويل
+    .replace(AR_DIAC, '')
+    .replace(AR_TATWEEL, '')
     .replace(/[\u0622\u0623\u0625]/gu, 'ا')
     .replace(/\u0649/gu, 'ي')
-    .replace(/\u0629/gu, 'ه')
-    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+    .replace(/\u0629/gu, 'ه');
+
+  if (!keepPunct) {
+    out = out
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  } else {
+    out = out.replace(/\s+/g, ' ').trim();
+  }
+  return out;
 }
 
 // مفتاح تطابق بالاسم فقط (لا يُستخدم كمعرّف)
-function _normKey(p) {
-  const s = (p?.name || '').toString().trim();
-  return s
-    .normalize('NFKD')
-    .replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]/gu, '')
-    .replace(/\u0640/gu, '')
-    .replace(/[\u0622\u0623\u0625]/gu, 'ا')
-    .replace(/\u0649/gu, 'ي')
-    .replace(/\u0629/gu, 'ه')
-    .replace(/\s+/g, ' ')
-    .trim();
+function _normKey(p){
+  return _norm((p?.name || '').toString().trim(), { keepPunct: true });
 }
 
 // =======================================
@@ -154,13 +156,56 @@ function normalizeLifeDatesOnBio(bio) {
   // ملاحظة: إن كانت السنة موجودة دون تاريخ، نتركها كما هي (لا نخترع يوم/شهر)
 }
 
+function _cloneDefaultBio(){
+  const base = structuredClone  ? structuredClone(DEFAULT_BIO)
+    : JSON.parse(JSON.stringify(DEFAULT_BIO));
+  normalizeLifeDatesOnBio(base);
+  return base;
+}
 
+function _withBio(srcBio){
+  const bio = Object.assign(_cloneDefaultBio(), srcBio || {});
+  normalizeLifeDatesOnBio(bio);
+  return bio;
+}
 
 // استنساخ Bio مع القيم الافتراضية
-export const cloneBio = (src = {}) => {
-  const base = structuredClone ? structuredClone(DEFAULT_BIO) : JSON.parse(JSON.stringify(DEFAULT_BIO));
-  return Object.assign(base, src || {});
-};
+export const cloneBio = (src = {}) => Object.assign(_cloneDefaultBio(), src || {});
+
+function _normalizeChild(c){
+  if (typeof c === 'string') {
+    return { name: c, role: 'ابن', bio: _cloneDefaultBio() };
+  }
+  const bio = _withBio(c?.bio);
+  return {
+    name: c?.name || '',
+    role: c?.role || 'ابن',
+    bio,
+    _id: c?._id
+  };
+}
+
+function _normalizeWifeRole(role, idx){
+  let r = String(role || '').trim() || 'زوجة';
+  const m = r.match(/^ال?زوجة\s+(\d+)$/u);
+  if (m) {
+    const n = parseInt(m[1], 10) || (idx + 1) || 1;
+    return `الزوجة ${getArabicOrdinalF(n)}`;
+  }
+  if (r === 'زوجة') return `الزوجة ${getArabicOrdinalF((idx + 1) || 1)}`;
+  return r;
+}
+
+function _normalizeWife(w, idx){
+  const wifeBio = _withBio(w?.bio);
+  const ww = {
+    name: w?.name || '',
+    role: _normalizeWifeRole(w?.role, idx),
+    bio: wifeBio
+  };
+  ww.children = (w?.children || []).map(_normalizeChild);
+  return ww;
+}
 
 // =======================================
 // 4) تهيئة الأشخاص (Bio + IDs + تطبيع محفوظ)
@@ -169,87 +214,18 @@ export const cloneBio = (src = {}) => {
 // تهيئة كائن شخص واحد
 function ensureBio(person) {
   if (!person) return;
-  person.bio = Object.assign({}, DEFAULT_BIO, person.bio || {});
-  // مزامنة تاريخ/سنة الميلاد والوفاة لهذا الشخص
-  normalizeLifeDatesOnBio(person.bio);
+
+  person.bio = _withBio(person.bio);
 
   if (Array.isArray(person.children)) {
-    person.children = person.children.map(c => {
-      if (typeof c === 'string') {
-        const bio = Object.assign({}, DEFAULT_BIO);
-        normalizeLifeDatesOnBio(bio);
-        return { name: c, role: 'ابن', bio };
-      }
-
-      const bio = Object.assign(
-        structuredClone ? structuredClone(DEFAULT_BIO) : JSON.parse(JSON.stringify(DEFAULT_BIO)),
-        c.bio || {}
-      );
-      normalizeLifeDatesOnBio(bio);
-
-      return {
-        name: c.name || '',
-        role: c.role || 'ابن',
-        bio,
-        _id: c._id
-      };
-    });
+    person.children = person.children.map(_normalizeChild);
   }
-
 
   if (Array.isArray(person.wives)) {
-    person.wives = person.wives.map((w, idx) => {
-      // تطبيع دور الزوجة: "الزوجة 1" → "الزوجة الأولى"
-      const baseRole = String(w.role || '').trim();
-      let role = baseRole || 'زوجة';
-
-            const m = role.match(/^ال?زوجة\s+(\d+)$/u);
-
-      if (m) {
-        const n = parseInt(m[1], 10) || (idx + 1) || 1;
-        role = `الزوجة ${getArabicOrdinalF(n)}`;
-      } else if (role === 'زوجة') {
-        // لو لم يُحدَّد رقم، استخدم ترتيبها في الزوجات
-        role = `الزوجة ${getArabicOrdinalF((idx + 1) || 1)}`;
-      }
-
-      const wifeBio = Object.assign({}, DEFAULT_BIO, w.bio || {});
-      normalizeLifeDatesOnBio(wifeBio);
-
-      const ww = {
-        name: w.name || '',
-        role,
-        bio: wifeBio
-      };
-
-
-      ww.children = (w.children || []).map(c => {
-        if (typeof c === 'string') {
-          const bio = Object.assign({}, DEFAULT_BIO);
-          normalizeLifeDatesOnBio(bio);
-          return { name: c, role: 'ابن', bio };
-        }
-
-        const bio = Object.assign(
-          structuredClone ? structuredClone(DEFAULT_BIO) : JSON.parse(JSON.stringify(DEFAULT_BIO)),
-          c.bio || {}
-        );
-        normalizeLifeDatesOnBio(bio);
-
-        return {
-          name: c.name || '',
-          role: c.role || 'ابن',
-          bio,
-          _id: c._id
-        };
-      });
-
-
-      return ww;
-    });
+    person.wives = person.wives.map(_normalizeWife);
   }
-
 }
+
 
 // تهيئة Bio للعائلة كاملة
 function ensureFamilyBios(f) {
@@ -263,46 +239,29 @@ function ensureFamilyBios(f) {
 
   // توحيد أدوار الزوجات على مستوى العائلة:
   // "الزوجة 1 / زوجة 1" → "الزوجة الأولى" ... الخ
-  if (Array.isArray(f.wives)) {
-    f.wives = f.wives.map((w, idx) => {
-      if (!w) return w;
-      const baseRole = String(w.role || '').trim();
-      let role = baseRole || 'زوجة';
-
-      const m = role.match(/^ال?زوجة\s+(\d+)$/u);
-      if (m) {
-        const n = parseInt(m[1], 10) || (idx + 1) || 1;
-        role = `الزوجة ${getArabicOrdinalF(n)}`;
-      } else if (role === 'زوجة') {
-        role = `الزوجة ${getArabicOrdinalF((idx + 1) || 1)}`;
-      }
-
-      return { ...w, role };
-    });
-  }
-  // تهيئة Bio للأجداد أيضًا (مع مزامنة تواريخ الميلاد/الوفاة)
-  if (Array.isArray(f.ancestors)) {
-    f.ancestors.forEach(ensureBio);
-  }
-
-  // ✅ تطبيع أدوار الأجداد إلى «الجد الأول/الثاني/…» بدل «الجد 1»
-  if (Array.isArray(f.ancestors)) {
-    f.ancestors = f.ancestors.map(a => {
-      const g0 = Number.isFinite(+a.generation) ? +a.generation : 1;
-      let r = String(a.role || '').trim();
-
-      const m = r.match(/^الجد\s*(\d+)$/u);
-      if (m) {
-        const n = parseInt(m[1], 10) || g0;
-        r = `الجد ${getArabicOrdinal(n)}`;
-      } else if (!r || r === 'جد' || /^الجد\s*\d+$/u.test(r)) {
-        r = `الجد ${getArabicOrdinal(g0)}`;
-      }
-      return { ...a, generation: g0, role: r };
-    });
-  }
+if (Array.isArray(f.wives)) {
+  f.wives = f.wives.map((w, idx) => ({ ...w, role: _normalizeWifeRole(w?.role, idx) }));
 }
 
+  // تهيئة Bio للأجداد أيضًا (مع مزامنة تواريخ الميلاد/الوفاة)
+if (Array.isArray(f.ancestors)) {
+  f.ancestors = f.ancestors.map(a => {
+    ensureBio(a);
+    const g0 = Number.isFinite(+a.generation) ? +a.generation : 1;
+    let r = String(a.role || '').trim();
+
+    const m = r.match(/^الجد\s*(\d+)$/u);
+    if (m) {
+      const n = parseInt(m[1], 10) || g0;
+      r = `الجد ${getArabicOrdinal(n)}`;
+    } else if (!r || r === 'جد' || /^الجد\s*\d+$/u.test(r)) {
+      r = `الجد ${getArabicOrdinal(g0)}`;
+    }
+    return { ...a, generation: g0, role: r };
+  });
+}
+
+}
 
 // ضمان وجود معرفات + حقول تطبيع مخزّنة (_norm*)
 function ensureIds(f) {
@@ -327,118 +286,90 @@ function ensureIds(f) {
 // =======================================
 // 5) بيانات افتراضية (عائلات أساسية)
 // =======================================
+const B=(e={})=>({...DEFAULT_BIO,...e});
+const P=(name,role,bio={},extra={})=>({name,role,bio:B(bio),...extra});
+const C=(name,role='ابن',bio={},extra={})=>P(name,role,bio,extra);
+const W=(name,role,bio={},children=[],extra={})=>({name,role,bio:B(bio),children,...extra});
+
 const familiesData = {
-family1:{
-  familyName:'سَيْدِنا',
-  fullRootPersonName:'أحمد محمد إدريس بُقَرْ',
+family1:{familyName:'سَيْدِنا',fullRootPersonName:'أحمد محمد إدريس بُقَرْ',
   ancestors:[
-    {name:'إدريس',generation:1,role:'الجد الأول',bio:{...DEFAULT_BIO,fullName:'إدريس بُقَرْ',birthDate:'1860-01-01',deathDate:'1935-01-01',birthPlace:'تشاد',occupation:'إمام وقارئ قرآن',achievements:['حافظ لكتاب الله','غرس القيم الإسلامية في العائلة','حافظ على صلة الرحم بين الفروع'],hobbies:['مجالس القرآن','الجلوس مع الأحفاد وسرد القصص'],description:'حافظ تقاليد العائلة ومرشد الأجيال',education:'حافظ لكتاب الله'}},
-    {name:'بُقَرْ',generation:2,role:'الجد الثاني',bio:{...DEFAULT_BIO,fullName:'بُقَرْ',birthDate:'1835-01-01',deathDate:'1910-01-01',birthPlace:'تشاد',occupation:'وجيه قبلي وتاجر',achievements:['أسس مكانة العائلة الاجتماعية في القبيلة','سعى في إصلاح ذات البين بين الناس'],hobbies:['الجلوس مع وجهاء القبيلة','متابعة أمور المزارع والأنعام'],description:'مؤسس العائلة وحامل إرثها العريق',education:'-'}}
+    P('إدريس','الجد الأول',{fullName:'إدريس بُقَرْ',birthDate:'1860-01-01',deathDate:'1935-01-01',birthPlace:'تشاد',occupation:'إمام وقارئ قرآن',achievements:['حافظ لكتاب الله','غرس القيم الإسلامية في العائلة','حافظ على صلة الرحم بين الفروع'],hobbies:['مجالس القرآن','الجلوس مع الأحفاد وسرد القصص'],description:'حافظ تقاليد العائلة ومرشد الأجيال',education:'حافظ لكتاب الله'},{generation:1}),
+    P('بُقَرْ','الجد الثاني',{fullName:'بُقَرْ',birthDate:'1835-01-01',deathDate:'1910-01-01',birthPlace:'تشاد',occupation:'وجيه قبلي وتاجر',achievements:['أسس مكانة العائلة الاجتماعية في القبيلة','سعى في إصلاح ذات البين بين الناس'],hobbies:['الجلوس مع وجهاء القبيلة','متابعة أمور المزارع والأنعام'],description:'مؤسس العائلة وحامل إرثها العريق',education:'-'},{generation:2})
   ],
-  father:{
-    name:'محمد',role:'الأب',
-    bio:{...DEFAULT_BIO,fullName:'محمد إدريس بُقَرْ',birthDate:'1885-01-01',deathDate:'1965-01-01',birthPlace:'تشاد',occupation:'إمام وخطيب ومعلم قرآن',achievements:['حافظ لكتاب الله','ربى أبناءه على طلب العلم الشرعي','عُرف بالحكمة والإصلاح بين الناس'],hobbies:['قراءة القرآن','تعليم الصغار مبادئ الدين','الزراعة في أرض العائلة'],description:'قائد العائلة ومسؤول عن استمراريتها',education:'حافظ لكتاب الله'}
-  },
-  rootPerson:{
-    name:'أحمد',role:'صاحب الشجرة',
-    bio:{...DEFAULT_BIO,fullName:'أحمد محمد إدريس بُقَرْ',cognomen:'سَيْدِنا',tribe:'قٌرْعان',clan:'يِرِي',motherName:'-',motherClan:'يِرِي',paternalGrandfather:'إدريس بُقَرْ',paternalGrandmother:'-',paternalGrandmotherClan:'-',maternalGrandfather:'-',maternalGrandfatherClan:'',maternalGrandmother:'-',maternalGrandmotherClan:'-',birthDate:'1910-01-01',deathDate:'1995-01-01',birthPlace:'تشاد',occupation:'إمام ومعلم قرآن ومرجع للعائلة',achievements:['حافظ لكتاب الله','أسس مجلسًا لتحفيظ القرآن في القرية','قام بجمع شجرة العائلة وتوثيقها','كان مرجعًا في الإصلاح العائلي وحل النزاعات','حافظ على مجلس أسبوعي للذكر والتربية الإيمانية'],hobbies:['القراءة في التفسير والفقه','الزراعة ورعاية النخل والزروع','تعليم الصغار القرآن في البيت والمسجد'],description:'حامل إرث العائلة ومستمر في تقاليدها',education:'حافظ لكتاب الله',remark:'سَيْدِنا ومصطفى أشقاء',siblingsBrothers:[{name:'مصطفى'},{name:'مَلْ لَمين'}],siblingsSisters:[{name:'رُوا'},{name:'زينفة'},{name:'مُرْمَ'},{name:'جُلّي'}]}
-  },
+  father:P('محمد','الأب',{fullName:'محمد إدريس بُقَرْ',birthDate:'1885-01-01',deathDate:'1965-01-01',birthPlace:'تشاد',occupation:'إمام وخطيب ومعلم قرآن',achievements:['حافظ لكتاب الله','ربى أبناءه على طلب العلم الشرعي','عُرف بالحكمة والإصلاح بين الناس'],hobbies:['قراءة القرآن','تعليم الصغار مبادئ الدين','الزراعة في أرض العائلة'],description:'قائد العائلة ومسؤول عن استمراريتها',education:'حافظ لكتاب الله'}),
+  rootPerson:P('أحمد','صاحب الشجرة',{fullName:'أحمد محمد إدريس بُقَرْ',cognomen:'سَيْدِنا',tribe:'قٌرْعان',clan:'يِرِي',motherName:'-',motherClan:'يِرِي',paternalGrandfather:'إدريس بُقَرْ',paternalGrandmother:'-',paternalGrandmotherClan:'-',maternalGrandfather:'-',maternalGrandfatherClan:'',maternalGrandmother:'-',maternalGrandmotherClan:'-',birthDate:'1910-01-01',deathDate:'1995-01-01',birthPlace:'تشاد',occupation:'إمام ومعلم قرآن ومرجع للعائلة',achievements:['حافظ لكتاب الله','أسس مجلسًا لتحفيظ القرآن في القرية','قام بجمع شجرة العائلة وتوثيقها','كان مرجعًا في الإصلاح العائلي وحل النزاعات','حافظ على مجلس أسبوعي للذكر والتربية الإيمانية'],hobbies:['القراءة في التفسير والفقه','الزراعة ورعاية النخل والزروع','تعليم الصغار القرآن في البيت والمسجد'],description:'حامل إرث العائلة ومستمر في تقاليدها',education:'حافظ لكتاب الله',remark:'سَيْدِنا ومصطفى أشقاء',siblingsBrothers:[{name:'مصطفى'},{name:'مَلْ لَمين'}],siblingsSisters:[{name:'رُوا'},{name:'زينفة'},{name:'مُرْمَ'},{name:'جُلّي'}]}),
   wives:[
-    {
-      name:'مَرْ موسى رَوْ',role:'الزوجة الأولى',
-      bio:{...DEFAULT_BIO,fullName:'مَرْ موسى رَوْ',fatherName:'مصطفى',motherName:'-',tribe:'قٌرْعان',clan:'كُشى',birthDate:'1915-01-01',deathDate:'2000-01-01',birthPlace:'تشاد',occupation:'ربّة بيت ومربية أجيال',achievements:['رَبَّت أبناءها على حفظ القرآن واحترام الكبير','كانت سندًا لزوجها في حمل مسؤولية العائلة','معروفة بالكرم وإكرام الضيوف'],hobbies:['تلاوة القرآن في البيت','إعداد الطعام للضيوف','غرس حب العائلة في قلوب الأبناء']},
-      children:[
-        {name:'آدام',role:'ابن',bio:{...DEFAULT_BIO,fullName:'آدام أحمد محمد',birthDate:'1935-01-01',birthPlace:'تشاد',occupation:'إمام مسجد ومحفظ قرآن',achievements:['حافظ لكتاب الله','أدار حلقات تحفيظ لسنوات طويلة','شارك في بناء مسجد الحي'],hobbies:['قراءة الكتب الشرعية','مرافقة طلاب العلم','الزراعة البسيطة في أرض العائلة']}},
-        {name:'أبَكُرِى',role:'ابن',bio:{...DEFAULT_BIO,fullName:'أبَكُرِى أحمد محمد',birthDate:'1938-01-01',birthPlace:'تشاد',occupation:'تاجر وأمين صندوق عائلي',achievements:['ساهم في تنمية دخل العائلة بالتجارة الحلال','شارك في دعم مشاريع تحفيظ القرآن','معروف بالأمانة في المعاملات'],hobbies:['متابعة أحوال السوق','الاجتماع مع كبار العائلة','دعم الأعمال الخيرية']}},
-        {name:'مَلْ علي',role:'ابن',bio:{...DEFAULT_BIO,fullName:'مَلْ علي أحمد محمد',birthDate:'1940-01-01',birthPlace:'تشاد',occupation:'داعية ومُعلِّم',achievements:['ألقى دروسًا في المساجد حول الأخلاق والآداب','ساعد في حل الخلافات بين الأسر المجاورة'],hobbies:['القراءة في السيرة النبوية','زيارة الأقارب وصلة الرحم']}},
-        {name:'مَلْ سِنِّي',role:'ابن',bio:{...DEFAULT_BIO,fullName:'مَلْ سِنِّي أحمد محمد',birthDate:'1943-01-01',birthPlace:'تشاد',occupation:'مزارع وصاحب أرض',achievements:['طور مزارع العائلة وزاد إنتاجها','كان يخصص جزءًا من المحصول للفقراء'],hobbies:['العمل في المزرعة','تربية الماشية','الجلوس في مجالس العائلة']}},
-        {name:'محمد نور',role:'ابن',bio:{...DEFAULT_BIO,fullName:'محمد نور أحمد محمد',birthDate:'1946-01-01',birthPlace:'تشاد',occupation:'مدرس قرآن في الكتّاب',achievements:['خرَّج أعدادًا من حفظة كتاب الله','مهتم بتعليم التجويد للصغار'],hobbies:['تحفيظ القرآن','زيارة الطلاب في بيوتهم تشجيعًا لهم']}},
-        {name:'إدريس',role:'ابن',bio:{...DEFAULT_BIO,fullName:'إدريس أحمد محمد',birthDate:'1949-01-01',birthPlace:'تشاد',occupation:'موظف في التعليم',achievements:['خدم في قطاع التعليم سنوات طويلة','شجع أبناء العائلة على إكمال دراستهم'],hobbies:['قراءة الكتب التربوية','المشاركة في الأنشطة المدرسية']}},
-        {name:'زهرة',role:'بنت',bio:{...DEFAULT_BIO,fullName:'زهرة أحمد محمد',birthDate:'1952-01-01',birthPlace:'تشاد',occupation:'معلمة قرآن للنساء',achievements:['علّمت نساء الحي القرآن وأحكام الطهارة والصلاة','معروفة بحسن الخلق والستر'],hobbies:['تلاوة القرآن','حضور الدروس الشرعية النسائية']}},
-        {name:'لُكِي',role:'بنت',bio:{...DEFAULT_BIO,fullName:'لُكِي أحمد محمد',birthDate:'1955-01-01',birthPlace:'تشاد',occupation:'قابلة تقليدية',achievements:['ساعدت في ولادات كثيرة في القرية','كانت تراعي ضوابط الشريعة في عملها'],hobbies:['خدمة النساء في القرية','حضور المجالس العائلية']}},
-        {name:'فاطمة',role:'بنت',bio:{...DEFAULT_BIO,fullName:'فاطمة أحمد محمد',birthDate:'1958-01-01',birthPlace:'تشاد',occupation:'ربّة بيت وداعمة للأعمال الخيرية',achievements:['شاركت في حملات إغاثية للفقراء','حافظت على جو إيماني داخل بيتها'],hobbies:['الاهتمام بالأبناء وتربيتهم','إعداد الطعام في المناسبات العائلية']}}
-      ]
-    },
-    {
-      name:'زهرة عَسْبَلَّ بُلْجي',role:'الزوجة الثانية',
-      bio:{...DEFAULT_BIO,fullName:'زهرة عَسْبَلَّ بُلْجي',fatherName:'-',motherName:'زاري فُزَرْياراي',motherClan:'مِدْلِي',tribe:'قٌرْعان',clan:'كُمَّجِلي',birthDate:'1912-01-01',deathDate:'1992-01-01',birthPlace:'تشاد',occupation:'ربّة بيت وحافظة لأنساب العائلة',achievements:['حفظت أخبار الجيل السابق ونقلتها للأحفاد','معروفة بالحكمة والصبر','حريصة على جمع الأحفاد في المناسبات'],hobbies:['سرد قصص الأجداد للأحفاد','الجلوس في مجالس النساء للتذكير بالله'],remark:'هي أم لجدي محمد وجدي أبكر'},
-      children:[
-        {name:'محمد',role:'ابن',bio:{...DEFAULT_BIO,fullName:'محمد أحمد',birthDate:'1938-01-01',deathDate:'2010-01-01',birthPlace:'تشاد',occupation:'إمام وخطيب',achievements:['خطب في الناس سنوات طويلة','أسهم في نشر العلم الشرعي في القرى المجاورة'],hobbies:['تحضير الدروس والخطب','زيارة المرضى وكبار السن'],remark:'جدي من جهة الأب'}},
-        {name:'موسى',role:'ابن',bio:{...DEFAULT_BIO,fullName:'موسى أحمد',birthDate:'1941-01-01',birthPlace:'تشاد',occupation:'محفظ قرآن ومربي',achievements:['حافظ لكتاب الله','أشرف على كتّاب لتحفيظ القرآن','شارك في دعم طلاب العلم'],hobbies:['تجويد القرآن','الجلوس مع طلابه خارج أوقات الدروس'],education:'حافظ لكتاب الله'}},
-        {name:'أبكر',role:'ابن',bio:{...DEFAULT_BIO,fullName:'أبكر أحمد',birthDate:'1944-01-01',deathDate:'2012-01-01',birthPlace:'تشاد',occupation:'تاجر ووجيه في العائلة',achievements:['ساهم في توسعة بيوت العائلة','كان له دور في الصلح بين العائلات الأخرى'],hobbies:['السفر للتجارة','مجالس الصلح بين الناس'],remark:'جدي من جهة الأم'}}
-      ]
-    },
-    {
-      name:'فاطمة علي عبد الكريم',role:'الزوجة الثالثة',
-      bio:{...DEFAULT_BIO,fullName:'فاطمة علي عبد الكريم',fatherName:'علي',motherName:'-',tribe:'قٌرْعان',clan:'مِلاَّ',birthDate:'1918-01-01',deathDate:'2003-01-01',birthPlace:'تشاد',occupation:'ربّة بيت ومربية',achievements:['رعت أبناءها على الاستقامة والخلق الحسن','عرفت بحرصها على العفاف والستر'],hobbies:['خدمة زوجها وأبنائها','إكرام الضيوف','حضور المناسبات العائلية'],remark:'تزوجها أخوه مصطفى بعد وفاته'},
-      children:[
-        {name:'محمد',role:'ابن',bio:{...DEFAULT_BIO,fullName:'محمد أحمد',birthDate:'1948-01-01',birthPlace:'تشاد',occupation:'إمام ومعلّم قرآن',achievements:['حافظ لكتاب الله','درّس القرآن لصغار الحي','شارك في ترميم مسجد القرية'],hobbies:['قراءة الكتب الدينية','الاعتكاف في رمضان'],education:'حافظ لكتاب الله'}},
-        {name:'عبد الرحمن',role:'ابن',bio:{...DEFAULT_BIO,fullName:'عبد الرحمن أحمد',birthDate:'1951-01-01',birthPlace:'تشاد',occupation:'موظف وإمام احتياط',cognomen:'أَدِّ',achievements:['جمع بين العمل الوظيفي وخدمة المسجد','شارك في لجان الخير بالعائلة'],hobbies:['تلاوة القرآن بعد الفجر','المشاركة في الأعمال التطوعية']}},
-        {name:'هرةَ شو',role:'بنت',bio:{...DEFAULT_BIO,fullName:'هرةَ شو أحمد',birthDate:'1954-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['معروفة بحسن التربية لأولادها','حافظت على صلة الرحم مع أهلها وأقاربها'],hobbies:['الاهتمام بالبيت والأبناء','حضور المجالس النسائية']}}
-      ]
-    },
-    {
-      name:'كُري بَتُرَنْ',role:'الزوجة الرابعة',
-      bio:{...DEFAULT_BIO,fullName:'كُري بَتُرَنْ',fatherName:'بَتُرَنْ',motherName:'-',tribe:'قٌرْعان',clan:'بَرِيَ',birthDate:'1920-01-01',deathDate:'2008-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['عُرفت بالسكينة والوقار داخل البيت','حافظت على جو إيماني في بيتها'],hobbies:['خدمة أهل البيت','الجلوس مع الأحفاد']},
-      children:[
-        {name:'بشير',role:'ابن',bio:{...DEFAULT_BIO,fullName:'بشير أحمد',birthDate:'1956-01-01',birthPlace:'تشاد',occupation:'موظف ومشارك في أعمال الخير',achievements:['شارك في مشروعات حفر الآبار الخيرية','يساعد في ترتيبات اللقاءات العائلية الكبرى'],hobbies:['زيارة القرابة','المشاركة في الأعمال التطوعية']}}
-      ]
-    }
+    W('مَرْ موسى رَوْ','الزوجة الأولى',{fullName:'مَرْ موسى رَوْ',fatherName:'مصطفى',motherName:'-',tribe:'قٌرْعان',clan:'كُشى',birthDate:'1915-01-01',deathDate:'2000-01-01',birthPlace:'تشاد',occupation:'ربّة بيت ومربية أجيال',achievements:['رَبَّت أبناءها على حفظ القرآن واحترام الكبير','كانت سندًا لزوجها في حمل مسؤولية العائلة','معروفة بالكرم وإكرام الضيوف'],hobbies:['تلاوة القرآن في البيت','إعداد الطعام للضيوف','غرس حب العائلة في قلوب الأبناء']},[
+      C('آدام','ابن',{fullName:'آدام أحمد محمد',birthDate:'1935-01-01',birthPlace:'تشاد',occupation:'إمام مسجد ومحفظ قرآن',achievements:['حافظ لكتاب الله','أدار حلقات تحفيظ لسنوات طويلة','شارك في بناء مسجد الحي'],hobbies:['قراءة الكتب الشرعية','مرافقة طلاب العلم','الزراعة البسيطة في أرض العائلة']}),
+      C('أبَكُرِى','ابن',{fullName:'أبَكُرِى أحمد محمد',birthDate:'1938-01-01',birthPlace:'تشاد',occupation:'تاجر وأمين صندوق عائلي',achievements:['ساهم في تنمية دخل العائلة بالتجارة الحلال','شارك في دعم مشاريع تحفيظ القرآن','معروف بالأمانة في المعاملات'],hobbies:['متابعة أحوال السوق','الاجتماع مع كبار العائلة','دعم الأعمال الخيرية']}),
+      C('مَلْ علي','ابن',{fullName:'مَلْ علي أحمد محمد',birthDate:'1940-01-01',birthPlace:'تشاد',occupation:'داعية ومُعلِّم',achievements:['ألقى دروسًا في المساجد حول الأخلاق والآداب','ساعد في حل الخلافات بين الأسر المجاورة'],hobbies:['القراءة في السيرة النبوية','زيارة الأقارب وصلة الرحم']}),
+      C('مَلْ سِنِّي','ابن',{fullName:'مَلْ سِنِّي أحمد محمد',birthDate:'1943-01-01',birthPlace:'تشاد',occupation:'مزارع وصاحب أرض',achievements:['طور مزارع العائلة وزاد إنتاجها','كان يخصص جزءًا من المحصول للفقراء'],hobbies:['العمل في المزرعة','تربية الماشية','الجلوس في مجالس العائلة']}),
+      C('محمد نور','ابن',{fullName:'محمد نور أحمد محمد',birthDate:'1946-01-01',birthPlace:'تشاد',occupation:'مدرس قرآن في الكتّاب',achievements:['خرَّج أعدادًا من حفظة كتاب الله','مهتم بتعليم التجويد للصغار'],hobbies:['تحفيظ القرآن','زيارة الطلاب في بيوتهم تشجيعًا لهم']}),
+      C('إدريس','ابن',{fullName:'إدريس أحمد محمد',birthDate:'1949-01-01',birthPlace:'تشاد',occupation:'موظف في التعليم',achievements:['خدم في قطاع التعليم سنوات طويلة','شجع أبناء العائلة على إكمال دراستهم'],hobbies:['قراءة الكتب التربوية','المشاركة في الأنشطة المدرسية']}),
+      C('زهرة','بنت',{fullName:'زهرة أحمد محمد',birthDate:'1952-01-01',birthPlace:'تشاد',occupation:'معلمة قرآن للنساء',achievements:['علّمت نساء الحي القرآن وأحكام الطهارة والصلاة','معروفة بحسن الخلق والستر'],hobbies:['تلاوة القرآن','حضور الدروس الشرعية النسائية']}),
+      C('لُكِي','بنت',{fullName:'لُكِي أحمد محمد',birthDate:'1955-01-01',birthPlace:'تشاد',occupation:'قابلة تقليدية',achievements:['ساعدت في ولادات كثيرة في القرية','كانت تراعي ضوابط الشريعة في عملها'],hobbies:['خدمة النساء في القرية','حضور المجالس العائلية']}),
+      C('فاطمة','بنت',{fullName:'فاطمة أحمد محمد',birthDate:'1958-01-01',birthPlace:'تشاد',occupation:'ربّة بيت وداعمة للأعمال الخيرية',achievements:['شاركت في حملات إغاثية للفقراء','حافظت على جو إيماني داخل بيتها'],hobbies:['الاهتمام بالأبناء وتربيتهم','إعداد الطعام في المناسبات العائلية']})
+    ]),
+    W('زهرة عَسْبَلَّ بُلْجي','الزوجة الثانية',{fullName:'زهرة عَسْبَلَّ بُلْجي',fatherName:'-',motherName:'زاري فُزَرْياراي',motherClan:'مِدْلِي',tribe:'قٌرْعان',clan:'كُمَّجِلي',birthDate:'1912-01-01',deathDate:'1992-01-01',birthPlace:'تشاد',occupation:'ربّة بيت وحافظة لأنساب العائلة',achievements:['حفظت أخبار الجيل السابق ونقلتها للأحفاد','معروفة بالحكمة والصبر','حريصة على جمع الأحفاد في المناسبات'],hobbies:['سرد قصص الأجداد للأحفاد','الجلوس في مجالس النساء للتذكير بالله'],remark:'هي أم لجدي محمد وجدي أبكر'},[
+      C('محمد','ابن',{fullName:'محمد أحمد',birthDate:'1938-01-01',deathDate:'2010-01-01',birthPlace:'تشاد',occupation:'إمام وخطيب',achievements:['خطب في الناس سنوات طويلة','أسهم في نشر العلم الشرعي في القرى المجاورة'],hobbies:['تحضير الدروس والخطب','زيارة المرضى وكبار السن'],remark:'جدي من جهة الأب'}),
+      C('موسى','ابن',{fullName:'موسى أحمد',birthDate:'1941-01-01',birthPlace:'تشاد',occupation:'محفظ قرآن ومربي',achievements:['حافظ لكتاب الله','أشرف على كتّاب لتحفيظ القرآن','شارك في دعم طلاب العلم'],hobbies:['تجويد القرآن','الجلوس مع طلابه خارج أوقات الدروس'],education:'حافظ لكتاب الله'}),
+      C('أبكر','ابن',{fullName:'أبكر أحمد',birthDate:'1944-01-01',deathDate:'2012-01-01',birthPlace:'تشاد',occupation:'تاجر ووجيه في العائلة',achievements:['ساهم في توسعة بيوت العائلة','كان له دور في الصلح بين العائلات الأخرى'],hobbies:['السفر للتجارة','مجالس الصلح بين الناس'],remark:'جدي من جهة الأم'})
+    ]),
+    W('فاطمة علي عبد الكريم','الزوجة الثالثة',{fullName:'فاطمة علي عبد الكريم',fatherName:'علي',motherName:'-',tribe:'قٌرْعان',clan:'مِلاَّ',birthDate:'1918-01-01',deathDate:'2003-01-01',birthPlace:'تشاد',occupation:'ربّة بيت ومربية',achievements:['رعت أبناءها على الاستقامة والخلق الحسن','عرفت بحرصها على العفاف والستر'],hobbies:['خدمة زوجها وأبنائها','إكرام الضيوف','حضور المناسبات العائلية'],remark:'تزوجها أخوه مصطفى بعد وفاته'},[
+      C('محمد','ابن',{fullName:'محمد أحمد',birthDate:'1948-01-01',birthPlace:'تشاد',occupation:'إمام ومعلّم قرآن',achievements:['حافظ لكتاب الله','درّس القرآن لصغار الحي','شارك في ترميم مسجد القرية'],hobbies:['قراءة الكتب الدينية','الاعتكاف في رمضان'],education:'حافظ لكتاب الله'}),
+      C('عبد الرحمن','ابن',{fullName:'عبد الرحمن أحمد',birthDate:'1951-01-01',birthPlace:'تشاد',occupation:'موظف وإمام احتياط',cognomen:'أَدِّ',achievements:['جمع بين العمل الوظيفي وخدمة المسجد','شارك في لجان الخير بالعائلة'],hobbies:['تلاوة القرآن بعد الفجر','المشاركة في الأعمال التطوعية']}),
+      C('هرةَ شو','بنت',{fullName:'هرةَ شو أحمد',birthDate:'1954-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['معروفة بحسن التربية لأولادها','حافظت على صلة الرحم مع أهلها وأقاربها'],hobbies:['الاهتمام بالبيت والأبناء','حضور المجالس النسائية']})
+    ]),
+    W('كُري بَتُرَنْ','الزوجة الرابعة',{fullName:'كُري بَتُرَنْ',fatherName:'بَتُرَنْ',motherName:'-',tribe:'قٌرْعان',clan:'بَرِيَ',birthDate:'1920-01-01',deathDate:'2008-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['عُرفت بالسكينة والوقار داخل البيت','حافظت على جو إيماني في بيتها'],hobbies:['خدمة أهل البيت','الجلوس مع الأحفاد']},[
+      C('بشير','ابن',{fullName:'بشير أحمد',birthDate:'1956-01-01',birthPlace:'تشاد',occupation:'موظف ومشارك في أعمال الخير',achievements:['شارك في مشروعات حفر الآبار الخيرية','يساعد في ترتيبات اللقاءات العائلية الكبرى'],hobbies:['زيارة القرابة','المشاركة في الأعمال التطوعية']})
+    ])
   ]
 },
 
-
 family2:{familyName:'كُبُرَ زين',fullRootPersonName:'محمد موسى قيلي أُبِي',
   ancestors:[
-    {name:'قيلي',generation:1,role:'الجد الأول',bio:{...DEFAULT_BIO,fullName:'قيلي',birthDate:'1840-01-01',deathDate:'1910-01-01',birthPlace:'تشاد',occupation:'إمام وقارئ قرآن',achievements:['حافظ لكتاب الله','حافظ على مجلس القرآن في العائلة','غرس القيم الإسلامية في الأبناء'],hobbies:['مجالس الذكر','الجلوس مع الأحفاد وسرد القصص'],description:'حافظ تقاليد العائلة ومرشد الأجيال',education:'حافظ لكتاب الله'}},
-    {name:'أُبي',generation:2,role:'الجد الثاني',bio:{...DEFAULT_BIO,fullName:'أُبي',birthDate:'1810-01-01',deathDate:'1880-01-01',birthPlace:'تشاد',occupation:'وجيه قبلي وتاجر',achievements:['مؤسس العائلة وحامل إرثها العريق','سعى في إصلاح ذات البين','عُرف بالأمانة والصدق في التجارة'],hobbies:['مجالس الوجهاء','متابعة شؤون المزارع والأنعام'],description:'مؤسس العائلة وحامل إرثها العريق',education:'حافظ لكتاب الله'}}
+    P('قيلي','الجد الأول',{fullName:'قيلي',birthDate:'1840-01-01',deathDate:'1910-01-01',birthPlace:'تشاد',occupation:'إمام وقارئ قرآن',achievements:['حافظ لكتاب الله','حافظ على مجلس القرآن في العائلة','غرس القيم الإسلامية في الأبناء'],hobbies:['مجالس الذكر','الجلوس مع الأحفاد وسرد القصص'],description:'حافظ تقاليد العائلة ومرشد الأجيال',education:'حافظ لكتاب الله'},{generation:1}),
+    P('أُبي','الجد الثاني',{fullName:'أُبي',birthDate:'1810-01-01',deathDate:'1880-01-01',birthPlace:'تشاد',occupation:'وجيه قبلي وتاجر',achievements:['مؤسس العائلة وحامل إرثها العريق','سعى في إصلاح ذات البين','عُرف بالأمانة والصدق في التجارة'],hobbies:['مجالس الوجهاء','متابعة شؤون المزارع والأنعام'],description:'مؤسس العائلة وحامل إرثها العريق',education:'حافظ لكتاب الله'},{generation:2})
   ],
-  father:{name:'موسى',role:'الأب',bio:{...DEFAULT_BIO,fullName:'موسى قيلي أُبي',birthDate:'1870-01-01',deathDate:'1950-01-01',birthPlace:'تشاد',occupation:'إمام وخطيب ومعلم قرآن',achievements:['حافظ لكتاب الله','ربى أبناءه على طلب العلم الشرعي','كان مرجعًا في حل النزاعات داخل العائلة'],hobbies:['قراءة القرآن','تعليم الصغار مبادئ الدين','الزراعة في أرض العائلة'],description:'قائد العائلة ومسؤول عن استمراريتها',education:'حافظ لكتاب الله'}},
-  rootPerson:{name:'محمد',role:'صاحب الشجرة',bio:{...DEFAULT_BIO,fullName:'محمد موسى قيلي أُبِي',cognomen:'كُبُرَ زين مَلْ مار جيلي',tribe:'قٌرْعان',clan:'ضولو',motherName:'شونُرا عَقِد مِلى',motherClan:'ضولو',paternalGrandfather:'قيلي',paternalGrandmother:'-',paternalGrandmotherClan:'-',maternalGrandfather:'-',maternalGrandfatherClan:'',maternalGrandmother:'-',maternalGrandmotherClan:'-',birthDate:'1900-01-01',deathDate:'1980-01-01',birthPlace:'تشاد',occupation:'إمام ومرجع للعائلة',achievements:['حافظ لكتاب الله','أقام حلقات لتحفيظ القرآن في الحي','حافظ على أنساب العائلة ودوّنها','كان مرجعًا شرعيًا لأفراد العائلة'],hobbies:['القراءة في التفسير والفقه','تعليم الصغار القرآن','الزراعة ورعاية مزارع العائلة'],education:'حافظ لكتاب الله',remark:'هو وأبوه وجده وأبو جده كلهم حُفَّاظ لكتاب الله',siblingsBrothers:[{name:'سليمان'},{name:'عمر شُوِي'}],siblingsSisters:[{name:'كُرِي'},{name:'مَرْمَ فُلْجِى'},{name:'أمِنَة'},{name:'جَنّبَ'}]}},
+  father:P('موسى','الأب',{fullName:'موسى قيلي أُبي',birthDate:'1870-01-01',deathDate:'1950-01-01',birthPlace:'تشاد',occupation:'إمام وخطيب ومعلم قرآن',achievements:['حافظ لكتاب الله','ربى أبناءه على طلب العلم الشرعي','كان مرجعًا في حل النزاعات داخل العائلة'],hobbies:['قراءة القرآن','تعليم الصغار مبادئ الدين','الزراعة في أرض العائلة'],description:'قائد العائلة ومسؤول عن استمراريتها',education:'حافظ لكتاب الله'}),
+  rootPerson:P('محمد','صاحب الشجرة',{fullName:'محمد موسى قيلي أُبِي',cognomen:'كُبُرَ زين مَلْ مار جيلي',tribe:'قٌرْعان',clan:'ضولو',motherName:'شونُرا عَقِد مِلى',motherClan:'ضولو',paternalGrandfather:'قيلي',paternalGrandmother:'-',paternalGrandmotherClan:'-',maternalGrandfather:'-',maternalGrandfatherClan:'',maternalGrandmother:'-',maternalGrandmotherClan:'-',birthDate:'1900-01-01',deathDate:'1980-01-01',birthPlace:'تشاد',occupation:'إمام ومرجع للعائلة',achievements:['حافظ لكتاب الله','أقام حلقات لتحفيظ القرآن في الحي','حافظ على أنساب العائلة ودوّنها','كان مرجعًا شرعيًا لأفراد العائلة'],hobbies:['القراءة في التفسير والفقه','تعليم الصغار القرآن','الزراعة ورعاية مزارع العائلة'],education:'حافظ لكتاب الله',remark:'هو وأبوه وجده وأبو جده كلهم حُفَّاظ لكتاب الله',siblingsBrothers:[{name:'سليمان'},{name:'عمر شُوِي'}],siblingsSisters:[{name:'كُرِي'},{name:'مَرْمَ فُلْجِى'},{name:'أمِنَة'},{name:'جَنّبَ'}]}),
   wives:[
-    {name:'أمِري علي دُو',role:'الزوجة الأولى',bio:{...DEFAULT_BIO,fullName:'أمِري علي دُو',fatherName:'علي',motherName:'-',tribe:'قٌرْعان',clan:'ضولو',birthDate:'1905-01-01',deathDate:'1985-01-01',birthPlace:'تشاد',occupation:'ربّة بيت ومربية أجيال',achievements:['ربّت أبناءها على حفظ القرآن والخلق الحسن','معروفة بالكرم وإكرام الضيف','كانت سندًا لزوجها في مسؤوليات العائلة'],hobbies:['تلاوة القرآن في البيت','إعداد الطعام في المناسبات العائلية']},
-      children:[
-        {name:'إيطار',role:'ابن',bio:{...DEFAULT_BIO,fullName:'إيطار محمد موسى',birthDate:'1925-01-01',deathDate:'1995-01-01',birthPlace:'تشاد',occupation:'إمام مسجد ومحفظ قرآن',achievements:['حافظ لكتاب الله','أدار حلقات تحفيظ لسنوات طويلة','شارك في توسعة مسجد الحي'],hobbies:['قراءة الكتب الشرعية','الجلوس مع طلابه خارج أوقات الدروس']}},
-        {name:'مصطفى قوني',role:'ابن',bio:{...DEFAULT_BIO,fullName:'مصطفى قوني محمد',birthDate:'1928-01-01',deathDate:'2000-01-01',birthPlace:'تشاد',occupation:'تاجر وأمين للعائلة',achievements:['ساهم في تنمية دخل العائلة بالتجارة الحلال','دعم مشاريع تحفيظ القرآن','معروف بالأمانة في المعاملات'],hobbies:['متابعة السوق','المشاركة في الأعمال الخيرية']}},
-        {name:'كُبُرى',role:'بنت',bio:{...DEFAULT_BIO,fullName:'كُبُرى محمد موسى',birthDate:'1931-01-01',deathDate:'1998-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['خدمت والديها وبرّتهما في كبرهما','عُرفت بالستر والعبادة'],hobbies:['تلاوة القرآن في البيت','الجلوس مع أخواتها وخالاتها'],remark:'ليس لها أبناء'}},
-        {name:'بِنْتِي',role:'بنت',bio:{...DEFAULT_BIO,fullName:'بِنْتِي محمد موسى',birthDate:'1934-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['حافظت على صلة الرحم بين أخواتها','عرفت بحسن الخلق ولين الجانب'],hobbies:['خدمة والدَيها','حضور المجالس النسائية']}},
-        {name:'ميمونة',role:'بنت',bio:{...DEFAULT_BIO,fullName:'ميمونة محمد موسى',birthDate:'1937-01-01',birthPlace:'تشاد',occupation:'ربّة بيت ومعلمة قرآن للصغار',achievements:['علمت أطفال الحي قصار السور','شجعت البنات على الحجاب والعفاف'],hobbies:['تحفيظ القرآن للبنات','المشاركة في المناسبات العائلية']}},
-        {name:'ديرو',role:'ابن',bio:{...DEFAULT_BIO,fullName:'ديرو محمد موسى',birthDate:'1940-01-01',birthPlace:'تشاد',occupation:'مزارع',achievements:['طوّر مزارع العائلة','خصص جزءًا من المحصول للفقراء'],hobbies:['العمل في المزرعة','رعاية الماشية']}},
-        {name:'شُو',role:'بنت',bio:{...DEFAULT_BIO,fullName:'شُو محمد موسى',birthDate:'1943-01-01',deathDate:'2015-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['كانت عونًا لأخواتها في خدمة الوالدين','عرفت بالحياء والوقار'],hobbies:['الجلوس مع قريباتها','المشاركة في أعمال الخير النسائية'],remark:'ليس لها أبناء'}}
-      ]
-    },
-    {name:'زينفة مري',role:'الزوجة الثانية',bio:{...DEFAULT_BIO,fullName:'زينفة مري',fatherName:'حسن',motherName:'-',tribe:'قٌرْعان',clan:'كُدِرى',birthDate:'1910-01-01',deathDate:'1990-01-01',birthPlace:'تشاد',occupation:'ربّة بيت وحافظة لأنساب العائلة',achievements:['حفظت كثيرًا من أخبار الجيل السابق','معروفة بالحكمة والصبر','حريصة على جمع الأحفاد في المناسبات'],hobbies:['سرد القصص للأحفاد','الجلوس في مجالس النساء للتذكير بالله']},
-      children:[
-        {name:'مَلْ لَمِين',role:'ابن',bio:{...DEFAULT_BIO,fullName:'مَلْ لَمِين محمد موسى',birthDate:'1935-01-01',deathDate:'2010-01-01',birthPlace:'تشاد',occupation:'إمام وخادم للمسجد',achievements:['أمّ الناس في الصلوات سنوات طويلة','شارك في ترميم المسجد','علّم الشباب أذكار الصباح والمساء'],hobbies:['تلاوة القرآن','زيارة المرضى وكبار السن']}},
-        {name:'مَلْ حسن',role:'ابن',bio:{...DEFAULT_BIO,fullName:'مَلْ حسن محمد موسى',birthDate:'1938-01-01',birthPlace:'تشاد',occupation:'تاجر ووجيه في العائلة',achievements:['هو أبو ما لا قا','دعم عددًا من طلاب العلم','شارك في إصلاح ذات البين في العائلة'],hobbies:['السفر للتجارة','مجالس الصلح بين الناس'],remark:'هو أبو ما لا قا'}},
-        {name:'تِجَّني',role:'ابن',bio:{...DEFAULT_BIO,fullName:'تِجَّني محمد موسى',birthDate:'1941-01-01',birthPlace:'تشاد',occupation:'مزارع وتاجر صغير',achievements:['جمع بين الزراعة والتجارة البسيطة','ساهم في نفقة بعض الأقارب المحتاجين'],hobbies:['العمل في الأرض','مجالس العائلة']}},
-        {name:'حامد',role:'ابن',bio:{...DEFAULT_BIO,fullName:'حامد محمد موسى',birthDate:'1944-01-01',birthPlace:'تشاد',occupation:'موظف حكومي',achievements:['خدم في وظيفته بنزاهة','كان قدوة في الصلاة في المسجد'],hobbies:['قراءة القرآن بعد الفجر','المشاركة في اللقاءات العائلية']}},
-        {name:'عيسى',role:'ابن',bio:{...DEFAULT_BIO,fullName:'عيسى محمد موسى',birthDate:'1947-01-01',birthPlace:'تشاد',occupation:'مدرّس ابتدائي',achievements:['علّم أجيالًا من أبناء القرية','حرص على غرس القيم الإسلامية في الطلاب'],hobbies:['القراءة التربوية','الأنشطة المدرسية']}},
-        {name:'زهرة إلِّي',role:'بنت',bio:{...DEFAULT_BIO,fullName:'زهرة إلِّي محمد موسى',birthDate:'1950-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['تهتم بخدمة والديها وأخوتها','تحرص على جمع قريباتها في المناسبات'],hobbies:['الطبخ في المناسبات','حضور المجالس النسائية']}},
-        {name:'فاطمة',role:'بنت',bio:{...DEFAULT_BIO,fullName:'فاطمة محمد موسى',birthDate:'1953-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['معروفة بحسن تربية أبنائها','حريصة على حفظ الأذكار والأوراد'],hobbies:['تلاوة القرآن','الاهتمام بالأبناء والبيت']}},
-        {name:'أمِنَة',role:'بنت',bio:{...DEFAULT_BIO,fullName:'أمِنَة محمد موسى',birthDate:'1956-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['هي أم مَلْ علي','حسن تربية أبنائها على الصلاة والحياء'],hobbies:['خدمة أهلها','حضور دروس العلم النسائية'],remark:'أمِنَة هي أم مَلْ علي'}}
-      ]
-    },
-    {name:'بِنْتِي آدم ميني',role:'الزوجة الثالثة',bio:{...DEFAULT_BIO,fullName:'بِنْتِي آدم ميني',fatherName:'آدم',motherName:'-',tribe:'قٌرْعان',clan:'مُوسَوْرَوْ',birthDate:'1915-01-01',deathDate:'1995-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['رعت أبناءها على الاستقامة','عرفت بالعفة والستر'],hobbies:['خدمة زوجها وأبنائها','إكرام الضيوف']},
-      children:[
-        {name:'عمر',role:'ابن',bio:{...DEFAULT_BIO,fullName:'عمر محمد موسى',birthDate:'1940-01-01',birthPlace:'تشاد',occupation:'تاجر',achievements:['أسهم في دعم عدد من طلاب العلم','ساعد أقاربه المحتاجين'],hobbies:['السفر للتجارة','مجالس العائلة']}},
-        {name:'آدم مِلي',role:'ابن',bio:{...DEFAULT_BIO,fullName:'آدم مِلي محمد موسى',birthDate:'1943-01-01',birthPlace:'تشاد',occupation:'مزارع',achievements:['طور مزرعته لخدمة العائلة','يحافظ على صلاة الجماعة في المسجد'],hobbies:['العمل في المزرعة','تربية الماشية']}},
-        {name:'زهرة',role:'بنت',bio:{...DEFAULT_BIO,fullName:'زهرة محمد موسى',birthDate:'1946-01-01',deathDate:'2010-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['عرفت بخدمة والديها وأخوتها','محبوبة بين قريباتها'],hobbies:['حضور المجالس النسائية','خدمة أهل البيت'],remark:'ليس لها أبناء'}},
-        {name:'فاطمة',role:'بنت',bio:{...DEFAULT_BIO,fullName:'فاطمة محمد موسى',birthDate:'1949-01-01',deathDate:'2012-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',cognomen:'مشهورة ب لَبو',achievements:['حافظت على جو إيماني في بيتها','مشهود لها بحسن الخلق'],hobbies:['الاهتمام بالأبناء','المشاركة في المناسبات العائلية'],remark:'ليس لها أبناء'}},
-        {name:'رُوا',role:'بنت',bio:{...DEFAULT_BIO,fullName:'رُوا محمد موسى',birthDate:'1952-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['مساهمة في صلة الرحم بين الفروع','حريصة على حضور الأعياد العائلية'],hobbies:['التجهيز للمناسبات','الجلوس مع قريباتها']}},
-        {name:'بَتُل',role:'بنت',bio:{...DEFAULT_BIO,fullName:'بَتُل محمد موسى',birthDate:'1955-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['عرفت بالحياء والالتزام بالحجاب','تعاونت مع أخواتها في خدمة الوالدين'],hobbies:['تلاوة القرآن','المشاركة في المجالس العائلية']}},
-        {name:'حمزةَ',role:'ابن',bio:{...DEFAULT_BIO,fullName:'حمزةَ محمد موسى',birthDate:'1958-01-01',birthPlace:'تشاد',occupation:'موظف ومشارك في أعمال الخير',achievements:['ساهم في مشاريع حفر الآبار','شارك في ترتيبات لقاءات العائلة'],hobbies:['زيارة الأقارب','العمل التطوعي']}}
-      ]
-    },
-    {name:'كُرِي بُكِنِّ كُبُرِي',role:'الزوجة الرابعة',bio:{...DEFAULT_BIO,fullName:'كُرِي بُكِنِّ كُبُرِي',fatherName:'بُكِنِّ',motherName:'لُكِي رُرُكْ عبد الكريم',tribe:'قٌرْعان',clan:'نوري رَوْ',birthDate:'1920-01-01',deathDate:'2000-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['عُرفت بالسكينة والوقار داخل البيت','حافظت على جو إيماني في بيتها'],hobbies:['خدمة أهل البيت','الجلوس مع الأحفاد'],remark:'سُمي أبي على أخيها سليمان الملقب ب كُري'},
-      children:[
-        {name:'بشير',role:'ابن',bio:{...DEFAULT_BIO,fullName:'بشير محمد موسى',birthDate:'1950-01-01',birthPlace:'تشاد',occupation:'موظف ومشارك في أعمال الخير',achievements:['شارك في مشروعات حفر الآبار','يساعد في ترتيب اللقاءات العائلية'],hobbies:['زيارة الأقارب','العمل التطوعي']}},
-        {name:'مريم',role:'بنت',bio:{...DEFAULT_BIO,fullName:'مريم محمد موسى',birthDate:'1953-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['معروفة بحسن تربية أبنائها','تحرص على صلة الرحم مع أقاربها'],hobbies:['الاهتمام بالبيت والأبناء','حضور المجالس النسائية'],remark:'هي جدتي من جهة الأب'}}
-      ]
-    }
+    W('أمِري علي دُو','الزوجة الأولى',{fullName:'أمِري علي دُو',fatherName:'علي',motherName:'-',tribe:'قٌرْعان',clan:'ضولو',birthDate:'1905-01-01',deathDate:'1985-01-01',birthPlace:'تشاد',occupation:'ربّة بيت ومربية أجيال',achievements:['ربّت أبناءها على حفظ القرآن والخلق الحسن','معروفة بالكرم وإكرام الضيف','كانت سندًا لزوجها في مسؤوليات العائلة'],hobbies:['تلاوة القرآن في البيت','إعداد الطعام في المناسبات العائلية']},[
+      C('إيطار','ابن',{fullName:'إيطار محمد موسى',birthDate:'1925-01-01',deathDate:'1995-01-01',birthPlace:'تشاد',occupation:'إمام مسجد ومحفظ قرآن',achievements:['حافظ لكتاب الله','أدار حلقات تحفيظ لسنوات طويلة','شارك في توسعة مسجد الحي'],hobbies:['قراءة الكتب الشرعية','الجلوس مع طلابه خارج أوقات الدروس']}),
+      C('مصطفى قوني','ابن',{fullName:'مصطفى قوني محمد',birthDate:'1928-01-01',deathDate:'2000-01-01',birthPlace:'تشاد',occupation:'تاجر وأمين للعائلة',achievements:['ساهم في تنمية دخل العائلة بالتجارة الحلال','دعم مشاريع تحفيظ القرآن','معروف بالأمانة في المعاملات'],hobbies:['متابعة السوق','المشاركة في الأعمال الخيرية']}),
+      C('كُبُرى','بنت',{fullName:'كُبُرى محمد موسى',birthDate:'1931-01-01',deathDate:'1998-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['خدمت والديها وبرّتهما في كبرهما','عُرفت بالستر والعبادة'],hobbies:['تلاوة القرآن في البيت','الجلوس مع أخواتها وخالاتها'],remark:'ليس لها أبناء'}),
+      C('بِنْتِي','بنت',{fullName:'بِنْتِي محمد موسى',birthDate:'1934-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['حافظت على صلة الرحم بين أخواتها','عرفت بحسن الخلق ولين الجانب'],hobbies:['خدمة والدَيها','حضور المجالس النسائية']}),
+      C('ميمونة','بنت',{fullName:'ميمونة محمد موسى',birthDate:'1937-01-01',birthPlace:'تشاد',occupation:'ربّة بيت ومعلمة قرآن للصغار',achievements:['علمت أطفال الحي قصار السور','شجعت البنات على الحجاب والعفاف'],hobbies:['تحفيظ القرآن للبنات','المشاركة في المناسبات العائلية']}),
+      C('ديرو','ابن',{fullName:'ديرو محمد موسى',birthDate:'1940-01-01',birthPlace:'تشاد',occupation:'مزارع',achievements:['طوّر مزارع العائلة','خصص جزءًا من المحصول للفقراء'],hobbies:['العمل في المزرعة','رعاية الماشية']}),
+      C('شُو','بنت',{fullName:'شُو محمد موسى',birthDate:'1943-01-01',deathDate:'2015-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['كانت عونًا لأخواتها في خدمة الوالدين','عرفت بالحياء والوقار'],hobbies:['الجلوس مع قريباتها','المشاركة في أعمال الخير النسائية'],remark:'ليس لها أبناء'})
+    ]),
+    W('زينفة مري','الزوجة الثانية',{fullName:'زينفة مري',fatherName:'حسن',motherName:'-',tribe:'قٌرْعان',clan:'كُدِرى',birthDate:'1910-01-01',deathDate:'1990-01-01',birthPlace:'تشاد',occupation:'ربّة بيت وحافظة لأنساب العائلة',achievements:['حفظت كثيرًا من أخبار الجيل السابق','معروفة بالحكمة والصبر','حريصة على جمع الأحفاد في المناسبات'],hobbies:['سرد القصص للأحفاد','الجلوس في مجالس النساء للتذكير بالله']},[
+      C('مَلْ لَمِين','ابن',{fullName:'مَلْ لَمِين محمد موسى',birthDate:'1935-01-01',deathDate:'2010-01-01',birthPlace:'تشاد',occupation:'إمام وخادم للمسجد',achievements:['أمّ الناس في الصلوات سنوات طويلة','شارك في ترميم المسجد','علّم الشباب أذكار الصباح والمساء'],hobbies:['تلاوة القرآن','زيارة المرضى وكبار السن']}),
+      C('مَلْ حسن','ابن',{fullName:'مَلْ حسن محمد موسى',birthDate:'1938-01-01',birthPlace:'تشاد',occupation:'تاجر ووجيه في العائلة',achievements:['هو أبو ما لا قا','دعم عددًا من طلاب العلم','شارك في إصلاح ذات البين في العائلة'],hobbies:['السفر للتجارة','مجالس الصلح بين الناس'],remark:'هو أبو ما لا قا'}),
+      C('تِجَّني','ابن',{fullName:'تِجَّني محمد موسى',birthDate:'1941-01-01',birthPlace:'تشاد',occupation:'مزارع وتاجر صغير',achievements:['جمع بين الزراعة والتجارة البسيطة','ساهم في نفقة بعض الأقارب المحتاجين'],hobbies:['العمل في الأرض','مجالس العائلة']}),
+      C('حامد','ابن',{fullName:'حامد محمد موسى',birthDate:'1944-01-01',birthPlace:'تشاد',occupation:'موظف حكومي',achievements:['خدم في وظيفته بنزاهة','كان قدوة في الصلاة في المسجد'],hobbies:['قراءة القرآن بعد الفجر','المشاركة في اللقاءات العائلية']}),
+      C('عيسى','ابن',{fullName:'عيسى محمد موسى',birthDate:'1947-01-01',birthPlace:'تشاد',occupation:'مدرّس ابتدائي',achievements:['علّم أجيالًا من أبناء القرية','حرص على غرس القيم الإسلامية في الطلاب'],hobbies:['القراءة التربوية','الأنشطة المدرسية']}),
+      C('زهرة إلِّي','بنت',{fullName:'زهرة إلِّي محمد موسى',birthDate:'1950-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['تهتم بخدمة والديها وأخوتها','تحرص على جمع قريباتها في المناسبات'],hobbies:['الطبخ في المناسبات','حضور المجالس النسائية']}),
+      C('فاطمة','بنت',{fullName:'فاطمة محمد موسى',birthDate:'1953-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['معروفة بحسن تربية أبنائها','حريصة على حفظ الأذكار والأوراد'],hobbies:['تلاوة القرآن','الاهتمام بالأبناء والبيت']}),
+      C('أمِنَة','بنت',{fullName:'أمِنَة محمد موسى',birthDate:'1956-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['هي أم مَلْ علي','حسن تربية أبنائها على الصلاة والحياء'],hobbies:['خدمة أهلها','حضور دروس العلم النسائية'],remark:'أمِنَة هي أم مَلْ علي'})
+    ]),
+    W('بِنْتِي آدم ميني','الزوجة الثالثة',{fullName:'بِنْتِي آدم ميني',fatherName:'آدم',motherName:'-',tribe:'قٌرْعان',clan:'مُوسَوْرَوْ',birthDate:'1915-01-01',deathDate:'1995-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['رعت أبناءها على الاستقامة','عرفت بالعفة والستر'],hobbies:['خدمة زوجها وأبنائها','إكرام الضيوف']},[
+      C('عمر','ابن',{fullName:'عمر محمد موسى',birthDate:'1940-01-01',birthPlace:'تشاد',occupation:'تاجر',achievements:['أسهم في دعم عدد من طلاب العلم','ساعد أقاربه المحتاجين'],hobbies:['السفر للتجارة','مجالس العائلة']}),
+      C('آدم مِلي','ابن',{fullName:'آدم مِلي محمد موسى',birthDate:'1943-01-01',birthPlace:'تشاد',occupation:'مزارع',achievements:['طور مزرعته لخدمة العائلة','يحافظ على صلاة الجماعة في المسجد'],hobbies:['العمل في المزرعة','تربية الماشية']}),
+      C('زهرة','بنت',{fullName:'زهرة محمد موسى',birthDate:'1946-01-01',deathDate:'2010-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['عرفت بخدمة والديها وأخوتها','محبوبة بين قريباتها'],hobbies:['حضور المجالس النسائية','خدمة أهل البيت'],remark:'ليس لها أبناء'}),
+      C('فاطمة','بنت',{fullName:'فاطمة محمد موسى',birthDate:'1949-01-01',deathDate:'2012-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',cognomen:'مشهورة ب لَبو',achievements:['حافظت على جو إيماني في بيتها','مشهود لها بحسن الخلق'],hobbies:['الاهتمام بالأبناء','المشاركة في المناسبات العائلية'],remark:'ليس لها أبناء'}),
+      C('رُوا','بنت',{fullName:'رُوا محمد موسى',birthDate:'1952-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['مساهمة في صلة الرحم بين الفروع','حريصة على حضور الأعياد العائلية'],hobbies:['التجهيز للمناسبات','الجلوس مع قريباتها']}),
+      C('بَتُل','بنت',{fullName:'بَتُل محمد موسى',birthDate:'1955-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['عرفت بالحياء والالتزام بالحجاب','تعاونت مع أخواتها في خدمة الوالدين'],hobbies:['تلاوة القرآن','المشاركة في المجالس العائلية']}),
+      C('حمزةَ','ابن',{fullName:'حمزةَ محمد موسى',birthDate:'1958-01-01',birthPlace:'تشاد',occupation:'موظف ومشارك في أعمال الخير',achievements:['ساهم في مشاريع حفر الآبار','شارك في ترتيبات لقاءات العائلة'],hobbies:['زيارة الأقارب','العمل التطوعي']})
+    ]),
+    W('كُرِي بُكِنِّ كُبُرِي','الزوجة الرابعة',{fullName:'كُرِي بُكِنِّ كُبُرِي',fatherName:'بُكِنِّ',motherName:'لُكِي رُرُكْ عبد الكريم',tribe:'قٌرْعان',clan:'نوري رَوْ',birthDate:'1920-01-01',deathDate:'2000-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['عُرفت بالسكينة والوقار داخل البيت','حافظت على جو إيماني في بيتها'],hobbies:['خدمة أهل البيت','الجلوس مع الأحفاد'],remark:'سُمي أبي على أخيها سليمان الملقب ب كُري'},[
+      C('بشير','ابن',{fullName:'بشير محمد موسى',birthDate:'1950-01-01',birthPlace:'تشاد',occupation:'موظف ومشارك في أعمال الخير',achievements:['شارك في مشروعات حفر الآبار','يساعد في ترتيب اللقاءات العائلية'],hobbies:['زيارة الأقارب','العمل التطوعي']}),
+      C('مريم','بنت',{fullName:'مريم محمد موسى',birthDate:'1953-01-01',birthPlace:'تشاد',occupation:'ربّة بيت',achievements:['معروفة بحسن تربية أبنائها','تحرص على صلة الرحم مع أقاربها'],hobbies:['الاهتمام بالبيت والأبناء','حضور المجالس النسائية'],remark:'هي جدتي من جهة الأب'})
+    ])
   ]
 }
-
+  
 };
 
 // تطبيق الترحيل والتهيئة للعائلات الأساسية
@@ -469,22 +400,6 @@ function _personFP(p) {
   return [name, rg, b].join('|');
 }
 
-// السير مع إنتاج مسار نصّي ثابت
-function _walkPersonsWithPath(fam, cb) {
-  if (!fam) return;
-  const anc = Array.isArray(fam.ancestors) ? fam.ancestors : [];
-  anc.forEach((a, i) => { _visit(a, `ancestors[${i}]`); });
-  if (fam.father) _visit(fam.father, 'father');
-  if (fam.rootPerson) _visit(fam.rootPerson, 'rootPerson');
-  (fam.wives || []).forEach((w, i) => { _visit(w, `wives[${i}]`); });
-
-  function _visit(p, path) {
-    if (!p) return;
-    cb(p, path);
-    (p.wives || []).forEach((w, i) => _visit(w, `${path}.wives[${i}]`));
-    (p.children || []).forEach((c, i) => _visit(c, `${path}.children[${i}]`));
-  }
-}
 
 // استرجاع مسار حسب _id
 export function findPathByIdInFamily(fam, pid) {
@@ -513,17 +428,28 @@ function _getByPath(fam, path) {
   return cur || null;
 }
 
-// سير بسيط بلا مسارات (للاستخدامات العامة)
-function _walkPersons(fam, cb) {
+function _walk(fam, cb, { withPath = false } = {}){
   if (!fam || typeof cb !== 'function') return;
-  const top = [
-    ...(Array.isArray(fam.ancestors) ? fam.ancestors : []),
-    fam.father, fam.rootPerson, ...(fam.wives || [])
-  ].filter(Boolean);
-  const visit = (p) => { if (!p) return; cb(p); (p.children || []).forEach(visit); (p.wives || []).forEach(visit); };
-  top.forEach(visit);
-  if (fam.rootPerson && Array.isArray(fam.rootPerson.wives)) fam.rootPerson.wives.forEach(visit); // توافق قديم
+
+  const visit = (p, path) => {
+    if (!p) return;
+    cb(p, path);
+    (p.wives || []).forEach((w, i) => visit(w, withPath ? `${path}.wives[${i}]` : null));
+    (p.children || []).forEach((c, i) => visit(c, withPath ? `${path}.children[${i}]` : null));
+  };
+
+  (Array.isArray(fam.ancestors) ? fam.ancestors : []).forEach((a,i)=> visit(a, withPath?`ancestors[${i}]`:null));
+  if (fam.father) visit(fam.father, withPath?'father':null);
+  if (fam.rootPerson) visit(fam.rootPerson, withPath?'rootPerson':null);
+  (fam.wives || []).forEach((w,i)=> visit(w, withPath?`wives[${i}]`:null));
+
+  // توافق قديم
+  if (fam.rootPerson?.wives?.length) fam.rootPerson.wives.forEach(w => visit(w, withPath?'rootPerson.wives[]':null));
 }
+
+function _walkPersonsWithPath(fam, cb){ _walk(fam, cb, { withPath:true }); }
+function _walkPersons(fam, cb){ _walk(fam, cb, { withPath:false }); }
+
 
 // =======================================
 // 7) حفظ/تحميل من IndexedDB (العائلات + ميتاداتا)
@@ -602,24 +528,22 @@ async function loadPersistedFamilies() {
       );
 
       // توحيد wives
-      if (!Array.isArray(f.wives)) f.wives = [];
-      f.wives = f.wives.map((w, i) => {
-        const idx = ['الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة'][i] || `رقم ${i + 1}`;
-        const roleLabel = (w && w.role) ? w.role : `الزوجة ${idx}`;
-        const children = Array.isArray(w.children) ? w.children.map(_normalizeChildForLoad).filter(Boolean) : [];
-        return { name: w.name || '', role: roleLabel, bio: w.bio || {}, children };
-      });
+  if (!Array.isArray(f.wives)) f.wives = [];
+f.wives = f.wives.map(_normalizeWifeForLoad);
 
-      if (f.rootPerson) {
-        if (!Array.isArray(f.rootPerson.wives) || f.rootPerson.wives.length === 0) {
-          f.rootPerson.wives = f.wives.map(w => ({ ...w }));
-        } else {
-          f.rootPerson.wives = f.rootPerson.wives.map(w => ({
-            name: w.name || '', role: w.role || 'زوجة', bio: w.bio || {},
-            children: (w.children || []).map(_normalizeChildForLoad)
-          }));
-        }
-      }
+if (f.rootPerson){
+  if (!Array.isArray(f.rootPerson.wives) || !f.rootPerson.wives.length){
+    f.rootPerson.wives = f.wives.map(w => ({ ...w }));
+  } else {
+    f.rootPerson.wives = f.rootPerson.wives.map(w => ({
+      name: w?.name || '',
+      role: w?.role || 'زوجة',
+      bio: w?.bio || {},
+      children: (w?.children || []).map(_normalizeChildForLoad)
+    }));
+  }
+}
+
 
       ensureFamilyBios(f);
       ensureIds(f);
@@ -672,6 +596,16 @@ function _normalizeChildForLoad(c) {
   if (!c) return null;
   return (typeof c === 'string') ? { name: c, role: 'ابن', bio: {} }
     : { name: c.name || '', role: c.role || 'ابن', bio: c.bio || {}, _id: c._id };
+}
+function _normalizeWifeForLoad(w, i){
+  const idxLabel = ['الأولى','الثانية','الثالثة','الرابعة','الخامسة'][i] || `رقم ${i+1}`;
+  const roleLabel = w?.role || `الزوجة ${idxLabel}`;
+  return {
+    name: w?.name || '',
+    role: roleLabel,
+    bio: w?.bio || {},
+    children: Array.isArray(w?.children) ? w.children.map(_normalizeChildForLoad).filter(Boolean) : []
+  };
 }
 
 // إزالة كل روابط الصور (غير مستخدم هنا لكن مفيد للتصدير بدون صور)
@@ -866,6 +800,15 @@ linkRootPersonWives();
 // =======================================
 // 10) واجهات الحفظ/التحميل/التعديل العامّة
 // =======================================
+function _sortedAncestors(fam){
+  const ancArr = Array.isArray(fam.ancestors) ? fam.ancestors : [];
+  return ancArr
+    .map(a => ({ a, gen: Number.isFinite(+a.generation) ? +a.generation : 1 }))
+    .sort((x,y)=>(x.gen??1)-(y.gen??1));
+}
+function _ancNames(sorted){
+  return sorted.map(x=>String(x.a?.name||'').trim()).filter(Boolean);
+}
 
 // التزام عائلة واحدة بعد تعديلها في الذاكرة
 export function commitFamily(key) {
@@ -878,70 +821,45 @@ export function commitFamily(key) {
   // 2) تهيئة الـ bio والزوجات والأجداد وفق القيم الافتراضية
   ensureFamilyBios(fam);
 
-  // 3) تجهيز الأجداد مرتّبين حسب generation (1 = الأقرب لصاحب الشجرة)
-  const ancArr = Array.isArray(fam.ancestors) ? fam.ancestors : [];
-  const ancSorted = ancArr
-    .map(a => {
-      const g = Number.isFinite(+a.generation) ? +a.generation : 1;
-      return { a, gen: g };
-    })
-    .sort((x, y) => (x.gen ?? 1) - (y.gen ?? 1));
+ const ancSorted = _sortedAncestors(fam);
+const ancNames  = _ancNames(ancSorted);
 
-  const ancNames = ancSorted
-    .map(x => String(x.a?.name || '').trim())
+if (!fam.familyName){
+  fam.familyName = fam.title ? String(fam.title).replace(/^.*?:\s*/u,'').trim()
+    : (fam.rootPerson?.name?.split(/\s+/u)[0] || '');
+}
+
+let rootFull = '';
+if (fam.rootPerson){
+  const rootName   = String(fam.rootPerson.name || '').trim();
+  const fatherName = String(fam.father?.name || '').trim();
+  rootFull = [rootName, fatherName, ...ancNames].filter(Boolean).join(' ').trim();
+
+  fam.rootPerson.bio = fam.rootPerson.bio || {};
+  if (rootFull) fam.rootPerson.bio.fullName = rootFull;
+  if (rootFull) fam.fullRootPersonName = rootFull;
+}
+
+if (fam.father){
+  const fName = String(fam.father.name || '').trim();
+  const fatherFull = [fName, ...ancNames].filter(Boolean).join(' ').trim();
+  fam.father.bio = fam.father.bio || {};
+  if (fatherFull) fam.father.bio.fullName = fatherFull;
+}
+
+ancSorted.forEach(({a}, idx) => {
+  if (!a) return;
+  const self = String(a.name||'').trim();
+  if (!self) return;
+  const tail = ancSorted.slice(idx+1)
+    .map(x=>String(x.a?.name||'').trim())
     .filter(Boolean);
 
-  // 4) اشتقاق familyName إن لم يكن موجودًا
-  if (!fam.familyName) {
-    fam.familyName =
-      fam.title ? String(fam.title).replace(/^.*?:\s*/u, '').trim()
-        : (fam.rootPerson?.name?.split(/\s+/u)[0] || '');
-  }
+  const chain = [self, ...tail].join(' ').trim();
+  a.bio = a.bio || {};
+  if (chain) a.bio.fullName = chain;
+});
 
-  // 5) بناء الاسم الكامل لصاحب الشجرة (الجذر)
-  let rootFull = '';
-  if (fam.rootPerson) {
-    const rootName = String(fam.rootPerson.name || '').trim();
-    const fatherName = String(fam.father?.name || '').trim();
-    rootFull = [rootName, fatherName, ...ancNames].filter(Boolean).join(' ').trim();
-
-    fam.rootPerson.bio = fam.rootPerson.bio || {};
-    if (rootFull) fam.rootPerson.bio.fullName = rootFull;
-  }
-
-  // 6) حفظ الاسم الكامل لصاحب الشجرة على مستوى العائلة
-  if (rootFull) {
-    fam.fullRootPersonName = rootFull;
-  }
-
-  // 7) بناء الاسم الكامل للأب
-  if (fam.father) {
-    const fName = String(fam.father.name || '').trim();
-    const fatherFull = [fName, ...ancNames].filter(Boolean).join(' ').trim();
-
-    fam.father.bio = fam.father.bio || {};
-    if (fatherFull) fam.father.bio.fullName = fatherFull;
-  }
-
-  // 8) بناء الاسم الكامل لكل جد حسب تسلسله
-  ancSorted.forEach((item, idx) => {
-    const aObj = item.a;
-    if (!aObj) return;
-
-    const selfName = String(aObj.name || '').trim();
-    if (!selfName) return;
-
-    // الأجداد الأبعد منه في السلسلة (الجيل الأكبر منه)
-    const tailNames = ancSorted
-      .slice(idx + 1)
-      .map(x => String(x.a?.name || '').trim())
-      .filter(Boolean);
-
-    const chain = [selfName, ...tailNames].filter(Boolean).join(' ').trim();
-
-    aObj.bio = aObj.bio || {};
-    if (chain) aObj.bio.fullName = chain;
-  });
 
   // 9) ضمان المعرفات والتطبيع المحفوظ للأسماء
   ensureIds(fam);

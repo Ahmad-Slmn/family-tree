@@ -1,3 +1,4 @@
+
 // tree.js
 // ===============================
 // عرض الشجرة وبطاقات الأشخاص + البحث والفلاتر + صور IndexedDB
@@ -32,9 +33,10 @@ function _cachePut(id, url, isBlob){
 export function clearPersonPhotoCache(id){ if (id) PHOTO_CACHE.delete(id); }
 
 function toggleConnectors(root, on){
-  root.querySelectorAll('.vertical-line, .connector-wrapper')
+  root.querySelectorAll('.connector-wrapper')
       .forEach(e => { e.style.display = on ? '' : 'none'; });
 }
+
 
 export function clearPhotoCache(){
   PHOTO_CACHE.clear();
@@ -210,19 +212,25 @@ export function normalizeAr(s = '', opts = {}){
     .trim();
 }
 
-
-
 export function makeMatcher(q, opts = {}){
   const fields = opts.fields || ['name','role','cognomen'];
   const nq = normalizeAr(q);
   if (!nq) return () => true;
   const tokens = nq.split(' ').filter(Boolean);
+
   return (p) => {
-    const nm = (p && p._normName) || normalizeAr(p?.name||'');
-    const rl = (p && p._normRole) || normalizeAr(p?.role||'');
+    // أعد التطبيع دائمًا وحدّث الكاش
+    const nm = normalizeAr(p?.name || '');
+    const rl = normalizeAr(p?.role || '');
+    if (p) { p._normName = nm; p._normRole = rl; }
+
     const cg = normalizeAr(p?.bio?.cognomen || '');
-    const target = [fields.includes('name')?nm:'', fields.includes('role')?rl:'', fields.includes('cognomen')?cg:'']
-      .filter(Boolean).join(' ').trim();
+    const target = [
+      fields.includes('name') ? nm : '',
+      fields.includes('role') ? rl : '',
+      fields.includes('cognomen') ? cg : ''
+    ].filter(Boolean).join(' ').trim();
+
     if (!target) return false;
     const words = target.split(' ').filter(Boolean);
 
@@ -230,7 +238,9 @@ export function makeMatcher(q, opts = {}){
       let idx = 0;
       for (const t of tokens){
         let j = -1;
-        for (let k = idx; k < words.length; k++){ if (words[k].startsWith(t)) { j = k; break; } }
+        for (let k = idx; k < words.length; k++){
+          if (words[k].startsWith(t)) { j = k; break; }
+        }
         if (j === -1) return false;
         idx = j + 1;
       }
@@ -239,6 +249,7 @@ export function makeMatcher(q, opts = {}){
     return tokens.every(t => words.some(w => w.startsWith(t)));
   };
 }
+
 export function roleGroup(p){
   const r = String(p?.role||'').trim();
   if (r === 'ابن' || r === 'بنت') return r;
@@ -248,21 +259,53 @@ export function roleGroup(p){
   return r || '';
 }
 
-// ===== إبراز مطابقات الاسم بدون innerHTML =====
-function highlightNameTokens(el, name, tokens){
+// ===== إبراز مطابقات جزئية مثل الاقتراحات =====
+const AR_MARKS_OPT = '[\\u0610-\\u061A\\u064B-\\u065F\\u0670\\u06D6-\\u06ED\\u0640]*';
+
+function highlightPartial(el, text, tokensRaw){
   el.textContent = '';
-  const frag = document.createDocumentFragment();
-  const words = String(name||'').split(/\s+/);
-  words.forEach((w, idx) => {
-    const n = normalizeAr(w);
-    const hit = tokens.some(t => n.startsWith(t));
-    const node = hit ? document.createElement('mark') : document.createElement('span');
-    node.textContent = w;
-    frag.appendChild(node);
-    if (idx < words.length - 1) frag.appendChild(document.createTextNode(' '));
-  });
-  el.appendChild(frag);
+  const src = String(text || '');
+  const toks = (tokensRaw || []).map(t => String(t||'').trim()).filter(Boolean);
+  if (!toks.length){ el.textContent = src; return; }
+
+const tokenToAgnosticPattern = (tok)=>{
+  const escapeChar = (ch) => ch.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+
+  const equivChar = (ch)=>{
+    if (/[اأإآ]/u.test(ch)) return '[اأإآ]';   // كل أشكال الألف
+    if (/[يى]/u.test(ch))   return '[يى]';     // (اختياري) ي/ى
+    if (/[هة]/u.test(ch))   return '[هة]';     // (اختياري) ه/ة
+    return escapeChar(ch);
+  };
+
+  // حروف التوكن مع السماح بالحركات/التطويل بينها
+  let p = Array.from(tok).map(equivChar).join(AR_MARKS_OPT);
+
+  return AR_MARKS_OPT + p + AR_MARKS_OPT;
+};
+
+  const rx = new RegExp('(' + toks.map(tokenToAgnosticPattern).join('|') + ')', 'gu');
+
+  let last = 0;
+  for (const m of src.matchAll(rx)){
+    if (m.index > last) el.append(src.slice(last, m.index));
+    const mark = document.createElement('mark');
+    mark.textContent = m[0];
+    el.append(mark);
+    last = m.index + m[0].length;
+  }
+  if (last < src.length) el.append(src.slice(last));
 }
+
+// استبقاء نفس أسماء الدوال القديمة حتى لا نكسر الاستدعاءات
+function highlightTextTokens(el, text, tokensRaw){
+  highlightPartial(el, text, tokensRaw);
+}
+
+function highlightNameTokens(el, name, tokensRaw){
+  highlightPartial(el, name, tokensRaw);
+}
+
 
 // ===== درجة الترتيب لنتائج البحث =====
 export function scoreForSearch(p, tokens){
@@ -284,31 +327,80 @@ export function scoreForSearch(p, tokens){
   return s;
 }
 
+function _parseYMD(str){
+  const parts = String(str || '').trim().split(/[-/]/);
+  let y = null, m = 0, d = 1;
+  if (parts[0]) y = parseInt(parts[0], 10);
+  if (parts[1]) m = Math.max(0, Math.min(11, parseInt(parts[1], 10) - 1));
+  if (parts[2]) d = Math.max(1, Math.min(31, parseInt(parts[2], 10)));
+  return Number.isFinite(y) ? { y, m, d } : null;
+}
+
+function _getBirthDate(bio){
+  if (!bio) return null;
+  if (bio.birthDate && bio.birthDate !== '-') {
+    const b = _parseYMD(bio.birthDate);
+    if (!b) return null;
+    return new Date(b.y, b.m, b.d);
+  }
+  if (bio.birthYear && bio.birthYear !== '-') {
+    const y = parseInt(String(bio.birthYear).trim().slice(0,4), 10);
+    if (!Number.isFinite(y)) return null;
+    return new Date(y, 0, 1);
+  }
+  return null;
+}
+
+function _getDeathDateOrNull(bio, birth){
+  if (!bio || !birth) return { ref: new Date(), died: false };
+
+  if (bio.deathDate && bio.deathDate !== '-') {
+    const d = _parseYMD(bio.deathDate);
+    if (d){
+      const death = new Date(d.y, d.m, d.d);
+      if (!Number.isNaN(death.getTime()) && death.getTime() >= birth.getTime()){
+        return { ref: death, died: true };
+      }
+    }
+  } else if (bio.deathYear && bio.deathYear !== '-') {
+    const dy = parseInt(String(bio.deathYear).trim().slice(0,4), 10);
+    if (Number.isFinite(dy)){
+      const death = new Date(dy, 0, 1);
+      if (!Number.isNaN(death.getTime()) && death.getTime() >= birth.getTime()){
+        return { ref: death, died: true };
+      }
+    }
+  }
+
+  return { ref: new Date(), died: false };
+}
+
+function _fmtUnit(n, one, two, few, many){
+  if (n <= 0) n = 1;
+  if (n === 1) return one;
+  if (n === 2) return two;
+  if (n >= 3 && n <= 10) return `${n} ${few}`;
+  return `${n} ${many}`;
+}
+
+function _fmtDays(n){  return _fmtUnit(n,'يوم واحد','يومان','أيام','يومًا'); }
+function _fmtWeeks(n){ return _fmtUnit(n,'أسبوع واحد','أسبوعان','أسابيع','أسبوعًا'); }
+function _fmtMonths(n){return _fmtUnit(n,'شهر واحد','شهران','أشهر','شهرًا'); }
+function _fmtYears(n){
+  if (n <= 0) return null;
+  if (n === 1) return 'سنة واحدة';
+  if (n === 2) return 'سنتان';
+  if (n >= 3 && n <= 10) return `${n} سنوات`;
+  return `${n} سنة`;
+}
+
 // حساب العمر الخام (بالسنوات) حتى تاريخ معيّن (اليوم أو تاريخ الوفاة)
 function computeAgeFromBio(bio, refDate){
-  if (!bio) return null;
+  const birth = _getBirthDate(bio);
+  if (!birth || Number.isNaN(birth.getTime())) return null;
 
   const today = new Date();
   const ref = (refDate instanceof Date && !Number.isNaN(refDate.getTime())) ? refDate : today;
-
-  let year = null;
-  let month = 0;
-  let day = 1;
-
-  // تاريخ الميلاد الكامل أو سنة الميلاد فقط
-  if (bio.birthDate && bio.birthDate !== '-') {
-    const parts = String(bio.birthDate).trim().split(/[-/]/);
-    if (parts[0]) year  = parseInt(parts[0], 10);
-    if (parts[1]) month = Math.max(0, Math.min(11, parseInt(parts[1], 10) - 1));
-    if (parts[2]) day   = Math.max(1, Math.min(31, parseInt(parts[2], 10)));
-  } else if (bio.birthYear && bio.birthYear !== '-') {
-    year = parseInt(String(bio.birthYear).trim().slice(0, 4), 10);
-  }
-
-  if (!Number.isFinite(year)) return null;
-
-  const birth = new Date(year, month, day);
-  if (Number.isNaN(birth.getTime())) return null;
 
   if (ref.getTime() <= birth.getTime()) return null;
 
@@ -321,132 +413,30 @@ function computeAgeFromBio(bio, refDate){
   return age;
 }
 
+
 function formatAgeFromBio(bio){
-  if (!bio) return null;
+  const birth = _getBirthDate(bio);
+  if (!birth || Number.isNaN(birth.getTime())) return null;
 
-  const today = new Date();
-  let year = null;
-  let month = 0;
-  let day = 1;
-
-  // نفس منطق استخراج تاريخ الميلاد
-  if (bio.birthDate && bio.birthDate !== '-') {
-    const parts = String(bio.birthDate).trim().split(/[-/]/);
-    if (parts[0]) year  = parseInt(parts[0], 10);
-    if (parts[1]) month = Math.max(0, Math.min(11, parseInt(parts[1], 10) - 1));
-    if (parts[2]) day   = Math.max(1, Math.min(31, parseInt(parts[2], 10)));
-  } else if (bio.birthYear && bio.birthYear !== '-') {
-    year = parseInt(String(bio.birthYear).trim().slice(0, 4), 10);
-  }
-
-  if (!Number.isFinite(year)) return null;
-
-  const birth = new Date(year, month, day);
-  if (Number.isNaN(birth.getTime())) return null;
-
-  // تحديد تاريخ المرجع: اليوم أو الوفاة إن وُجدت (تاريخ كامل أو سنة فقط)
-  let ref  = today;
-  let died = false;
-
-  // 1) تاريخ وفاة كامل deathDate (YYYY-MM-DD)
-  if (bio.deathDate && bio.deathDate !== '-') {
-    const dParts = String(bio.deathDate).trim().split(/[-/]/);
-    let dy = null, dm = 0, dd = 1;
-    if (dParts[0]) dy = parseInt(dParts[0], 10);
-    if (dParts[1]) dm = Math.max(0, Math.min(11, parseInt(dParts[1], 10) - 1));
-    if (dParts[2]) dd = Math.max(1, Math.min(31, parseInt(dParts[2], 10)));
-
-    if (Number.isFinite(dy)){
-      const death = new Date(dy, dm, dd);
-      if (!Number.isNaN(death.getTime()) && death.getTime() >= birth.getTime()){
-        ref  = death;
-        died = true;
-      }
-    }
-  }
-  // 2) سنة وفاة فقط deathYear ⇒ نقرّبها إلى أول السنة
-  else if (bio.deathYear && bio.deathYear !== '-') {
-    const dy = parseInt(String(bio.deathYear).trim().slice(0, 4), 10);
-    if (Number.isFinite(dy)) {
-      const death = new Date(dy, 0, 1); // تقريب: 1 يناير من سنة الوفاة
-      if (!Number.isNaN(death.getTime()) && death.getTime() >= birth.getTime()){
-        ref  = death;
-        died = true;
-      }
-    }
-  }
+  const { ref, died } = _getDeathDateOrNull(bio, birth);
 
   const MS_PER_DAY = 1000 * 60 * 60 * 24;
-  const rawMs = ref.getTime() - birth.getTime();
-  if (rawMs < 0) return null;
+  let diffDays = Math.floor((ref.getTime() - birth.getTime()) / MS_PER_DAY);
+  if (diffDays < 0) return null;
 
-  let diffDays = Math.floor(rawMs / MS_PER_DAY);
-
-  // حالة: الوفاة في نفس يوم الميلاد ⇒ نعتبرها "يوم واحد" على الأقل
   if (died && diffDays === 0) diffDays = 1;
 
   const prefix = died ? 'توفّي عن عمر ' : '';
 
-  // -------- صيغ اليوم --------
-  const fmtDays = (n) => {
-    if (n <= 0) n = 1;
-    if (n === 1) return 'يوم واحد';
-    if (n === 2) return 'يومان';
-    if (n >= 3 && n <= 10) return `${n} أيام`;
-    return `${n} يومًا`;
-  };
+  if (diffDays < 7)  return prefix + _fmtDays(diffDays);
+  if (diffDays < 30) return prefix + _fmtWeeks(Math.floor(diffDays/7) || 1);
+  if (diffDays < 365)return prefix + _fmtMonths(Math.floor(diffDays/30) || 1);
 
-  // -------- صيغ الأسبوع --------
-  const fmtWeeks = (n) => {
-    if (n <= 0) n = 1;
-    if (n === 1) return 'أسبوع واحد';
-    if (n === 2) return 'أسبوعان';
-    if (n >= 3 && n <= 10) return `${n} أسابيع`;
-    return `${n} أسبوعًا`;
-  };
-
-  // -------- صيغ الشهر --------
-  const fmtMonths = (n) => {
-    if (n <= 0) n = 1;
-    if (n === 1) return 'شهر واحد';
-    if (n === 2) return 'شهران';
-    if (n >= 3 && n <= 10) return `${n} أشهر`;
-    return `${n} شهرًا`;
-  };
-
-  // -------- صيغ السنة --------
-  const fmtYears = (n) => {
-    if (n <= 0) return null;
-    if (n === 1) return 'سنة واحدة';
-    if (n === 2) return 'سنتان';
-    if (n >= 3 && n <= 10) return `${n} سنوات`;
-    return `${n} سنة`;
-  };
-
-  // أقل من أسبوع ⇒ بالأيام
-  if (diffDays < 7) {
-    return prefix + fmtDays(diffDays);
-  }
-
-  // من أسبوع إلى أقل من شهر ⇒ بالأسابيع
-  if (diffDays < 30) {
-    const w = Math.floor(diffDays / 7) || 1;
-    return prefix + fmtWeeks(w);
-  }
-
-  // من شهر إلى أقل من سنة ⇒ بالأشهر
-  if (diffDays < 365) {
-    const m = Math.floor(diffDays / 30) || 1;
-    return prefix + fmtMonths(m);
-  }
-
-  // سنة فأكثر ⇒ بالسنوات
   const years = computeAgeFromBio(bio, ref);
-  if (years == null) return null;
-  const yLabel = fmtYears(years);
-  if (!yLabel) return null;
-  return prefix + yLabel;
+  const yLabel = _fmtYears(years);
+  return yLabel ? prefix + yLabel : null;
 }
+
 
 
 // ===== عرض حقول bio العامة =====
@@ -564,6 +554,10 @@ export function createCard(person, className = '', handlers = {}, opts = {}){
   const canEditName = !(opts && opts.readonlyName);
   const nameClasses = canEditName ? 'name editable-inline editable-name' : 'name';
   const nameEl = textEl('div', String(person.name||''), nameClasses);
+// منع فقاعات الأحداث على الاسم دائمًا (حتى في readonlyName) للحفاظ على السلوك السابق
+['mousedown','click','dblclick','touchstart'].forEach(evt => {
+  nameEl.addEventListener(evt, e => e.stopPropagation(), true);
+});
 
   if (canEditName){
     nameEl.contentEditable = 'true';
@@ -597,10 +591,6 @@ export function createCard(person, className = '', handlers = {}, opts = {}){
       }
     });
 
-    // منع فقاعات الأحداث عند التحرير فقط إذا كان قابلاً للتحرير
-    ['mousedown','click','dblclick','touchstart'].forEach(evt => {
-      nameEl.addEventListener(evt, e => e.stopPropagation(), true);
-    });
   } else {
      // اسم للعرض فقط في العائلات الأساسية: يرجع لمؤشر البطاقة (pointer)
     nameEl.style.cursor = 'pointer';
@@ -627,15 +617,21 @@ export function createCard(person, className = '', handlers = {}, opts = {}){
   }
   const roleEl = textEl('div', role, 'role');
 
-
-  ['mousedown','click','dblclick','touchstart'].forEach(evt => {
-    nameEl.addEventListener(evt, e => e.stopPropagation(), true);
-  });
-
   const editableFields = el('div','identity-fields');
   editableFields.append(nameEl, roleEl);
   if (dob) editableFields.appendChild(textEl('div', String(dob), 'dob'));
   card.appendChild(editableFields);
+  // سطر اللقب في وضع البحث فقط
+  if (opts && opts.showCognomenHint && bio.cognomen && opts.highlightTokens?.length){
+    const cgLine = el('div', 'cognomen-line');
+    cgLine.style.cssText = 'font-size:.85rem;opacity:.9;margin-top:.15rem;';
+    const label = textEl('span', 'اللقب: ');
+    const val = document.createElement('span');
+    highlightTextTokens(val, String(bio.cognomen||''), opts.highlightTokens);
+    cgLine.append(label, val);
+    editableFields.appendChild(cgLine);
+  }
+
 
   if (opts.showMotherHint && hasMother){
     const strip = el('div','mini-strip mother-strip');
@@ -655,21 +651,17 @@ export function createCard(person, className = '', handlers = {}, opts = {}){
     ev.stopPropagation(); if (typeof handlers.onShowDetails === 'function') handlers.onShowDetails(person);
   });
 
+  // إضافة موصل الزوجة داخل البطاقة (مرة واحدة)
+  if (card.classList.contains('wife') && !card.querySelector('.wife-connector')) {
+    card.appendChild(el('div','wife-connector'));
+  }
+
   return card;
+
 }
 
 // ===== موصلات بصرية بسيطة =====
 function createConnector(){ return el('div','connector'); }
-function createDivLine(cls){ return el('div', cls); }
-function createVerticalLineBetweenWifeAndChildren(){ return createDivLine('vertical-line'); }
-function createWifeChildrenConnector(count){
-  const wrap = el('div','connector-wrapper');
-  wrap.append(createDivLine('vertical-line arrow-down'));
-  const hLine = createDivLine('horizontal-children-line');
-  hLine.style.gridTemplateColumns = `repeat(${Math.max(1,count)},1fr)`;
-  for(let i=0;i<count;i++) hLine.append(createDivLine('child-connector'));
-  wrap.appendChild(hLine); return wrap;
-}
 
 // ===== مقطع زوجة + أبنائها مع احترام الفلاتر/البحث =====
 function createWifeSection(wife, handlers, match, passFiltersFn, opts = {}){
@@ -678,11 +670,14 @@ function createWifeSection(wife, handlers, match, passFiltersFn, opts = {}){
 // عند وجود نصّ بحث، يجب أيضًا أن تطابق البحث مثل غيرها.
 const showWifeCard = !opts?.hideNonMatchingParents ? true
   : (passFiltersFn ? passFiltersFn(wife) : true) && (!opts?.hasQuery || (typeof match === 'function' && match(wife)));
-  if (showWifeCard){
-    const wifeCard = upsertCard(sec, wife, handlers, 'wife', opts);
-    const box = createCounterBoxForPerson(wife);
-    if (box && !wifeCard.querySelector('.counter-box')) wifeCard.appendChild(box);
-  }
+let wifeCard = null;
+
+if (showWifeCard){
+  wifeCard = upsertCard(sec, wife, handlers, 'wife', opts);
+  const box = createCounterBoxForPerson(wife);
+  if (box && !wifeCard.querySelector('.counter-box')) wifeCard.appendChild(box);
+}
+
 
   const grid = el('div','children-grid'); let drawn = 0;
   (wife.children||[]).forEach(child => {
@@ -695,10 +690,11 @@ const showWifeCard = !opts?.hideNonMatchingParents ? true
     grid.appendChild(wrap); drawn++;
   });
 
-  if (showWifeCard){
-    if (drawn > 0) sec.append(createVerticalLineBetweenWifeAndChildren(), createWifeChildrenConnector(drawn), grid);
-    else sec.append(grid);
-  } else {
+if (showWifeCard){
+  sec.append(grid);
+}
+
+ else {
     if (drawn > 0) sec.append(grid); else return null;
   }
   return sec;
@@ -840,11 +836,12 @@ function addBioRow(parent, label, value){
   parent.appendChild(row);
 }
 
-// قائمة أسماء مع إمكانية النقر لفتح التفاصيل
-function renderNamesListWithLinks(parent, title, arr, handlers){
+function renderClickableNames(parent, title, arr, handlers){
   if (!Array.isArray(arr) || !arr.length) return;
+
   const sec = el('div','bio-sublist');
-  sec.append(textEl('h3', title));
+  if (title) sec.append(textEl('h3', title));
+
   const ul = el('ul');
 
   arr.forEach(x => {
@@ -854,16 +851,14 @@ function renderNamesListWithLinks(parent, title, arr, handlers){
     const li = el('li');
     li.textContent = nm;
 
-    if (handlers && typeof handlers.onShowDetails === 'function'){
-      const srcId = x && x._id;
-      if (srcId){
-        li.classList.add('clickable');
-        li.style.cursor = 'pointer';
-        li.addEventListener('click', ev => {
-          ev.stopPropagation();
-          handlers.onShowDetails(srcId);
-        });
-      }
+    const id = x && x._id;
+    if (id && handlers?.onShowDetails){
+      li.classList.add('clickable');
+      li.style.cursor = 'pointer';
+      li.addEventListener('click', ev => {
+        ev.stopPropagation();
+        handlers.onShowDetails(id);
+      });
     }
 
     ul.appendChild(li);
@@ -874,6 +869,7 @@ function renderNamesListWithLinks(parent, title, arr, handlers){
     parent.appendChild(sec);
   }
 }
+
 
 /* ===== 1) قسم البيانات الأساسية ===== */
 function buildBasicSection(bio, person, family){
@@ -976,8 +972,8 @@ function buildFamilySection(bio, person, family, handlers){
   const bros = sib.brothers || [];
   const sis  = sib.sisters  || [];
 
-  renderNamesListWithLinks(body, `الإخوة (${bros.length})`, bros, handlers);
-  renderNamesListWithLinks(body, `الأخوات (${sis.length})`, sis, handlers);
+  renderClickableNames(body, `الإخوة (${bros.length})`, bros, handlers);
+  renderClickableNames(body, `الأخوات (${sis.length})`, sis, handlers);
 
   // الأعمام/العمّات/الأخوال/الخالات
   const ua = Lineage.resolveUnclesAunts(person, family);
@@ -987,16 +983,16 @@ function buildFamilySection(bio, person, family, handlers){
   const matAunts  = ua.maternalAunts  || [];
 
   if (patUncles.length){
-    renderNamesListWithLinks(body, `الأعمام (${patUncles.length})`, patUncles, handlers);
+    renderClickableNames(body, `الأعمام (${patUncles.length})`, patUncles, handlers);
   }
   if (patAunts.length){
-    renderNamesListWithLinks(body, `العمّات (${patAunts.length})`, patAunts, handlers);
+    renderClickableNames(body, `العمّات (${patAunts.length})`, patAunts, handlers);
   }
   if (matUncles.length){
-    renderNamesListWithLinks(body, `الأخوال (${matUncles.length})`, matUncles, handlers);
+    renderClickableNames(body, `الأخوال (${matUncles.length})`, matUncles, handlers);
   }
   if (matAunts.length){
-    renderNamesListWithLinks(body, `الخالات (${matAunts.length})`, matAunts, handlers);
+    renderClickableNames(body, `الخالات (${matAunts.length})`, matAunts, handlers);
   }
 
   if (!body.children.length) return null;
@@ -1017,26 +1013,10 @@ function buildWivesSection(person, family, handlers){
   // مطوي افتراضيًا، ويُفتح حسب state إن وُجد
   const { section, body } = createBioSection('wives', `الزوجات (${wives.length})`, { defaultOpen: true });
 
-  const ul = el('ul');
-  wives.forEach(w => {
-    const li = el('li');
-    li.textContent = String(w?.name || '').trim();
+renderClickableNames(body, '', wives, handlers);
+if (!body.children.length) return null;
+return section;
 
-    if (handlers && typeof handlers.onShowDetails === 'function' && w && w._id){
-      li.classList.add('clickable');
-      li.style.cursor = 'pointer';
-      li.addEventListener('click', ev => {
-        ev.stopPropagation();
-        handlers.onShowDetails(w._id);
-      });
-    }
-
-    ul.appendChild(li);
-  });
-
-  if (!ul.children.length) return null;
-  body.appendChild(ul);
-  return section;
 }
 
 /* ===== 5) قسم الأبناء (الأبناء + البنات في قسم واحد) ===== */
@@ -1065,68 +1045,13 @@ function buildChildrenSection(person, family, handlers){
   );
 
   // قسم فرعي للأبناء
-  if (sons.length){
-    const sub = el('div','bio-sublist');
-    sub.append(textEl('h3', `الأبناء (${sons.length})`));
-
-    const ul = el('ul');
-    sons.forEach(c => {
-      const name = String(c?.name || '').trim();
-      if (!name) return;
-
-      const li = el('li');
-      li.textContent = name;
-
-      // النقر لفتح تفاصيل الابن
-      if (handlers && typeof handlers.onShowDetails === 'function' && c && c._id){
-        li.classList.add('clickable');
-        li.style.cursor = 'pointer';
-        li.addEventListener('click', ev => {
-          ev.stopPropagation();
-          handlers.onShowDetails(c._id);
-        });
-      }
-
-      ul.appendChild(li);
-    });
-
-    if (ul.children.length){
-      sub.appendChild(ul);
-      body.appendChild(sub);
-    }
-  }
-
+if (sons.length){
+  renderClickableNames(body, `الأبناء (${sons.length})`, sons, handlers);
+}
   // قسم فرعي للبنات
-  if (daughters.length){
-    const sub = el('div','bio-sublist');
-    sub.append(textEl('h3', `البنات (${daughters.length})`));
-
-    const ul = el('ul');
-    daughters.forEach(c => {
-      const name = String(c?.name || '').trim();
-      if (!name) return;
-
-      const li = el('li');
-      li.textContent = name;
-
-      // النقر لفتح تفاصيل البنت
-      if (handlers && typeof handlers.onShowDetails === 'function' && c && c._id){
-        li.classList.add('clickable');
-        li.style.cursor = 'pointer';
-        li.addEventListener('click', ev => {
-          ev.stopPropagation();
-          handlers.onShowDetails(c._id);
-        });
-      }
-
-      ul.appendChild(li);
-    });
-
-    if (ul.children.length){
-      sub.appendChild(ul);
-      body.appendChild(sub);
-    }
-  }
+if (daughters.length){
+  renderClickableNames(body, `البنات (${daughters.length})`, daughters, handlers);
+}
 
   // لو لسبب ما لم يُضَف أي محتوى فرعي ⇒ لا ترسم القسم
   if (!body.children.length) return null;
@@ -1206,6 +1131,28 @@ const builders = {
   if (wrap.children.length) container.appendChild(wrap);
 }
 
+function makePassFilters(flt, fam, lineageCtx){
+  return function passFilters(p){
+    if (flt.role && roleGroup(p) !== flt.role) return false;
+
+    if (flt.clan){
+      const fc = normalizeAr(String(flt.clan||''));
+      const resolvedClan = Lineage.resolveClan(p, fam, lineageCtx);
+      const pc = normalizeAr(String(resolvedClan||''));
+      if (!pc || !pc.includes(fc)) return false;
+    }
+
+    if (flt.birthFrom || flt.birthTo){
+      const by = (p?.bio?.birthYear != null && String(p.bio.birthYear).trim())  ? String(p.bio.birthYear).padStart(4,'0') : '';
+      const bd = String(p?.bio?.birthDate||'').trim();
+      const bNorm = bd ? bd : (by ? `${by}-01-01` : '');
+      if (!bNorm) return false;
+      if (flt.birthFrom && bNorm < String(flt.birthFrom)) return false;
+      if (flt.birthTo   && bNorm > String(flt.birthTo))   return false;
+    }
+    return true;
+  };
+}
 
 
 
@@ -1222,39 +1169,22 @@ export function renderFamilyButtons(families = {}, selectedKey = null, handlers 
   // نفس مطابقة drawFamilyTree
   const q   = (handlers && handlers.getSearch && handlers.getSearch()) || '';
   const flt = (handlers && handlers.getFilters && handlers.getFilters()) || { role:'', clan:'', birthFrom:'', birthTo:'' };
-  const match = makeMatcher(q, { fields: ['name','role','cognomen'] });
-  function passFilters(p, fam){
-    if (flt.role && roleGroup(p) !== flt.role) return false;
+const match = makeMatcher(q, { fields: ['name','role','cognomen'] });
 
-    if (flt.clan){
-      const fc = normalizeAr(String(flt.clan||''));
-      const ctx = Lineage.buildLineageContext(fam);
-      const resolvedClan = Lineage.resolveClan(p, fam, ctx);
-      const pc = normalizeAr(String(resolvedClan||''));
-      if (!pc || !pc.includes(fc)) return false;
-    }
+// سنبني passFilters لكل عائلة داخل familyMatches
+function familyMatches(f){
+  if (!f) return false;
+  const ctx = Lineage.buildLineageContext(f);
+  const passFilters = makePassFilters(flt, f, ctx);
 
-    if (flt.birthFrom || flt.birthTo){
-      const by = (p?.bio?.birthYear != null && String(p.bio.birthYear).trim()) ? String(p.bio.birthYear).padStart(4,'0')
-        : '';
-      const bd = String(p?.bio?.birthDate||'').trim();
-      const bNorm = bd ? bd : (by ? `${by}-01-01` : '');
-      if (!bNorm) return false;
-      if (flt.birthFrom && bNorm < String(flt.birthFrom)) return false;
-      if (flt.birthTo   && bNorm > String(flt.birthTo))   return false;
-    }
-    return true;
-  }
+  const pool = [
+    ...(Array.isArray(f.ancestors) ? f.ancestors : []),
+    f.father, f.rootPerson, ...(f.wives || [])
+  ].filter(Boolean);
+  (f.wives || []).forEach(w => (w.children || []).forEach(c => pool.push(c)));
+  return pool.some(p => match(p) && passFilters(p));
+}
 
-  function familyMatches(f){
-    if (!f) return false;
-    const pool = [
-      ...(Array.isArray(f.ancestors) ? f.ancestors : []),
-      f.father, f.rootPerson, ...(f.wives || [])
-    ].filter(Boolean);
-    (f.wives || []).forEach(w => (w.children || []).forEach(c => pool.push(c)));
-    return pool.some(p => match(p) && passFilters(p, f));
-  }
 
 
   Object.entries(families || {}).forEach(([k,f]) => {
@@ -1329,6 +1259,23 @@ function describeActiveFiltersAr(flt = {}){
 
   // إن لم يوجد أي جزء، أعِد عبارة عامة
   return parts.length ? parts.join('، ') : 'الفلاتر الحالية';
+}
+
+function collectPersonsForSearch(fam){
+  const out = [];
+  if (!fam) return out;
+
+  const roots = [
+    ...(Array.isArray(fam.ancestors) ? fam.ancestors : []),
+    fam.father,
+    fam.rootPerson
+  ].filter(Boolean);
+  roots.forEach(p => out.push(p));
+
+  (fam.wives || []).forEach(w => out.push(w));
+  (fam.wives || []).forEach(w => (w.children||[]).forEach(c => out.push(c)));
+
+  return out;
 }
 
 
@@ -1412,28 +1359,8 @@ let _drawnTotal = 0;
 
   };
 
-  const match = makeMatcher(q, { fields: ['name','role','cognomen'] });
-  function passFilters(p){
-    if (flt.role && roleGroup(p) !== flt.role) return false;
-
-    if (flt.clan){
-      const fc = normalizeAr(String(flt.clan||''));
-      const resolvedClan = Lineage.resolveClan(p, fam, lineageCtx);
-      const pc = normalizeAr(String(resolvedClan||''));
-      if (!pc || !pc.includes(fc)) return false;
-    }
-
-    if (flt.birthFrom || flt.birthTo){
-      const by = (p?.bio?.birthYear != null && String(p.bio.birthYear).trim())  ? String(p.bio.birthYear).padStart(4,'0')
-        : '';
-      const bd = String(p?.bio?.birthDate||'').trim();
-      const bNorm = bd ? bd : (by ? `${by}-01-01` : '');
-      if (!bNorm) return false;
-      if (flt.birthFrom && bNorm < String(flt.birthFrom)) return false;
-      if (flt.birthTo   && bNorm > String(flt.birthTo))   return false;
-    }
-    return true;
-  }
+const match = makeMatcher(q, { fields: ['name','role','cognomen'] });
+const passFilters = makePassFilters(flt, fam, lineageCtx);
 
 
   // أدوات نتائج البحث: مفتاح "إظهار اسم الأم" + عدّاد
@@ -1494,7 +1421,7 @@ if (titleEl) {
   // رسم الأسلاف في الوضع العادي فقط
   if (!q){
     filteredAncestors.forEach((person, idx) => {
-      const generation = el('div','generation');
+     const generation = el('div','generation ancestor-generation');
       const isRoot = person === fam.rootPerson || person.role === 'صاحب الشجرة';
       const cls = `ancestor${isRoot ? ' rootPerson' : ''}`;
            const card = upsertCard(
@@ -1535,21 +1462,10 @@ _drawnTotal++;
 // بحث: عرض جميع المطابقين وترتيبهم + إبراز الاسم
 if (q){
   const tokens = normalizeAr(q).split(/\s+/).filter(Boolean);
-  const results = [];
+const tokensRaw = String(q || '').trim().split(/\s+/).filter(Boolean);
 
-  // 1) الأجداد + الأب + صاحب الشجرة
-  const roots = [
-    ...(Array.isArray(fam.ancestors) ? fam.ancestors : []),
-    fam.father,
-    fam.rootPerson
-  ].filter(Boolean);
-  roots.forEach(p => { if (match(p) && passFilters(p)) results.push(p); });
-
-  // 2) الزوجات
-  (fam.wives || []).forEach(w => { if (match(w) && passFilters(w)) results.push(w); });
-
-  // 3) الأبناء
-  (fam.wives || []).forEach(w => (w.children||[]).forEach(c => { if (match(c) && passFilters(c)) results.push(c); }));
+  const pool = collectPersonsForSearch(fam);
+  const results = pool.filter(p => match(p) && passFilters(p));
 
   if (!results.length){
     const empty = el('div','empty-state'); empty.style.cssText='padding:2rem;text-align:center;opacity:.8';
@@ -1573,13 +1489,27 @@ if (q){
   results.forEach(p => {
     const wrapCard = el('div','relative');
     const cls = (p.role === 'ابن') ? 'son' : (p.role === 'بنت' ? 'daughter' : '');
-        const card = upsertCard(
-      wrapCard,
-      p,
-      handlers,
-      cls,
-      { showMotherHint, highlightTokens: tokens, readonlyName: !!fam.__core }
-    );
+
+    // تحديد هل كانت المطابقة باللقب فقط
+    const cgNorm = normalizeAr(p?.bio?.cognomen || '');
+    const nameRoleNorm = normalizeAr(`${p?.name||''} ${p?.role||''}`);
+    const hitCogOnly =
+      tokens.some(t => cgNorm.includes(t)) &&
+      !tokens.some(t => nameRoleNorm.includes(t));
+
+const card = upsertCard(
+  wrapCard,
+  p,
+  handlers,
+  cls,
+  {
+    showMotherHint,
+    highlightTokens: tokensRaw,   // إبراز جزئي مثل الاقتراحات
+    showCognomenHint: hitCogOnly,
+    readonlyName: !!fam.__core
+  }
+);
+
 
     const box = createCounterBoxForPerson(p);
     if (box && !card.querySelector('.counter-box')) card.appendChild(box);
@@ -1595,6 +1525,7 @@ if (q){
   toggleConnectors(tree, false);
   return;
 }
+
 
 // عرض الزوجات + الأبناء في الوضع العادي
 if (flt.role && !['زوجة','ابن','بنت'].includes(flt.role)){

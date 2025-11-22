@@ -43,37 +43,64 @@ const rotatingItems=[
 // سرعات الكتابة/المسح والوقوف
 let taglineTimer=null;
 const TAG_WRITE_DELAY=55,TAG_ERASE_DELAY=45,TAG_HOLD_FULL=5000,TAG_HOLD_EMPTY=700;
+const TAG_STATE_KEY='treeTaglineState'; // حفظ موضع و اتجاه التايللاين
 
 function startRotatingTagline(){
   const el=document.getElementById("treeTagline");
   const iconEl=document.getElementById("treeTagIcon");
   if(!el) return;
-  let index=(+localStorage.getItem('treeTaglineIndex')||0)%rotatingItems.length,i=0,dir=1;
+
+  // اقرأ آخر حالة محفوظة (index + i + dir)
+  let state=null;
+  try{ state=JSON.parse(localStorage.getItem(TAG_STATE_KEY)||'null'); }catch{}
+  let index=Number(state?.index);
+  let i=Number(state?.i);
+  let dir=Number(state?.dir);
+
+  if(!Number.isFinite(index)) index=(+localStorage.getItem('treeTaglineIndex')||0);
+  index=((index%rotatingItems.length)+rotatingItems.length)%rotatingItems.length;
+  if(!Number.isFinite(i)||i<0) i=0;
+  if(dir!==1&&dir!==-1) dir=1;
+
+  // طبّق الحالة فورًا قبل أول tick
+  {
+    const {text,icon}=rotatingItems[index];
+    if(iconEl) iconEl.textContent=icon;
+    i=Math.min(i,text.length);
+    el.textContent=text.slice(0,i);
+  }
+
+  const save=()=>{ // حفظ الحالة الحالية
+    localStorage.setItem(TAG_STATE_KEY,JSON.stringify({index,i,dir,ts:Date.now()}));
+  };
 
   const tick=()=>{
     const {text,icon}=rotatingItems[index];
     if(iconEl) iconEl.textContent=icon;
+
     if(dir===1){
       if(++i>=text.length){
-        i=text.length; el.textContent=text; dir=-1;
+        i=text.length; el.textContent=text; dir=-1; save();
         taglineTimer=setTimeout(tick,TAG_HOLD_FULL); return;
       }
-      el.textContent=text.slice(0,i);
+      el.textContent=text.slice(0,i); save();
       taglineTimer=setTimeout(tick,TAG_WRITE_DELAY);
     }else{
       if(--i<=0){
         i=0; el.textContent=""; dir=1;
         index=(index+1)%rotatingItems.length;
-        localStorage.setItem('treeTaglineIndex',index);
+        localStorage.setItem('treeTaglineIndex',index); // بقاء التوافق القديم
+        save();
         taglineTimer=setTimeout(tick,TAG_HOLD_EMPTY); return;
       }
-      el.textContent=text.slice(0,i);
+      el.textContent=text.slice(0,i); save();
       taglineTimer=setTimeout(tick,TAG_ERASE_DELAY);
     }
   };
 
   clearTimeout(taglineTimer); tick();
 }
+
 
 
 window.addEventListener("DOMContentLoaded",startRotatingTagline);
@@ -259,6 +286,23 @@ const LOGO_BY_THEME = {
   const file = LOGO_BY_THEME[theme] || LOGO_BY_THEME.default;
   img.src = `src/assets/images/${file}`;
 }
+
+/* =========================
+   مزامنة لون شريط المتصفح مع الثيم الحالي
+   ========================= */
+function syncThemeColor(){
+  const meta=document.querySelector('meta[name="theme-color"]');
+  if(!meta) return;
+
+  const cs=getComputedStyle(document.documentElement);
+  const color=
+    cs.getPropertyValue('--arrow-color').trim()||
+    cs.getPropertyValue('--title-color').trim()||
+    '#3f5a3c';
+
+  meta.setAttribute('content',color);
+}
+
 
 /* =========================
    Handlers مشتركة تُمرَّر للـ UI
@@ -801,11 +845,16 @@ setSplashProgress(85, 'تهيئة البحث والإحصاءات والطباع
     // فتح التفاصيل مباشرة عند استقبال ui:openPersonById من البحث
     bus.on('ui:openPersonById', ({ id }) => onShowDetails(id, { silent: true }));
 
-    // ثيم + شعار + رسم أولي
-    applySavedTheme(currentTheme);
-    updateSplashLogo(currentTheme);
-    redrawUI();
-    syncActiveFamilyUI();
+// ثيم + شعار + رسم أولي (موحّد مع head لمنع الوميض)
+const bootTheme =
+  window.__bootTheme ||
+  [...document.documentElement.classList].find(c=>c.startsWith('theme-'))?.slice(6) ||
+  (localStorage.getItem('theme')||localStorage.getItem('appTheme')||'default').trim();
+
+applySavedTheme(bootTheme);setState({theme:bootTheme});
+syncThemeColor();updateSplashLogo(bootTheme);
+redrawUI();syncActiveFamilyUI();
+
 
     // توست
     getToastNodes().toastContainer = dom.toastContainer;
@@ -820,23 +869,40 @@ setSplashProgress(85, 'تهيئة البحث والإحصاءات والطباع
     );
 
     // أزرار الثيم + تحديث الشعار + رسائل توضيحية
-    dom.themeButtons?.addEventListener('click',e=>{
-      const btn=e.target.closest('.theme-button');if(!btn)return;
-      const theme=btn.dataset.theme;
-      const prevTheme=getState().theme||currentTheme;
-      if(theme===prevTheme){
-        const curLabel=btn.dataset.label||theme;
-        showInfo(`النمط ${highlight(curLabel)} مُفعَّل حاليًا بالفعل.`);
-        return;
-      }
-      const prevBtn=dom.themeButtons.querySelector(`.theme-button[data-theme="${prevTheme}"]`);
-      const prevLabel=prevBtn?.dataset.label||prevTheme||'السابق';
-      const newLabel=btn.dataset.label||theme;
-      setState({theme});
-      applySavedTheme(theme);
-      updateSplashLogo(theme);
-      showSuccess(`تم تغيير النمط من ${highlight(prevLabel)} إلى ${highlight(newLabel)}.`);
-    });
+dom.themeButtons?.addEventListener('click',e=>{
+  const btn=e.target.closest('.theme-button'); if(!btn) return;
+  const theme=btn.dataset.theme;
+  const prevTheme=getState().theme||bootTheme;
+
+  if(theme===prevTheme){
+    const curLabel=btn.dataset.label||theme;
+    showInfo(`النمط ${highlight(curLabel)} مُفعَّل حاليًا بالفعل.`);
+    return;
+  }
+
+  const prevBtn=dom.themeButtons.querySelector(`.theme-button[data-theme="${prevTheme}"]`);
+  const prevLabel=prevBtn?.dataset.label||prevTheme||'السابق';
+  const newLabel=btn.dataset.label||theme;
+
+  //  مهم: عند اختيار الافتراضي انزع أي ثيم سابق فورًا
+  if(theme==='default'){
+    document.documentElement.classList.remove(
+      'theme-corporate','theme-elegant','theme-minimal','theme-royal','theme-dark'
+    );
+  }
+
+  setState({theme});
+  applySavedTheme(theme);
+
+  localStorage.setItem('theme', theme);
+  localStorage.setItem('appTheme', theme);
+
+  syncThemeColor();
+  updateSplashLogo(theme);
+
+  showSuccess(`تم تغيير النمط من ${highlight(prevLabel)} إلى ${highlight(newLabel)}.`);
+});
+
 
 
     bus.emit('app:ready');

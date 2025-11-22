@@ -1,3 +1,4 @@
+
 /* ================== الأساسيات layout.css ================== */
 /* ===================== Cairo Font (محلي) ===================== */
 @font-face {
@@ -205,8 +206,6 @@ body{background:var(--bg-gradient);min-height:100vh;color:var(--text-main); over
   to{opacity:0;transform:translateY(10px);}
 }
 
-
-
 .container{max-width:87.5rem;margin:0 auto}
 
 /* ================== شريط التمرير ================== */
@@ -239,258 +238,86 @@ body{background:var(--bg-gradient);min-height:100vh;color:var(--text-main); over
 @keyframes slideIn{from{opacity:0;transform:translateY(-2rem)}to{opacity:1;transform:translateY(0)}}
 @keyframes slideOut{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-2rem)}}
 
-/* ========== الشريط العلوي ========== */
+/* ========== الشريط العلوي + البحث (مضغوط) ========== */
+:root {
+    --h: 2.75rem;
+    --pad: .75rem;
+    --motion-dur: 240ms;
+    --motion-ease: cubic-bezier(.22, .61, .36, 1);
+   --ancestor-gap: 3.5rem; /* المسافة الرأسية بين كل سلف */
+  --ancestor-line: clamp(2px, calc(var(--ancestor-gap) / 18), 6px); /* سماكة الخط تزيد مع المسافة */
+  --ancestor-dot: clamp(.45rem, calc(var(--ancestor-line) * 2.5), .9rem); /* حجم الدوائر مع السماكة */
+  --ancestor-lift: .3125rem;
+}
+.top-bar{display:flex;align-items:center;gap:.75rem;flex-wrap:nowrap;width:100%;padding:var(--pad) 1rem;margin-bottom:1.5rem;background:var(--panel-bg);border:1px solid var(--surface-border);border-radius:.75rem;box-shadow:var(--shadow)}
+#activeFamily,#filtersToggle,.date-time-display{flex:0 0 auto}
+.search-wrap{position:relative;flex:1 1 clamp(260px,40vw,520px);min-width:220px}
 
-:root{
-  /* أبعاد موحّدة لعناصر الشريط */
-  --h: 2.75rem;
-  --pad: .75rem;
+/* البحث */
+.search-box{position:relative;display:flex;align-items:center;height:var(--h);background:linear-gradient(to bottom,color-mix(in oklab,var(--card-bg) 92%,var(--text-main) 8%),var(--card-bg));border:1px solid color-mix(in oklab,var(--surface-border) 80%,transparent);border-radius:.85rem;padding-inline:.65rem .75rem;gap:.45rem;transition:border-color var(--motion-dur),box-shadow var(--motion-dur),transform var(--motion-dur);will-change:box-shadow,transform}
+.search-box .search-icon,.search-icon-btn{inline-size:2rem;block-size:2rem;display:grid;place-items:center;border-radius:.6rem;background:color-mix(in oklab,var(--chip-bg) 75%,transparent);color:color-mix(in oklab,var(--text-main) 70%,transparent);font-size:1rem;transition:transform var(--motion-dur),background var(--motion-dur),color var(--motion-dur)}
+.search-box .search-icon{margin-inline-end:.15rem;pointer-events:none;opacity:1}
+.search-icon-btn{border:0;cursor:pointer}
+.search-icon-btn i{pointer-events:none}
 
-  /* حركة متوسطة */
-  --motion-dur: 240ms;
-  --motion-ease: cubic-bezier(.22,.61,.36,1);
-}
+.search-box input{flex:1;border:0;background:transparent;font-size:.98rem;letter-spacing:.01em;color:var(--text-main);caret-color:var(--title-color);padding-inline-start:.1rem}
+.search-box input:focus{outline:none}
+#quickSearch::placeholder{font-size:.90em;color:color-mix(in oklab,var(--placeholder-fg) 85%,transparent)}
 
-/* شريط علوي مرن لا يُسقط عناصر جديدة للسطر التالي */
-.top-bar{
-  display: flex;
-  align-items: center;
-  gap: .75rem;
-  flex-wrap: nowrap;
-  width: 100%;
-  padding: var(--pad) 1rem;
-  margin-bottom: 1.5rem;
-  background: var(--panel-bg);
-  border: 1px solid var(--surface-border);
-  border-radius: .75rem;
-  box-shadow: var(--shadow);
-}
-
-/* عناصر ثابتة العرض نسبياً */
-#activeFamily,
-#filtersToggle,
-.date-time-display{
-  flex: 0 0 auto;          /* لا تتمدد ولا تنكمش */
-}
-
-/* البحث يتمدد لكن بحد أقصى حتى لا يبتلع الصف */
-.search-wrap{
-  position: relative;
-  flex: 1 1 clamp(260px, 40vw, 520px);
-  min-width: 220px;
-}
-
-/* =========================
-   Search
-========================= */
-.search-box{
-  position: relative;
-  display: flex;
-  align-items: center;
-  height: var(--h);
-  background: var(--card-bg);
-  border: 1px solid var(--surface-border);
-  border-radius: .75rem;
-  padding-inline: .75rem;
-  transition: border-color .2s, box-shadow .2s;
-}
-.search-box .search-icon{
-  font-size: 1rem;
-  opacity: .55;
-  margin-inline-end: .5rem;
-  pointer-events: none;
-}
-.search-box input{
-  flex: 1;
-  border: 0;
-  background: transparent;
-  font-size: .95rem;
-  color: var(--text-main);
-}
-.search-box input:focus{ outline: none; }
-.search-box:focus-within{
-  border-color: var(--focus-border);
-  box-shadow: 0 0 0 3px var(--focus-ring-soft);
-}
+.search-box:focus-within{border-color:var(--focus-border);transform:translateY(-1px);box-shadow:0 0 0 3px var(--focus-ring-soft),0 10px 24px color-mix(in oklab,var(--text-main) 10%,transparent)}
+.search-box:focus-within .search-icon,
+.search-box:focus-within .search-icon-btn{background:color-mix(in oklab,var(--title-color) 12%,var(--chip-bg));color:var(--title-color);transform:translateY(-1px) scale(1.03)}
 
 /* زر المسح */
-.search-box .clear-btn{
-  position: absolute;
-  inset-inline-end: .5rem;
-  width: 1.6rem; height: 1.6rem;
-  display: grid; place-items: center;
-  background: transparent; border: 0; cursor: pointer;
-  color: var(--text-main); opacity: .5; transition: opacity .2s;
-}
-.search-box .clear-btn:hover{ opacity: 1; }
+.search-box .clear-btn{position:absolute;inset-inline-end:.5rem;width:1.6rem;height:1.6rem;display:grid;place-items:center;background:transparent;border:0;cursor:pointer;color:var(--text-main);opacity:.5;border-radius:.55rem;transition:opacity var(--motion-dur),transform var(--motion-dur),background var(--motion-dur)}
+.search-box .clear-btn:hover{background:color-mix(in oklab,var(--modal-danger) 10%,transparent);transform:scale(1.05);opacity:1}
 
-/* اقتراحات */
-.suggestions{
-  position: absolute;
-  inset-inline: 0;
-  top: calc(100% + .35rem);
-  z-index: 30;
-  display: none;
-  background: var(--card-bg);
-  border: 1px solid var(--surface-border);
-  border-radius: .65rem;
-  max-height: 18rem;
-  overflow-y: auto;
-  box-shadow: 0 8px 20px rgba(0,0,0,.12);
-}
-.suggestions.show{ display: block; }
-.suggestions .item{
-  padding: .6rem .85rem;
-  cursor: pointer;
-  transition: background .15s;
-}
-.suggestions .item:hover,
-.suggestions .item[aria-selected="true"]{ background: var(--chip-bg); }
+/* الاقتراحات */
+.suggestions{position:absolute;inset-inline:0;top:calc(100% + .35rem);z-index:30;display:none;background:var(--card-bg);border:1px solid color-mix(in oklab,var(--surface-border) 85%,transparent);border-radius:.75rem;max-height:18rem;overflow-y:auto;box-shadow:0 .5rem 1.25rem color-mix(in oklab,var(--text-main) 12%,transparent);transform-origin:top center;transform:translateY(-6px);opacity:0;visibility:hidden;pointer-events:none;transition:transform var(--motion-dur) var(--motion-ease),opacity var(--motion-dur) var(--motion-ease),visibility 0s linear var(--motion-dur);will-change:transform,opacity}
+.suggestions.show{display:block;transform:translateY(0);opacity:1;visibility:visible;pointer-events:auto;transition-delay:0s,0s,0s}
+.suggestions .item{padding:.65rem .9rem;cursor:pointer;transition:background .15s,transform .12s}
+.suggestions .item small{margin-inline-start:.35rem;opacity:.85;font-size:.85em;white-space:nowrap}
+.suggestions .item + .item{border-top:1px solid color-mix(in oklab,var(--surface-border) 70%,transparent)}
+.suggestions .item:hover,.suggestions .item[aria-selected=true]{background:var(--chip-bg);transform:translateY(-1px)}
+.suggestions .suggest-tag{display:inline-block;margin-top:.2rem;padding:.1rem .35rem;border-radius:.4rem;background:color-mix(in oklab,var(--chip-bg) 70%,transparent)}
 
-/* =========================
-   Family button + Filters button (unified)
-========================= */
-.family-button{
-  height: var(--h);
-  display: inline-flex;
-  align-items: center;
-  gap: .5rem;
-  padding: 0 .9rem;
-  background: var(--card-bg);
-  color: var(--text-main);
-  border: 1px solid var(--surface-border);
-  border-radius: .65rem;
-  font-size: .95rem;
-  font-weight: 600;
-  line-height: 1;
-  box-shadow: 0 1px 4px rgba(0,0,0,.06);
-  cursor: pointer
-}
-.family-button i{ font-size: .95rem; opacity: .8; }
+/* أزرار العائلة والفلاتر */
+.family-button{height:var(--h);display:inline-flex;align-items:center;gap:.5rem;padding:0 .9rem;background:var(--card-bg);color:var(--text-main);border:1px solid var(--surface-border);border-radius:.65rem;font-size:.95rem;font-weight:600;line-height:1;box-shadow:0 1px 4px color-mix(in oklab,var(--text-main) 8%,transparent);cursor:pointer}
+.family-button i{font-size:.95rem;opacity:.8}
 
-/* =========================
-   Date/Time pill
-========================= */
-.date-time-display{
-  height: var(--h);
-  display: inline-flex;
-  align-items: center;
-  gap: .5rem;
-  padding: 0 .85rem;
-  background: var(--chip-bg);
-  border: 1px solid var(--surface-border);
-  border-radius: .65rem;
-  color: var(--text-main);
-  font-size: .92rem;
-  line-height: 1;
-  white-space: nowrap;
-}
-.date-time-display i{ font-size: .95rem; opacity: .8; }
-.day-name{ color: var(--title-color); font-weight: 700; }
-.time{ color: var(--arrow-color); font-feature-settings: "tnum"; }
+/* التاريخ والوقت */
+.date-time-display{height:var(--h);display:inline-flex;align-items:center;gap:.5rem;padding:0 .85rem;background:var(--chip-bg);border:1px solid var(--surface-border);border-radius:.65rem;color:var(--text-main);font-size:.92rem;line-height:1;white-space:nowrap}
+.date-time-display i{font-size:.95rem;opacity:.8}
+.day-name{color:var(--title-color);font-weight:700}
+.time{color:var(--arrow-color);font-feature-settings:"tnum"}
 
-/* إزالة تغليف قديم إن وُجد */
-.top-bar > div{ all: unset; position: relative; }
-.family-item{ display: contents; }
+/* تنظيف تغليف قديم */
+.top-bar>div{all:unset;position:relative}
+.family-item{display:contents}
 
-/* =========================
-   Motion: medium, subtle
-========================= */
-.top-bar > *{
-  will-change: transform, opacity;
-  animation: topbar-in var(--motion-dur) var(--motion-ease) both;
-}
-.top-bar > *:nth-child(1){ animation-delay: 20ms; }
-.top-bar > *:nth-child(2){ animation-delay: 60ms; }
-.top-bar > *:nth-child(3){ animation-delay: 100ms; }
-.top-bar > *:nth-child(4){ animation-delay: 140ms; }
+/* الحركة */
+.top-bar>*{will-change:transform,opacity;animation:topbar-in var(--motion-dur) var(--motion-ease) both}
+.top-bar>*:nth-child(1){animation-delay:20ms}
+.top-bar>*:nth-child(2){animation-delay:60ms}
+.top-bar>*:nth-child(3){animation-delay:100ms}
+.top-bar>*:nth-child(4){animation-delay:140ms}
+@keyframes topbar-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
 
-@keyframes topbar-in{
-  from{ opacity:0; transform: translateY(-6px); }
-  to  { opacity:1; transform: translateY(0); }
-}
+#filtersToggle{transition:box-shadow var(--motion-dur),transform var(--motion-dur);will-change:box-shadow,transform}
+#filtersToggle:hover, #activeFamily:hover{box-shadow:0 6px 18px color-mix(in oklab,var(--text-main) 12%,transparent)}
+#filtersToggle:active, #activeFamily:active{transform:translateY(1px) scale(.997)}
 
-.search-box{
-  transition: border-color var(--motion-dur), box-shadow var(--motion-dur), transform var(--motion-dur);
-  will-change: box-shadow, transform;
-}
-.search-box:focus-within{
-  transform: translateY(-1px);
-  box-shadow: 0 0 0 3px var(--focus-ring-soft), 0 8px 20px rgba(0,0,0,.07);
-}
+#advFilters{transform-origin:top center;transform:translateY(-8px) scaleY(.98);opacity:0;visibility:hidden;pointer-events:none;transition:transform var(--motion-dur) var(--motion-ease),opacity var(--motion-dur) var(--motion-ease),visibility 0s linear var(--motion-dur);will-change:transform,opacity}
+#advFilters.open{transform:translateY(0) scaleY(1);opacity:1;visibility:visible;pointer-events:auto;transition-delay:0s,0s,0s}
+#advFilters .filters-card{transition:box-shadow var(--motion-dur),transform var(--motion-dur)}
+#advFilters.open .filters-card:hover{box-shadow:0 8px 24px color-mix(in oklab,var(--text-main) 8%,transparent);transform:translateY(-1px)}
 
-/* اقتراحات: انزلاق + شفافية */
-.suggestions{
-  transform-origin: top center;
-  transform: translateY(-6px);
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transition:
-    transform var(--motion-dur) var(--motion-ease),
-    opacity var(--motion-dur) var(--motion-ease),
-    visibility 0s linear var(--motion-dur);
-  will-change: transform, opacity;
-}
-.suggestions.show{
-  transform: translateY(0);
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-  transition-delay: 0s, 0s, 0s;
-}
-
-/* زر الفلاتر: تغذية بصرية خفيفة */
-#filtersToggle{
-  transition: box-shadow var(--motion-dur), transform var(--motion-dur);
-  will-change: box-shadow, transform;
-}
-#filtersToggle:hover{ box-shadow: 0 6px 18px rgba(0,0,0,.12); }
-#filtersToggle:active{ transform: translateY(1px) scale(.997); }
-
-/* لوحة الفلاتر (#advFilters) — تتطلب .open من JS */
-#advFilters{
-  transform-origin: top center;
-  transform: translateY(-8px) scaleY(.98);
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transition:
-    transform var(--motion-dur) var(--motion-ease),
-    opacity var(--motion-dur) var(--motion-ease),
-    visibility 0s linear var(--motion-dur);
-  will-change: transform, opacity;
-}
-#advFilters.open{
-  transform: translateY(0) scaleY(1);
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-  transition-delay: 0s, 0s, 0s;
-}
-#advFilters .filters-card{
-  transition: box-shadow var(--motion-dur), transform var(--motion-dur);
-}
-#advFilters.open .filters-card:hover{
-  box-shadow: 0 8px 24px rgba(0,0,0,.08);
-  transform: translateY(-1px);
-}
-
-/* احترام تفضيل تقليل الحركة */
-@media (prefers-reduced-motion: reduce){
-  .top-bar > *,
-  .search-box,
-  .suggestions,
-  #filtersToggle,
-  #advFilters,
-  #advFilters .filters-card,
-  .date-time-display{
-    transition: none !important;
-    animation: none !important;
-    transform: none !important;
+/* احترام تقليل الحركة */
+@media (prefers-reduced-motion:reduce){
+  .top-bar>*,.search-box,.suggestions,#filtersToggle,#advFilters,#advFilters .filters-card,.date-time-display{
+    transition:none!important;animation:none!important;transform:none!important
   }
 }
-
 
 /* ========== زر فتح اللوحة الجانبية ========== */
 .side-toggle{
@@ -586,9 +413,9 @@ body{background:var(--bg-gradient);min-height:100vh;color:var(--text-main); over
 #resetSettingsBtn:disabled{opacity:.6;cursor:not-allowed;transform:none}
 
 /* ========== تركيز الوصول ========== */
-:where(button,[role="button"],.family-button,.theme-button):focus{outline:none}
+:where(button,[role="button"],.family-button,.theme-button):focus{outline:none !important}
 :where(button,[role="button"],.family-button,.theme-button):focus-visible{
-  outline:3px solid var(--focus-ring);outline-offset:2px;border-radius:.5rem
+  outline:3px solid var(--focus-ring);outline-offset:2px !important;border-radius:.5rem !important
 }
 
 /* ========== تجاوبية ========== */
@@ -626,7 +453,7 @@ body{background:var(--bg-gradient);min-height:100vh;color:var(--text-main); over
   color:var(--text-main);
   transition:transform .2s, box-shadow .2s, background-color .2s, color .2s;
 }
-.side-panel .family-item > .family-button:hover{
+.side-panel .family-button:hover{
   background:var(--ancestor-border);
   color:#fff;
   transform:translateY(-1px);
@@ -868,6 +695,7 @@ content:"";position:absolute;inset-inline:2rem;inset-block-start:.75rem;
   transition:transform .3s cubic-bezier(.4,0,.2,1),
              box-shadow .3s cubic-bezier(.4,0,.2,1);
   gap:.75rem; /* مسافة طبيعية بين الأجزاء */
+  z-index: 1
 }
 .member-card:hover{
   transform:translateY(-.3125rem);
@@ -1047,13 +875,73 @@ content:"";position:absolute;inset-inline:2rem;inset-block-start:.75rem;
 }
 
 /* ================== الوصلات والسهام ================== */
-.connector,.vertical-line.arrow-down{position:absolute;background:var(--arrow-color)}
-.connector{top:100%;left:50%;width:.125rem;height:3rem;transform:translateX(-50%)}
-.vertical-line.arrow-down{width:.125rem;height:1.25rem;margin-bottom:.5rem}
-.vertical-line.arrow-down::after{
-  content:'';position:absolute;bottom:-.5rem;left:50%;transform:translateX(-50%);
-  border-left:.375rem solid transparent;border-right:.375rem solid transparent;border-top:.5rem solid var(--arrow-color)
+
+.generation.ancestor-generation{
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  gap: 0 !important;
+  width: auto;
 }
+
+/* دوائر بداية/نهاية الموصل */
+.ancestor-generation > .connector::before,
+.ancestor-generation > .connector::after{
+  content:"";position:absolute;left:50%;transform:translateX(-50%);inline-size: 0;
+  block-size: 0;background: transparent;border: none;
+  box-shadow:0 0 .5rem color-mix(in oklab,var(--connector-color) 70%,transparent);
+}
+.ancestor-generation > .connector::before{ top: calc(var(--ancestor-dot) / -2); }
+.ancestor-generation > .connector::after { bottom: calc(var(--ancestor-dot) / -2); }
+
+/* تحريك البطاقة يبقى كما هو */
+.ancestor-generation > .member-card:hover{
+  transform: translateY(calc(var(--ancestor-lift) * -1));
+}
+
+/* القاعدة الأساسية للموصل */
+.ancestor-generation > .connector{
+  inline-size: var(--ancestor-line);
+  block-size: var(--ancestor-gap);
+  margin: 0 !important;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in oklab, var(--connector-color) 85%, #fff),
+    var(--connector-color)
+  );
+  border-radius: 999px;
+  box-shadow: 0 0 .6rem color-mix(in oklab,var(--connector-color) 70%,transparent);
+  position: relative;
+
+  transition:
+    block-size .3s cubic-bezier(.4,0,.2,1),
+    margin-top  .3s cubic-bezier(.4,0,.2,1);
+}
+
+/* الموصل الذي قبل البطاقة المرفوعة */
+.ancestor-generation > .connector:has(+ .member-card:is(:hover,:focus-within,.is-lifted,.is-dragging)){
+  block-size: calc(var(--ancestor-gap) - var(--ancestor-lift));
+}
+
+/* الموصل الذي بعد البطاقة المرفوعة */
+.ancestor-generation > .member-card:is(:hover,:focus-within,.is-lifted,.is-dragging) + .connector{
+  margin-top: calc(var(--ancestor-lift) * -1) !important;
+  block-size: calc(var(--ancestor-gap) + var(--ancestor-lift));
+}
+
+/* لا تحرك الموصل عند hover عليه وحده */
+.ancestor-generation > .connector:hover{
+  transform:none;
+  filter: brightness(1.08);
+}
+
+.family-tree:has(>.ancestor-generation){gap:0!important}
+.family-tree>.generation:not(.ancestor-generation){margin-top:3rem}
+.member-card.wife{overflow:visible}
+.member-card.wife .wife-connector{position:absolute;left:50%;bottom:-1.25rem;transform:translateX(-50%);width:.125rem;height:1.25rem;background:var(--arrow-color);border-radius:999px}
+.member-card.wife .wife-connector::after{content:"";position:absolute;bottom:-.55rem;left:50%;transform:translateX(-50%);border-left:.375rem solid transparent;border-right:.375rem solid transparent;border-top:.55rem solid var(--arrow-color)}
+.wife-connector,.wife-connector *, .connector,.connector::before,.connector::after{pointer-events:none!important}
 
 /* ================== النافذة العامة (المودال) ================== */
 .modal{
@@ -1203,12 +1091,6 @@ content:"";position:absolute;inset-inline:2rem;inset-block-start:.75rem;
   padding:.45rem 1rem;border-radius:1rem;font-weight:600;font-size:.88rem;
 }
 
-/* ================== الاقتراحات والبحث ================== */
-.search-wrap{position:relative;min-width:16rem}
-.suggestions{
-  position:absolute;top:100%;right:0;left:0;background:var(--card-bg);
-  border:1px solid var(--surface-border);border-radius:.5rem;margin-top:.25rem;z-index:10;display:none;max-height:18rem;overflow:auto
-}
 #familyTree{position:relative;z-index:10}
 .suggestions.show{display:block}
 .suggestions .item{padding:.5rem .75rem;cursor:pointer}
@@ -1314,3 +1196,4 @@ input[type="search"]::-webkit-search-cancel-button{ -webkit-appearance:none; }
   .generation{flex-wrap:wrap;justify-content:center;gap:4rem}
   .wife-section{flex:0 1 18rem;max-width:18rem}
 }
+
