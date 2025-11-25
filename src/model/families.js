@@ -1,3 +1,7 @@
+
+
+
+
 // families.js
 // =======================================
 // تخزين العائلات + ترحيل النسخ + أدوات التطبيع
@@ -263,6 +267,7 @@ if (Array.isArray(f.ancestors)) {
 
 }
 
+
 // ضمان وجود معرفات + حقول تطبيع مخزّنة (_norm*)
 function ensureIds(f) {
   if (!f) return;
@@ -284,6 +289,444 @@ function ensureIds(f) {
 }
 
 // =======================================
+// مساعدات نصية للنسب (لا تعتمد على DOM)
+// =======================================
+
+// فاصل عام للفواصل العربية/الإنجليزية
+const SPLIT_RE = /[,\u060C]/u;
+
+// تقسيم نص إلى مصفوفة نصوص (بعد التشذيب وإزالة الفارغ)
+function splitTextList(text) {
+  return String(text || '')
+    .split(SPLIT_RE)
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
+// تقسيم نص إلى مصفوفة كائنات { name }
+function splitTextToNameObjects(text) {
+  return splitTextList(text).map(name => ({ name }));
+}
+
+
+// تطبيع عائلة مضافة لتتوافق مع lineage (Schema v4)
+export function normalizeNewFamilyForLineage(f){
+  if (!f || typeof f !== 'object') return;
+
+  const newId = () => (crypto?.randomUUID?.() || 'id-' + Math.random().toString(36).slice(2));
+
+  // ---- 1) تثبيت rootPerson و wives ----
+  if (!f.rootPerson){ f.rootPerson = { name:'', role:'صاحب الشجرة', bio:{}, children:[], wives:[] }; }
+  if (!Array.isArray(f.wives)){
+    f.wives = Array.isArray(f.rootPerson.wives) ? f.rootPerson.wives : [];
+  }
+  f.rootPerson.wives = f.wives;
+
+  // ---- 2) كل شخص له _id ----
+  function visit(p){
+    if (!p) return;
+    if (!p._id) p._id = newId();
+    if (!p.bio) p.bio = {};
+    if (!Array.isArray(p.children)) p.children = [];
+    if (!Array.isArray(p.wives)) p.wives = [];
+    p.children.forEach(visit);
+    p.wives.forEach(visit);
+  }
+  visit(f.rootPerson);
+  f.wives.forEach(visit);
+  if (f.father) visit(f.father);
+
+  // ---- 3) روابط الأب/الأم للطفل ----
+const rootId = f.rootPerson?._id || null;
+
+// أ) أبناء الزوجات: الأب هو صاحب الشجرة دائمًا
+f.wives.forEach(w=>{
+  const mid = w?._id || null;
+  (w.children || []).forEach(c=>{
+    if (!c) return;
+    if (!c.fatherId) c.fatherId = rootId;
+    if (!c.motherId) c.motherId = mid;
+
+    c.father = c.fatherId;
+    c.mother = c.motherId;
+
+    if (!c.bio) c.bio = {};
+    c.bio.fatherId = c.fatherId;
+    c.bio.motherId = c.motherId;
+  });
+});
+
+
+  // ب) أبناء صاحب الشجرة إن وُجدوا مباشرة تحت rootPerson.children
+  if (f.rootPerson && Array.isArray(f.rootPerson.children)) {
+    f.rootPerson.children.forEach(c=>{
+      if (!c) return;
+      if (!c.fatherId) c.fatherId = rootId;
+      if (c.motherId == null) c.motherId = null;
+
+      c.father = c.fatherId;
+      c.mother = c.motherId;
+
+      if (!c.bio) c.bio = {};
+      c.bio.fatherId = c.fatherId;
+      c.bio.motherId = c.motherId;
+    });
+  }
+  
+    // ---- 3.5) باكفِل روابط الأب/الأم من bio إن كانت ناقصة ----
+  function backfillChildParentIds(p){
+    if (!p) return;
+
+    // فقط للأبناء/البنات
+    const r = String(p.role || '').trim();
+    if (r === 'ابن' || r === 'بنت') {
+      const bf = p.bio && p.bio.fatherId;
+      const bm = p.bio && p.bio.motherId;
+
+      if (!p.fatherId && bf) p.fatherId = bf;
+      if (!p.motherId && bm) p.motherId = bm;
+
+      // حافظ على المراجع المباشرة التي يتوقعها lineage
+      if (!p.father && p.fatherId) p.father = p.fatherId;
+      if (!p.mother && p.motherId) p.mother = p.motherId;
+    }
+
+    (p.children || []).forEach(backfillChildParentIds);
+    (p.wives || []).forEach(backfillChildParentIds);
+  }
+
+  backfillChildParentIds(f.rootPerson);
+  (f.wives || []).forEach(backfillChildParentIds);
+  if (f.father) backfillChildParentIds(f.father);
+  (f.ancestors || []).forEach(backfillChildParentIds);
+
+
+  // ---- 4) تحويل نصوص الإخوة/الأخوات للأب/الأم إلى مصفوفات {name} ----
+  function fixSiblings(bio){
+    if (!bio || typeof bio !== 'object') return;
+
+    const bTxt = String(bio.brothersTxt || bio.siblingsBrothersTxt || '').trim();
+    const sTxt = String(bio.sistersTxt  || bio.siblingsSistersTxt  || '').trim();
+
+    // لا تلمس المصفوفة إذا كانت موجودة فعلاً ولا يوجد نص جديد
+    if (bTxt) {
+      bio.siblingsBrothers = splitTextToNameObjects(bTxt);
+    } else if (!Array.isArray(bio.siblingsBrothers)) {
+      bio.siblingsBrothers = [];
+    }
+
+    if (sTxt) {
+      bio.siblingsSisters = splitTextToNameObjects(sTxt);
+    } else if (!Array.isArray(bio.siblingsSisters)) {
+      bio.siblingsSisters = [];
+    }
+  }
+
+  if (f.father && f.father.bio) fixSiblings(f.father.bio);
+
+  if (f.rootPerson && f.rootPerson.bio) {
+    fixSiblings(f.rootPerson.bio);
+    // ملاحظة: إخوة/أخوات أم صاحب الشجرة سننقلها لاحقًا إلى “الأم الحقيقية”
+  }
+
+  (f.wives || []).forEach(w => { if (w && w.bio) fixSiblings(w.bio); });
+
+
+  return f;
+}
+
+
+
+// =======================================
+// 4.5) فهرسة الأشخاص + روابط واقعية (NEW)
+// (نسخة متوافقة مع jshint بدون ||= ?? ?.)
+// =======================================
+
+function _uuid(prefix){
+  try {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  } catch(e){}
+  return (prefix || 'p') + '_' + Math.random().toString(36).slice(2,10);
+}
+
+// بناء فهرس family.persons من البنية الحالية (ancestors/father/rootPerson/wives/children)
+// مع الحفاظ على الأشخاص المولَّدين سابقًا (الأم/أب الزوجة/أم الزوجة)
+function buildPersonsIndex(fam){
+  if (!fam) return;
+
+  // احتفظ بأي persons قديمة (خصوصًا المولّدة)
+  var oldPersons = fam.persons || {};
+  var next = {};
+
+  var put = function(p){
+    if (!p) return;
+    if (!p._id) p._id = _uuid('p');
+    next[p._id] = p;
+  };
+
+  // NEW: زيارة عميقة لكل شخص وأبنائه/زوجاته
+  var visit = function(p){
+    if (!p) return;
+    put(p);
+    (p.children || []).forEach(visit);
+    (p.wives || []).forEach(visit);
+  };
+
+  // 1) أعد بناء الفهرس من الشكل القديم (عميق)
+  (Array.isArray(fam.ancestors) ? fam.ancestors : []).forEach(visit);
+
+  if (fam.father) visit(fam.father);
+  if (fam.rootPerson) visit(fam.rootPerson);
+
+  // wives كمصدر وحيد (حتى لو كانت مرآة داخل rootPerson)
+  (fam.wives || []).forEach(visit);
+
+  // 2) أعد ضمّ الأشخاص “الافتراضيين/المولّدين” الموجودين سابقًا
+  Object.keys(oldPersons).forEach(function(id){
+    if (next[id]) return; // موجود بالفعل من البنية القديمة
+    var op = oldPersons[id];
+    if (!op) return;
+
+    // احتفظ بالأم وأب/أم الزوجة أو أي شخص مشار إليه بروابط
+    var r = String(op.role || '').trim();
+    var isVirtualRole = (r === 'الأم' || r === 'أب الزوجة' || r === 'أم الزوجة');
+
+    var isReferenced =
+      (fam.rootPerson && fam.rootPerson.motherId === id) ||
+      (fam.wives || []).some(function(w){
+        return w && (w.fatherId === id || w.motherId === id);
+      });
+
+    if (isVirtualRole || isReferenced){
+      next[id] = op;
+    }
+  });
+
+  fam.persons = next;
+}
+
+
+// ربط سلسلة الأجداد fatherId بشكل خطّي
+function linkAncestorsChain(fam){
+  if (!fam) return;
+
+  var anc = _sortedAncestors(fam).map(function(x){ return x.a; }).filter(Boolean);
+
+  for (var i=0;i<anc.length;i++){
+    anc[i].fatherId = (i+1<anc.length) ? anc[i+1]._id : null;
+
+    if (anc[i].motherId == null) anc[i].motherId = null;
+    if (!Array.isArray(anc[i].spousesIds)) anc[i].spousesIds = [];
+    if (!Array.isArray(anc[i].childrenIds)) anc[i].childrenIds = [];
+  }
+
+  if (fam.father){
+    fam.father.fatherId = anc[0] ? anc[0]._id : null;
+
+    if (fam.father.motherId == null) fam.father.motherId = null;
+    if (!Array.isArray(fam.father.spousesIds)) fam.father.spousesIds = [];
+    if (!Array.isArray(fam.father.childrenIds)) fam.father.childrenIds = [];
+  }
+
+  if (fam.rootPerson){
+    fam.rootPerson.fatherId = fam.father ? fam.father._id : null;
+
+    if (fam.rootPerson.motherId == null) fam.rootPerson.motherId = null;
+    if (!Array.isArray(fam.rootPerson.spousesIds)) fam.rootPerson.spousesIds = [];
+    if (!Array.isArray(fam.rootPerson.childrenIds)) fam.rootPerson.childrenIds = [];
+  }
+}
+
+// إنشاء "أم حقيقية" لصاحب الشجرة إن كانت موجودة في bio
+function ensureRealMotherForRoot(fam){
+  if (!fam || !fam.rootPerson) return;
+
+  var rp = fam.rootPerson;
+  var b  = rp.bio || {};
+  var hasMother =
+    ((b.motherName && b.motherName !== '-') ||
+     (b.motherClan && b.motherClan !== '-'));
+
+  if (!hasMother) return;
+
+  if (rp.motherId && fam.persons && fam.persons[rp.motherId]) return;
+
+  var momBro = splitTextToNameObjects(b.motherBrothersTxt || '');
+  var momSis = splitTextToNameObjects(b.motherSistersTxt  || '');
+
+  var mom = {
+    _id: _uuid('m'),
+    name: b.motherName || 'الأم',
+    role: 'الأم',
+    bio: {
+      clan: b.motherClan || '',
+      tribe: b.motherTribe || '',
+      siblingsBrothers: momBro,
+      siblingsSisters:  momSis
+    },
+    spousesIds: rp.fatherId ? [rp.fatherId] : [],
+    childrenIds: [rp._id],
+    fatherId: null,
+    motherId: null
+  };
+
+
+  if (!fam.persons) fam.persons = {};
+  fam.persons[mom._id] = mom;
+
+  rp.motherId = mom._id;
+
+  if (fam.father){
+    if (!Array.isArray(fam.father.spousesIds)) fam.father.spousesIds = [];
+    if (fam.father.spousesIds.indexOf(mom._id) === -1) fam.father.spousesIds.push(mom._id);
+  }
+}
+
+// إنشاء أب/أم حقيقيَّين للزوجات إن وُجدوا في bio (اختياري تدريجي)
+function ensureRealParentsForWives(fam){
+  if (!fam || !fam.wives || !fam.wives.length) return;
+  if (!fam.persons) fam.persons = {};
+
+  for (var i=0;i<fam.wives.length;i++){
+    var w = fam.wives[i];
+    if (!w || !w._id) continue;
+
+    if (w.fatherId == null) w.fatherId = null;
+    if (w.motherId == null) w.motherId = null;
+
+    var wb = w.bio || {};
+
+    // NEW: إخوة/أخوات أب الزوجة من نصوصها
+    var fBro = splitTextToNameObjects(wb.fatherBrothersTxt || '');
+    var fSis = splitTextToNameObjects(wb.fatherSistersTxt  || '');
+
+    // NEW: إخوة/أخوات أم الزوجة من نصوصها
+    var mBro = splitTextToNameObjects(wb.motherBrothersTxt || '');
+    var mSis = splitTextToNameObjects(wb.motherSistersTxt  || '');
+
+    if (!w.fatherId && wb.fatherName && wb.fatherName !== '-') {
+      var wf = {
+        _id: _uuid('wf'),
+        name: wb.fatherName,
+        role: 'أب الزوجة',
+        bio: {
+          clan: wb.fatherClan || '',
+          tribe: wb.tribe || '',
+          // NEW:
+          siblingsBrothers: fBro,
+          siblingsSisters:  fSis
+        },
+        childrenIds: [w._id],
+        spousesIds: [],
+        fatherId: null,
+        motherId: null
+      };
+      fam.persons[wf._id] = wf;
+      w.fatherId = wf._id;
+    }
+
+    if (!w.motherId && wb.motherName && wb.motherName !== '-') {
+      var wm = {
+        _id: _uuid('wm'),
+        name: wb.motherName,
+        role: 'أم الزوجة',
+        bio: {
+          clan: wb.motherClan || '',
+          // NEW:
+          siblingsBrothers: mBro,
+          siblingsSisters:  mSis
+        },
+        childrenIds: [w._id],
+        spousesIds: [],
+        fatherId: null,
+        motherId: null
+      };
+      fam.persons[wm._id] = wm;
+      w.motherId = wm._id;
+    }
+  }
+}
+
+// ربط روابط الأب/الأم/الأبناء لكل الأشخاص الحاليين (من البنية القديمة)
+function linkParentChildLinksFromOldShape(fam){
+  if (!fam) return;
+
+  // جهّز الحقول لكل شخص
+  _walkPersons(fam, function(p){
+    if (!p) return;
+    if (p.fatherId == null) p.fatherId = null;
+    if (p.motherId == null) p.motherId = null;
+    if (!Array.isArray(p.spousesIds)) p.spousesIds = [];
+    if (!Array.isArray(p.childrenIds)) p.childrenIds = [];
+  });
+
+  var father = fam.father || null;
+  var root   = fam.rootPerson || null;
+
+  // اربط rootPerson كابنٍ للأب
+  if (father && root){
+    root.fatherId = father._id;
+
+    if (!Array.isArray(father.childrenIds)) father.childrenIds = [];
+    if (father.childrenIds.indexOf(root._id) === -1) father.childrenIds.push(root._id);
+
+    if (!Array.isArray(father.spousesIds)) father.spousesIds = [];
+    if (!Array.isArray(root.spousesIds)) root.spousesIds = [];
+  }
+
+  // NEW: اربط أبناء الأب الموجودين في father.children (إخوة rootPerson)
+  if (father && Array.isArray(father.children)) {
+    father.children.forEach(function(ch){
+      if (!ch) return;
+
+      // اضبط روابط الطفل
+      ch.fatherId = father._id;
+      if (ch.motherId == null) ch.motherId = null;
+
+      // ضمّه إلى childrenIds للأب
+      if (!Array.isArray(father.childrenIds)) father.childrenIds = [];
+      if (father.childrenIds.indexOf(ch._id) === -1) father.childrenIds.push(ch._id);
+    });
+  }
+
+  // اربط الزوجات كأزواج للجذر + اربط أبناء الزوجات
+  (fam.wives || []).forEach(function(w){
+    if (!w || !root) return;
+
+    if (!Array.isArray(root.spousesIds)) root.spousesIds = [];
+    if (root.spousesIds.indexOf(w._id) === -1) root.spousesIds.push(w._id);
+
+    if (!Array.isArray(w.spousesIds)) w.spousesIds = [];
+    if (w.spousesIds.indexOf(root._id) === -1) w.spousesIds.push(root._id);
+
+    (w.children || []).forEach(function(ch){
+      if (!ch) return;
+
+      ch.fatherId = root ? root._id : null;
+      ch.motherId = w._id;
+
+      if (!Array.isArray(root.childrenIds)) root.childrenIds = [];
+      if (root.childrenIds.indexOf(ch._id) === -1) root.childrenIds.push(ch._id);
+
+      if (!Array.isArray(w.childrenIds)) w.childrenIds = [];
+      if (w.childrenIds.indexOf(ch._id) === -1) w.childrenIds.push(ch._id);
+    });
+  });
+}
+
+
+// تجميعة واحدة لتطبيق كل الروابط والفهرسة
+function buildRealLinks(fam){
+  if (!fam) return;
+  buildPersonsIndex(fam);
+  linkAncestorsChain(fam);
+  linkParentChildLinksFromOldShape(fam);
+  ensureRealMotherForRoot(fam);
+  ensureRealParentsForWives(fam);
+}
+
+
+// =======================================
 // 5) بيانات افتراضية (عائلات أساسية)
 // =======================================
 const B=(e={})=>({...DEFAULT_BIO,...e});
@@ -293,12 +736,18 @@ const W=(name,role,bio={},children=[],extra={})=>({name,role,bio:B(bio),children
 
 const familiesData = {
 family1:{familyName:'سَيْدِنا',fullRootPersonName:'أحمد محمد إدريس بُقَرْ',
-  ancestors:[
-    P('إدريس','الجد الأول',{fullName:'إدريس بُقَرْ',birthDate:'1860-01-01',deathDate:'1935-01-01',birthPlace:'تشاد',occupation:'إمام وقارئ قرآن',achievements:['حافظ لكتاب الله','غرس القيم الإسلامية في العائلة','حافظ على صلة الرحم بين الفروع'],hobbies:['مجالس القرآن','الجلوس مع الأحفاد وسرد القصص'],description:'حافظ تقاليد العائلة ومرشد الأجيال',education:'حافظ لكتاب الله'},{generation:1}),
-    P('بُقَرْ','الجد الثاني',{fullName:'بُقَرْ',birthDate:'1835-01-01',deathDate:'1910-01-01',birthPlace:'تشاد',occupation:'وجيه قبلي وتاجر',achievements:['أسس مكانة العائلة الاجتماعية في القبيلة','سعى في إصلاح ذات البين بين الناس'],hobbies:['الجلوس مع وجهاء القبيلة','متابعة أمور المزارع والأنعام'],description:'مؤسس العائلة وحامل إرثها العريق',education:'-'},{generation:2})
-  ],
-  father:P('محمد','الأب',{fullName:'محمد إدريس بُقَرْ',birthDate:'1885-01-01',deathDate:'1965-01-01',birthPlace:'تشاد',occupation:'إمام وخطيب ومعلم قرآن',achievements:['حافظ لكتاب الله','ربى أبناءه على طلب العلم الشرعي','عُرف بالحكمة والإصلاح بين الناس'],hobbies:['قراءة القرآن','تعليم الصغار مبادئ الدين','الزراعة في أرض العائلة'],description:'قائد العائلة ومسؤول عن استمراريتها',education:'حافظ لكتاب الله'}),
-  rootPerson:P('أحمد','صاحب الشجرة',{fullName:'أحمد محمد إدريس بُقَرْ',cognomen:'سَيْدِنا',tribe:'قٌرْعان',clan:'يِرِي',motherName:'-',motherClan:'يِرِي',paternalGrandfather:'إدريس بُقَرْ',paternalGrandmother:'-',paternalGrandmotherClan:'-',maternalGrandfather:'-',maternalGrandfatherClan:'',maternalGrandmother:'-',maternalGrandmotherClan:'-',birthDate:'1910-01-01',deathDate:'1995-01-01',birthPlace:'تشاد',occupation:'إمام ومعلم قرآن ومرجع للعائلة',achievements:['حافظ لكتاب الله','أسس مجلسًا لتحفيظ القرآن في القرية','قام بجمع شجرة العائلة وتوثيقها','كان مرجعًا في الإصلاح العائلي وحل النزاعات','حافظ على مجلس أسبوعي للذكر والتربية الإيمانية'],hobbies:['القراءة في التفسير والفقه','الزراعة ورعاية النخل والزروع','تعليم الصغار القرآن في البيت والمسجد'],description:'حامل إرث العائلة ومستمر في تقاليدها',education:'حافظ لكتاب الله',remark:'سَيْدِنا ومصطفى أشقاء',siblingsBrothers:[{name:'مصطفى'},{name:'مَلْ لَمين'}],siblingsSisters:[{name:'رُوا'},{name:'زينفة'},{name:'مُرْمَ'},{name:'جُلّي'}]}),
+ancestors:[
+  P('إدريس','الجد الأول',{fullName:'إدريس بُقَرْ',birthDate:'1860-01-01',deathDate:'1935-01-01',birthPlace:'تشاد',occupation:'إمام وقارئ قرآن',achievements:['حافظ لكتاب الله','غرس القيم الإسلامية في العائلة','حافظ على صلة الرحم بين الفروع'],hobbies:['مجالس القرآن','الجلوس مع الأحفاد وسرد القصص'],description:'حافظ تقاليد العائلة ومرشد الأجيال',education:'حافظ لكتاب الله'},{generation:1}),
+  P('بُقَرْ','الجد الثاني',{fullName:'بُقَرْ',birthDate:'1835-01-01',deathDate:'1910-01-01',birthPlace:'تشاد',occupation:'وجيه قبلي وتاجر',achievements:['أسس مكانة العائلة الاجتماعية في القبيلة','سعى في إصلاح ذات البين بين الناس'],hobbies:['الجلوس مع وجهاء القبيلة','متابعة أمور المزارع والأنعام'],description:'مؤسس العائلة وحامل إرثها العريق',education:'-'},{generation:2})
+],
+father:P('محمد','الأب',{fullName:'محمد إدريس بُقَرْ',birthDate:'1885-01-01',deathDate:'1965-01-01',birthPlace:'تشاد',occupation:'إمام وخطيب ومعلم قرآن',achievements:['حافظ لكتاب الله','ربى أبناءه على طلب العلم الشرعي','عُرف بالحكمة والإصلاح بين الناس'],hobbies:['قراءة القرآن','تعليم الصغار مبادئ الدين','الزراعة في أرض العائلة'],description:'قائد العائلة ومسؤول عن استمراريتها',education:'حافظ لكتاب الله'},
+  {children:[
+    C('مصطفى','ابن'),C('مَلْ لَمين','ابن'),
+    C('رُوا','بنت'),C('زينفة','بنت'),C('مُرْمَ','بنت'),C('جُلّي','بنت')
+  ]}
+),
+rootPerson:P('أحمد','صاحب الشجرة',{fullName:'أحمد محمد إدريس بُقَرْ',cognomen:'سَيْدِنا',tribe:'قٌرْعان',clan:'يِرِي',motherName:'-',motherClan:'يِرِي',paternalGrandfather:'إدريس بُقَرْ',paternalGrandmother:'-',paternalGrandmotherClan:'-',maternalGrandfather:'-',maternalGrandfatherClan:'',maternalGrandmother:'-',maternalGrandmotherClan:'-',birthDate:'1910-01-01',deathDate:'1995-01-01',birthPlace:'تشاد',occupation:'إمام ومعلم قرآن ومرجع للعائلة',achievements:['حافظ لكتاب الله','أسس مجلسًا لتحفيظ القرآن في القرية','قام بجمع شجرة العائلة وتوثيقها','كان مرجعًا في الإصلاح العائلي وحل النزاعات','حافظ على مجلس أسبوعي للذكر والتربية الإيمانية'],hobbies:['القراءة في التفسير والفقه','الزراعة ورعاية النخل والزروع','تعليم الصغار القرآن في البيت والمسجد'],description:'حامل إرث العائلة ومستمر في تقاليدها',education:'حافظ لكتاب الله',remark:'سَيْدِنا ومصطفى أشقاء'}),
+
   wives:[
     W('مَرْ موسى رَوْ','الزوجة الأولى',{fullName:'مَرْ موسى رَوْ',fatherName:'مصطفى',motherName:'-',tribe:'قٌرْعان',clan:'كُشى',birthDate:'1915-01-01',deathDate:'2000-01-01',birthPlace:'تشاد',occupation:'ربّة بيت ومربية أجيال',achievements:['رَبَّت أبناءها على حفظ القرآن واحترام الكبير','كانت سندًا لزوجها في حمل مسؤولية العائلة','معروفة بالكرم وإكرام الضيوف'],hobbies:['تلاوة القرآن في البيت','إعداد الطعام للضيوف','غرس حب العائلة في قلوب الأبناء']},[
       C('آدام','ابن',{fullName:'آدام أحمد محمد',birthDate:'1935-01-01',birthPlace:'تشاد',occupation:'إمام مسجد ومحفظ قرآن',achievements:['حافظ لكتاب الله','أدار حلقات تحفيظ لسنوات طويلة','شارك في بناء مسجد الحي'],hobbies:['قراءة الكتب الشرعية','مرافقة طلاب العلم','الزراعة البسيطة في أرض العائلة']}),
@@ -328,12 +777,15 @@ family1:{familyName:'سَيْدِنا',fullRootPersonName:'أحمد محمد إ�
 },
 
 family2:{familyName:'كُبُرَ زين',fullRootPersonName:'محمد موسى قيلي أُبِي',
-  ancestors:[
-    P('قيلي','الجد الأول',{fullName:'قيلي',birthDate:'1840-01-01',deathDate:'1910-01-01',birthPlace:'تشاد',occupation:'إمام وقارئ قرآن',achievements:['حافظ لكتاب الله','حافظ على مجلس القرآن في العائلة','غرس القيم الإسلامية في الأبناء'],hobbies:['مجالس الذكر','الجلوس مع الأحفاد وسرد القصص'],description:'حافظ تقاليد العائلة ومرشد الأجيال',education:'حافظ لكتاب الله'},{generation:1}),
-    P('أُبي','الجد الثاني',{fullName:'أُبي',birthDate:'1810-01-01',deathDate:'1880-01-01',birthPlace:'تشاد',occupation:'وجيه قبلي وتاجر',achievements:['مؤسس العائلة وحامل إرثها العريق','سعى في إصلاح ذات البين','عُرف بالأمانة والصدق في التجارة'],hobbies:['مجالس الوجهاء','متابعة شؤون المزارع والأنعام'],description:'مؤسس العائلة وحامل إرثها العريق',education:'حافظ لكتاب الله'},{generation:2})
-  ],
-  father:P('موسى','الأب',{fullName:'موسى قيلي أُبي',birthDate:'1870-01-01',deathDate:'1950-01-01',birthPlace:'تشاد',occupation:'إمام وخطيب ومعلم قرآن',achievements:['حافظ لكتاب الله','ربى أبناءه على طلب العلم الشرعي','كان مرجعًا في حل النزاعات داخل العائلة'],hobbies:['قراءة القرآن','تعليم الصغار مبادئ الدين','الزراعة في أرض العائلة'],description:'قائد العائلة ومسؤول عن استمراريتها',education:'حافظ لكتاب الله'}),
-  rootPerson:P('محمد','صاحب الشجرة',{fullName:'محمد موسى قيلي أُبِي',cognomen:'كُبُرَ زين مَلْ مار جيلي',tribe:'قٌرْعان',clan:'ضولو',motherName:'شونُرا عَقِد مِلى',motherClan:'ضولو',paternalGrandfather:'قيلي',paternalGrandmother:'-',paternalGrandmotherClan:'-',maternalGrandfather:'-',maternalGrandfatherClan:'',maternalGrandmother:'-',maternalGrandmotherClan:'-',birthDate:'1900-01-01',deathDate:'1980-01-01',birthPlace:'تشاد',occupation:'إمام ومرجع للعائلة',achievements:['حافظ لكتاب الله','أقام حلقات لتحفيظ القرآن في الحي','حافظ على أنساب العائلة ودوّنها','كان مرجعًا شرعيًا لأفراد العائلة'],hobbies:['القراءة في التفسير والفقه','تعليم الصغار القرآن','الزراعة ورعاية مزارع العائلة'],education:'حافظ لكتاب الله',remark:'هو وأبوه وجده وأبو جده كلهم حُفَّاظ لكتاب الله',siblingsBrothers:[{name:'سليمان'},{name:'عمر شُوِي'}],siblingsSisters:[{name:'كُرِي'},{name:'مَرْمَ فُلْجِى'},{name:'أمِنَة'},{name:'جَنّبَ'}]}),
+ancestors:[
+  P('قيلي','الجد الأول',{fullName:'قيلي',birthDate:'1840-01-01',deathDate:'1910-01-01',birthPlace:'تشاد',occupation:'إمام وقارئ قرآن',achievements:['حافظ لكتاب الله','حافظ على مجلس القرآن في العائلة','غرس القيم الإسلامية في الأبناء'],hobbies:['مجالس الذكر','الجلوس مع الأحفاد وسرد القصص'],description:'حافظ تقاليد العائلة ومرشد الأجيال',education:'حافظ لكتاب الله'},{generation:1}),
+  P('أُبي','الجد الثاني',{fullName:'أُبي',birthDate:'1810-01-01',deathDate:'1880-01-01',birthPlace:'تشاد',occupation:'وجيه قبلي وتاجر',achievements:['مؤسس العائلة وحامل إرثها العريق','سعى في إصلاح ذات البين','عُرف بالأمانة والصدق في التجارة'],hobbies:['مجالس الوجهاء','متابعة شؤون المزارع والأنعام'],description:'مؤسس العائلة وحامل إرثها العريق',education:'حافظ لكتاب الله'},{generation:2})
+],
+father:P('موسى','الأب',{fullName:'موسى قيلي أُبي',birthDate:'1870-01-01',deathDate:'1950-01-01',birthPlace:'تشاد',occupation:'إمام وخطيب ومعلم قرآن',achievements:['حافظ لكتاب الله','ربى أبناءه على طلب العلم الشرعي','كان مرجعًا في حل النزاعات داخل العائلة'],hobbies:['قراءة القرآن','تعليم الصغار مبادئ الدين','الزراعة في أرض العائلة'],description:'قائد العائلة ومسؤول عن استمراريتها',education:'حافظ لكتاب الله'},{
+  children:[ C('سليمان','ابن',{}), C('عمر شُوِي','ابن',{}), C('كُرِي','بنت',{}), C('مَرْمَ فُلْجِى','بنت',{}), C('أمِنَة','بنت',{}), C('جَنّبَ','بنت',{}) ]
+}),
+rootPerson:P('محمد','صاحب الشجرة',{fullName:'محمد موسى قيلي أُبِي',cognomen:'كُبُرَ زين مَلْ مار جيلي',tribe:'قٌرْعان',clan:'ضولو',motherName:'شونُرا عَقِد مِلى',motherClan:'ضولو',paternalGrandfather:'قيلي',paternalGrandmother:'-',paternalGrandmotherClan:'-',maternalGrandfather:'-',maternalGrandfatherClan:'',maternalGrandmother:'-',maternalGrandmotherClan:'-',birthDate:'1900-01-01',deathDate:'1980-01-01',birthPlace:'تشاد',occupation:'إمام ومرجع للعائلة',achievements:['حافظ لكتاب الله','أقام حلقات لتحفيظ القرآن في الحي','حافظ على أنساب العائلة ودوّنها','كان مرجعًا شرعيًا لأفراد العائلة'],hobbies:['القراءة في التفسير والفقه','تعليم الصغار القرآن','الزراعة ورعاية مزارع العائلة'],education:'حافظ لكتاب الله',remark:'هو وأبوه وجده وأبو جده كلهم حُفَّاظ لكتاب الله'}),
+
   wives:[
     W('أمِري علي دُو','الزوجة الأولى',{fullName:'أمِري علي دُو',fatherName:'علي',motherName:'-',tribe:'قٌرْعان',clan:'ضولو',birthDate:'1905-01-01',deathDate:'1985-01-01',birthPlace:'تشاد',occupation:'ربّة بيت ومربية أجيال',achievements:['ربّت أبناءها على حفظ القرآن والخلق الحسن','معروفة بالكرم وإكرام الضيف','كانت سندًا لزوجها في مسؤوليات العائلة'],hobbies:['تلاوة القرآن في البيت','إعداد الطعام في المناسبات العائلية']},[
       C('إيطار','ابن',{fullName:'إيطار محمد موسى',birthDate:'1925-01-01',deathDate:'1995-01-01',birthPlace:'تشاد',occupation:'إمام مسجد ومحفظ قرآن',achievements:['حافظ لكتاب الله','أدار حلقات تحفيظ لسنوات طويلة','شارك في توسعة مسجد الحي'],hobbies:['قراءة الكتب الشرعية','الجلوس مع طلابه خارج أوقات الدروس']}),
@@ -380,6 +832,7 @@ Object.keys(familiesData).forEach(k => {
   if (f.hidden == null) f.hidden = false;
   ensureFamilyBios(f);
   ensureIds(f);
+  buildRealLinks(f);
 });
 
 // =======================================
@@ -512,6 +965,8 @@ async function loadPersistedFamilies() {
       const ver = Number.isFinite(+f.__v) ? +f.__v : 0;
       migrate(f, ver, SCHEMA_VERSION);
       if (f.hidden == null) f.hidden = false;
+// NEW: تطبيع النسب للعائلات المحمّلة من التخزين
+      normalizeNewFamilyForLineage(f);
 
       if (f.fullGrandsonName && !f.fullRootPersonName) { f.fullRootPersonName = f.fullGrandsonName; delete f.fullGrandsonName; }
 
@@ -527,27 +982,24 @@ async function loadPersistedFamilies() {
         f.rootPerson ? [f.rootPerson?.name, f.father?.name, ...ancNames].filter(Boolean).join(' ') : ''
       );
 
-      // توحيد wives
-  if (!Array.isArray(f.wives)) f.wives = [];
-f.wives = f.wives.map(_normalizeWifeForLoad);
+      // توحيد wives (المصدر الوحيد)
+      if (!Array.isArray(f.wives)) f.wives = [];
+      f.wives = f.wives.map(_normalizeWifeForLoad);
 
-if (f.rootPerson){
-  if (!Array.isArray(f.rootPerson.wives) || !f.rootPerson.wives.length){
-    f.rootPerson.wives = f.wives.map(w => ({ ...w }));
-  } else {
-    f.rootPerson.wives = f.rootPerson.wives.map(w => ({
-      name: w?.name || '',
-      role: w?.role || 'زوجة',
-      bio: w?.bio || {},
-      children: (w?.children || []).map(_normalizeChildForLoad)
-    }));
-  }
-}
-
+      // IMPORTANT: احذف أي مرآة قديمة حتى لا تتكرر الشجرة
+      if (f.rootPerson && f.rootPerson.wives) delete f.rootPerson.wives;
 
       ensureFamilyBios(f);
       ensureIds(f);
+
+      // أعِد بناء المرآة من المصدر الوحيد + اضبط defaults للأبناء
+      linkRootPersonWives(f);
+
+      // ابنِ الروابط الواقعية والفهرس الآن (بدل النهاية)
+      buildRealLinks(f);
+
       familiesData[k] = f;
+
     });
 
     // تطبيق إخفاء العائلات الأساسية
@@ -582,6 +1034,7 @@ if (f.rootPerson){
         if (hit.crp) targetPerson.bio.photoCropped = 1; else delete targetPerson.bio.photoCropped;
       });
     });
+
   } catch (e) {
     console.warn('loadPersistedFamilies(idb)', e);
   }
@@ -594,17 +1047,37 @@ if (f.rootPerson){
 // تطبيع ابن عند التحميل
 function _normalizeChildForLoad(c) {
   if (!c) return null;
-  return (typeof c === 'string') ? { name: c, role: 'ابن', bio: {} }
-    : { name: c.name || '', role: c.role || 'ابن', bio: c.bio || {}, _id: c._id };
+  if (typeof c === 'string') {
+    return { name: c, role: 'ابن', bio: {}, fatherId:null, motherId:null };
+  }
+return {
+  name: c.name || '',
+  role: c.role || 'ابن',
+  bio: c.bio || {},
+  _id: c._id,
+  fatherId: (c.fatherId != null) ? c.fatherId : (c.bio && c.bio.fatherId) || null,
+  motherId: (c.motherId != null) ? c.motherId : (c.bio && c.bio.motherId) || null,
+
+  // NEW: تحميل عميق لما تحت الابن
+  children: Array.isArray(c.children) ? c.children.map(_normalizeChildForLoad).filter(Boolean) : [],
+  wives: Array.isArray(c.wives) ? c.wives.map(_normalizeWifeForLoad).filter(Boolean) : []
+};
+
 }
+
 function _normalizeWifeForLoad(w, i){
   const idxLabel = ['الأولى','الثانية','الثالثة','الرابعة','الخامسة'][i] || `رقم ${i+1}`;
   const roleLabel = w?.role || `الزوجة ${idxLabel}`;
+
   return {
     name: w?.name || '',
     role: roleLabel,
     bio: w?.bio || {},
-    children: Array.isArray(w?.children) ? w.children.map(_normalizeChildForLoad).filter(Boolean) : []
+    _id: w?._id,  // IMPORTANT: لا تفقد الـ id بعد التحميل
+    fatherId: w?.fatherId ?? w?.bio?.fatherId ?? null,
+    motherId: w?.motherId ?? w?.bio?.motherId ?? null,
+    children: Array.isArray(w?.children) ? w.children.map(_normalizeChildForLoad).filter(Boolean)
+      : []
   };
 }
 
@@ -620,23 +1093,9 @@ function stripPhotosDeep(obj) {
 
 // إعدادات توريث القبيلة/العشيرة لكل عائلة (تُخزَّن في __meta.lineage)
 export function getLineageConfig(fam) {
-  // قيم افتراضية للقاعدة
   const defaults = {
-    // من أين تُورَّث "القبيلة"
-    // father  = من الأب (الافتراضي)
-    // mother  = من الأم
-    // firstKnown = من أول جدّ مذكور في ancestors
-    tribeRule: 'father',
-
-    // من أين تُورَّث "العشيرة"
-    // father  = من الأب (الافتراضي)
-    // mother  = من الأم
-    // firstKnown = من أول جدّ مذكور
-    clanRule: 'father',
-
-    // كيف نتصرّف عند غياب بيانات الأب
-    // mother = نرجع لعشيرة الأم
-    // none   = لا نملأ تلقائيًا
+    tribeRule: 'father',          // father | mother | firstAncestor | none
+    clanRule: 'father',           // father | mother | firstAncestor | none
     missingFatherFallback: 'mother'
   };
 
@@ -644,15 +1103,23 @@ export function getLineageConfig(fam) {
 
   if (!fam.__meta) fam.__meta = {};
   if (!fam.__meta.lineage) {
-    // أول مرة: أنشئ الإعدادات بالافتراضي
     fam.__meta.lineage = { ...defaults };
   } else {
-    // دمج أي إعدادات قديمة مع الافتراضي (لضمان وجود جميع المفاتيح)
     fam.__meta.lineage = { ...defaults, ...fam.__meta.lineage };
   }
 
+  // --- NEW: تطبيع رجعي للقيمة القديمة ---
+  if (fam.__meta.lineage.tribeRule === 'firstKnown') {
+    fam.__meta.lineage.tribeRule = 'firstAncestor';
+  }
+  if (fam.__meta.lineage.clanRule === 'firstKnown') {
+    fam.__meta.lineage.clanRule = 'firstAncestor';
+  }
+  // --------------------------------------
+
   return fam.__meta.lineage;
 }
+
 
 // إيجاد تكرارات داخل العائلة بالاسم المطبع
 export function findDuplicatesInFamily(f) {
@@ -683,24 +1150,16 @@ export function findDuplicatesInFamily(f) {
 // =======================================
 
 // ضبط حقول ابن واحد من سياق العائلة/الزوجة
+// ضبط حقول ابن واحد من سياق العائلة/الزوجة
 function setChildDefaults(child, fam, wife) {
   if (!child || !child.bio) return;
 
-  // اسم الأب المختصر/الكامل
+  // اسم الأب المختصر
   const fatherShort = String(
-    fam.rootPerson?.bio?.fullName ||
-    fam.fullRootPersonName ||
     fam.rootPerson?.name ||
     fam.father?.name ||
     ''
   ).trim().split(/\s+/u)[0] || '';
-
-  const fatherFull =
-    fam.fullRootPersonName ||
-    fam.rootPerson?.bio?.fullName ||
-    fam.rootPerson?.name ||
-    fam.father?.name ||
-    '';
 
   if (!child.bio.fatherName || child.bio.fatherName === '-') {
     child.bio.fatherName = fatherShort;
@@ -708,94 +1167,67 @@ function setChildDefaults(child, fam, wife) {
   if (!child.bio.motherName || child.bio.motherName === '-') {
     child.bio.motherName = (wife?.name && wife.name !== '-') ? wife.name : '-';
   }
-
-  // جهة الأم: توريث معلومات الأم من الزوجة
-  if (wife && wife.bio) {
-    child.bio.maternalGrandfather = wife.bio.fatherName || wife.bio.fullName || child.bio.maternalGrandfather || '';
-    child.bio.maternalGrandmother = wife.bio.motherName || child.bio.maternalGrandmother || '';
-    child.bio.maternalGrandmotherClan = wife.bio.motherClan || child.bio.maternalGrandmotherClan || '';
-    if (wife.bio.tribe) child.bio.motherTribe = wife.bio.tribe;
-    if (wife.bio.clan)  child.bio.motherClan  = wife.bio.clan;
-  }
-
-
-  // جهة الأب: الجد الأبوي = والد الأب (أولوية للأب ثم fallback للأجداد)
-  const fatherNameFromRoot = String(
-    fam.rootPerson?.bio?.fatherName || // والد صاحب الشجرة من الـ bio
-    fam.father?.name ||                // أو كائن الأب إن وُجد
-    ''
-  ).trim();
-
-  const paternalFromRoot   = fam.rootPerson?.bio || {};
-  const paternalFromFather = fam.father?.bio || {};
-  const paternalGrandmother =
-    paternalFromRoot?.motherName || paternalFromFather?.motherName || '';
-  const paternalGrandmotherClan =
-    paternalFromRoot?.motherClan || paternalFromFather?.motherClan || '';
-
-  if (paternalGrandmother)      child.bio.paternalGrandmother      = paternalGrandmother;
-  if (paternalGrandmotherClan)  child.bio.paternalGrandmotherClan  = paternalGrandmotherClan;
-
-  // املأ الجد الأبوي أولًا من والد صاحب الشجرة
-  let paternalGF = fatherNameFromRoot;
-
-  // ملاذ أخير: أقرب اسم في ancestors إذا لم يتوفر والد الأب
-  if (!paternalGF && Array.isArray(fam.ancestors) && fam.ancestors.length) {
-    const sorted = fam.ancestors
-      .map(a => ({ ...a, generation: Number.isFinite(+a.generation) ? +a.generation : 1 }))
-      .sort((a, b) => (a.generation ?? 1) - (b.generation ?? 1));
-    paternalGF = sorted[0]?.name || '';
-  }
-
-  if (paternalGF && !child.bio.paternalGrandfather) {
-    child.bio.paternalGrandfather = paternalGF;
-  }
-
-  // قبيلة/عشيرة الطفل من جهة الأب افتراضيًا
-  if (!child.bio.tribe || child.bio.tribe === '-') {
-    child.bio.tribe = fam.rootPerson?.bio?.tribe || '';
-  }
-  if (!child.bio.clan || child.bio.clan === '-') {
-    child.bio.clan = fam.rootPerson?.bio?.clan || '';
-  }
-
-  // الاسم الكامل للطفل: يُعاد بناؤه دائمًا من اسم الطفل + السلسلة الكاملة للأب
-  const autoFullName = [child.name, fatherFull].filter(Boolean).join(' ').trim();
-  child.bio.fullName = autoFullName;
 }
 
 
 
 // ربط wives داخل rootPerson كمرآة مشتقّة من fam.wives
-function linkRootPersonWives() {
-  Object.values(familiesData || {}).forEach(fam => {
+// تقبل fam اختياريًا لتعمل على عائلة واحدة
+function linkRootPersonWives(targetFam) {
+
+  // لو مُرّر fam نعمل عليها فقط، وإلا على كل العائلات (سلوك قديم)
+  var famList = targetFam ? [targetFam] : Object.values(familiesData || {});
+
+  famList.forEach(function(fam){
     if (!fam) return;
     if (!Array.isArray(fam.wives)) fam.wives = [];
 
-    fam.wives = fam.wives.map(w => {
-      const ww = Object.assign({}, w);
-      ww.children = (ww.children || []).map(c => {
-        const base = structuredClone ? structuredClone(DEFAULT_BIO) : JSON.parse(JSON.stringify(DEFAULT_BIO));
+    fam.wives = fam.wives.map(function(w){
+      var ww = Object.assign({}, w);
 
-        const child = (typeof c === 'string')  ? { name: c, role: 'ابن', bio: Object.assign(base, {}) }
-          : { name: c.name || '', role: c.role || 'ابن', bio: Object.assign(base, c.bio || {}), _id: c._id };
+      ww.children = (ww.children || []).map(function(c){
+        var base = structuredClone ? structuredClone(DEFAULT_BIO)
+          : JSON.parse(JSON.stringify(DEFAULT_BIO));
 
-        // مزامنة تاريخ/سنة الميلاد والوفاة للابن
+       var child;
+if (typeof c === 'string') {
+  child = {
+    name: c,
+    role: 'ابن',
+    bio: Object.assign(base, {}),
+    children: [],
+    wives: []
+  };
+} else {
+  child = {
+    name: c.name || '',
+    role: c.role || 'ابن',
+    bio: Object.assign(base, c.bio || {}),
+    _id: c._id,
+    fatherId: (c.fatherId != null) ? c.fatherId : (c.bio && c.bio.fatherId) || null,
+    motherId: (c.motherId != null) ? c.motherId : (c.bio && c.bio.motherId) || null,
+    // NEW: لا تمسح ما تحت الابن
+    children: Array.isArray(c.children) ? c.children : [],
+    wives: Array.isArray(c.wives) ? c.wives : []
+  };
+}
+
         normalizeLifeDatesOnBio(child.bio);
-
         setChildDefaults(child, fam, ww);
         return child;
-
       });
+
       return ww;
     });
 
-    if (fam.rootPerson) fam.rootPerson.wives = fam.wives.map(w => ({ ...w }));
+    if (fam.rootPerson) fam.rootPerson.wives = fam.wives.map(function(w){ return Object.assign({}, w); });
   });
 }
 
 // تنفيذ ربط مبدئي
 linkRootPersonWives();
+// إعادة بناء الروابط لتحديث persons + childrenIds + spousesIds بعد إعادة تركيب الزوجات
+Object.keys(familiesData || {}).forEach(k => buildRealLinks(familiesData[k]));
 
 // =======================================
 // 10) واجهات الحفظ/التحميل/التعديل العامّة
@@ -814,61 +1246,42 @@ function _ancNames(sorted){
 export function commitFamily(key) {
   const fam = families[key];
   if (!fam) return;
-
+// NEW: تأمين النسب قبل أي اشتقاق/حفظ
+  normalizeNewFamilyForLineage(fam);
   // 1) ترحيل النسخة إلى آخر Schema
   migrate(fam, Number.isFinite(+fam.__v) ? +fam.__v : 0, SCHEMA_VERSION);
 
   // 2) تهيئة الـ bio والزوجات والأجداد وفق القيم الافتراضية
   ensureFamilyBios(fam);
+  const ancSorted = _sortedAncestors(fam);
+  const ancNames  = _ancNames(ancSorted);
 
- const ancSorted = _sortedAncestors(fam);
-const ancNames  = _ancNames(ancSorted);
+  // اشتقاق familyName فقط إن كانت فارغة (غير خلاف الباتش)
+  if (!fam.familyName){
+    fam.familyName = fam.title ? String(fam.title).replace(/^.*?:\s*/u,'').trim()
+      : (fam.rootPerson?.name?.split(/\s+/u)[0] || '');
+  }
 
-if (!fam.familyName){
-  fam.familyName = fam.title ? String(fam.title).replace(/^.*?:\s*/u,'').trim()
-    : (fam.rootPerson?.name?.split(/\s+/u)[0] || '');
-}
-
-let rootFull = '';
-if (fam.rootPerson){
-  const rootName   = String(fam.rootPerson.name || '').trim();
-  const fatherName = String(fam.father?.name || '').trim();
-  rootFull = [rootName, fatherName, ...ancNames].filter(Boolean).join(' ').trim();
-
-  fam.rootPerson.bio = fam.rootPerson.bio || {};
-  if (rootFull) fam.rootPerson.bio.fullName = rootFull;
-  if (rootFull) fam.fullRootPersonName = rootFull;
-}
-
-if (fam.father){
-  const fName = String(fam.father.name || '').trim();
-  const fatherFull = [fName, ...ancNames].filter(Boolean).join(' ').trim();
-  fam.father.bio = fam.father.bio || {};
-  if (fatherFull) fam.father.bio.fullName = fatherFull;
-}
-
-ancSorted.forEach(({a}, idx) => {
-  if (!a) return;
-  const self = String(a.name||'').trim();
-  if (!self) return;
-  const tail = ancSorted.slice(idx+1)
-    .map(x=>String(x.a?.name||'').trim())
-    .filter(Boolean);
-
-  const chain = [self, ...tail].join(' ').trim();
-  a.bio = a.bio || {};
-  if (chain) a.bio.fullName = chain;
-});
-
+  // اشتقاق fullRootPersonName كحقل عنوان للعائلة فقط (بدون لمس bio.fullName)
+  if (fam.rootPerson && !fam.fullRootPersonName){
+    const rootName   = String(fam.rootPerson.name || '').trim();
+    const fatherName = String(fam.father?.name || '').trim();
+    const rootFull = [rootName, fatherName, ...ancNames].filter(Boolean).join(' ').trim();
+    if (rootFull) fam.fullRootPersonName = rootFull;
+  }
 
   // 9) ضمان المعرفات والتطبيع المحفوظ للأسماء
   ensureIds(fam);
 
   // 10) ربط زوجات rootPerson (وتحديث أبناء الزوجات مع setChildDefaults)
-  linkRootPersonWives();
+  linkRootPersonWives(fam);
+
+  // 10.5) بناء الروابط الواقعية + فهرس الأشخاص
+  buildRealLinks(fam); // NEW
 
   // 11) حفظ في IndexedDB
   savePersistedFamilies();
+
 }
 
 
@@ -877,22 +1290,65 @@ ancSorted.forEach(({a}, idx) => {
 export function importFamilies(obj = {}) {
   if (!obj || typeof obj !== 'object') return;
   const all = getFamilies();
+
   Object.keys(obj).forEach(k => {
-    const f = obj[k]; if (!f) return;
+    if (k === '__meta') return;            
+    const f = obj[k];
+    if (!f) return;
+
     const fromVer = Number.isFinite(+f.__v) ? +f.__v : 0;
     migrate(f, fromVer, SCHEMA_VERSION);
+    normalizeNewFamilyForLineage(f);
     ensureFamilyBios(f);
     ensureIds(f);
+    buildRealLinks(f);
+
     all[k] = f;
   });
+
   linkRootPersonWives();
+  Object.keys(all || {}).forEach(k => buildRealLinks(all[k]));
   savePersistedFamilies();
 }
 
-// تصدير نسخة عميقة آمنة
+
+// تصدير نسخة عميقة آمنة + تنظيف الحقول المشتقة
 export function exportFamilies() {
-  return JSON.parse(JSON.stringify(getFamilies()));
+  // 1) نسخة عميقة حتى لا نلمس الذاكرة
+  const out = JSON.parse(JSON.stringify(getFamilies()));
+
+  Object.keys(out).forEach(k => {
+    if (k === '__meta') return;
+    const f = out[k];
+    if (!f) return;
+
+    // 2) احذف المرآة: rootPerson.wives (المصدر الحقيقي هو f.wives)
+    if (f.rootPerson?.wives) delete f.rootPerson.wives;
+
+    // 3) احذف فهرس الأشخاص المشتق
+    if (f.persons) delete f.persons;
+
+    // 4) امشِ على كل الأشخاص واحذف الروابط/الفهارس المشتقة
+    _walkPersons(f, (p) => {
+      if (!p) return;
+
+      // روابط تُعاد بناؤها في buildRealLinks
+      if (p.childrenIds) delete p.childrenIds;
+      if (p.spousesIds)  delete p.spousesIds;
+
+      // حقول تطبيع مخزّنة تُعاد عبر ensureIds
+      if (p._normName) delete p._normName;
+      if (p._normRole) delete p._normRole;
+
+      // مرايا/كاش صور مشتقّة (المصدر الحقيقي: p.bio.photoUrl)
+      if (p.photoUrl && p.bio?.photoUrl === p.photoUrl) delete p.photoUrl;
+      if (p.photoVer) delete p.photoVer;
+    });
+  });
+
+  return out;
 }
+
 
 // مولّد مفاتيح للعائلات الجديدة
 function generateFamilyKey() {
@@ -906,6 +1362,7 @@ export function saveFamily(key, familyObj) {
   const wasCore = !!(families[key] && families[key].__core);
   familyObj.__custom = true;
   if (wasCore) familyObj.__core = true;
+  normalizeNewFamilyForLineage(familyObj);
 
   migrate(familyObj, Number.isFinite(+familyObj.__v) ? +familyObj.__v : 0, SCHEMA_VERSION);
 
@@ -918,7 +1375,8 @@ export function saveFamily(key, familyObj) {
 
   ensureFamilyBios(familyObj);
   ensureIds(familyObj);
-  linkRootPersonWives();
+  linkRootPersonWives(familyObj);
+  buildRealLinks(familyObj);
   savePersistedFamilies();
 }
 
@@ -937,14 +1395,18 @@ export async function deleteFamily(key) {
   }
   return true;
 }
-
 // تحميل من IndexedDB ثم ربط/تهيئة
-export function loadPersistedFamiliesExport() {
-  loadPersistedFamilies();
+export async function loadPersistedFamiliesExport() {
+  await loadPersistedFamilies();
+
   if (typeof ensureFamilyBios === 'function') {
     Object.keys(families || {}).forEach(k => ensureFamilyBios(families[k]));
   }
+
   linkRootPersonWives();
+
+  // بناء الروابط الواقعية بعد اكتمال التحميل
+  Object.keys(families || {}).forEach(k => buildRealLinks(families[k]));
 }
 
 // =======================================

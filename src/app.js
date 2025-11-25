@@ -23,6 +23,7 @@ import * as FeaturePhotos from './features/photo.js';
 import * as FeatureStats from './features/stats.js';
 import * as FeatureIO from './features/io.js';
 import * as FeaturePrint from './features/print.js';
+import * as FeatureEngage from './features/engage.js';
 
 // تدوير عبارات رأس الشجرة (كتابة/مسح حرفيًا)
 const rotatingItems=[
@@ -301,6 +302,38 @@ function syncThemeColor(){
     '#3f5a3c';
 
   meta.setAttribute('content',color);
+}
+
+/* =========================
+   أزرار التمرير (صعود/نزول)
+   ========================= */
+
+function initScrollButtons(){
+  const scrollUpBtn = document.getElementById("scrollUpBtn");
+  const scrollDownBtn = document.getElementById("scrollDownBtn");
+  if (!scrollUpBtn || !scrollDownBtn) return; // احتياط لو لم توجد الأزرار
+
+  function updateScrollButtons() {
+    const y = window.scrollY;
+    const max = document.documentElement.scrollHeight - window.innerHeight;
+
+    if (y > 200) scrollUpBtn.classList.add("show");
+    else scrollUpBtn.classList.remove("show");
+
+    if (y < max - 200) scrollDownBtn.classList.add("show");
+    else scrollDownBtn.classList.remove("show");
+  }
+
+  window.addEventListener("scroll", updateScrollButtons, { passive: true });
+  updateScrollButtons();
+
+  scrollUpBtn.addEventListener("click", () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+
+  scrollDownBtn.addEventListener("click", () => {
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });
+  });
 }
 
 
@@ -646,6 +679,8 @@ setSplashProgress(55, 'تحضير الواجهة…');
     dom.searchInput    = byId('quickSearch');
     dom.suggestBox     = byId('searchSuggestions');
     dom.activeFamily   = byId('activeFamily');
+// تهيئة أزرار الصعود/النزول
+initScrollButtons();
 
     bus.on('io:import:done', syncActiveFamilyUI);
     bus.on('families:coreFlag:refresh', syncActiveFamilyUI);
@@ -731,16 +766,23 @@ setSplashProgress(55, 'تحضير الواجهة…');
     });
 
     // عناصر تُغلق اللوحة مباشرة
-    const shouldCloseOnClick = (t) => {
-      if (!t) return false;
-      if (t.closest('input[type="range"], .font-size-selector')) return false;
-      if (t.closest('label[for="importInput"], #importInput')) return false;
-      if (t.closest('input, select, textarea')) return false;
-      if (t.closest('#sideClose')) return true;
-      if (t.closest('.theme-button')) return true;
-      if (t.closest('#printBtn, #exportBtn, #statsBtn')) return true;
-      return false;
-    };
+const shouldCloseOnClick = (t) => {
+  if (!t) return false;
+
+  // لا تُغلق عند التفاعل مع المدخلات
+  if (t.closest('input[type="range"], .font-size-selector')) return false;
+  if (t.closest('label[for="importInput"], #importInput')) return false;
+  if (t.closest('input, select, textarea')) return false;
+
+  // تُغلق عند هذه الأزرار
+  if (t.closest('#sideClose')) return true;
+  if (t.closest('.theme-button')) return true;
+  if (t.closest('#printBtn, #exportBtn, #statsBtn')) return true;
+  if (t.closest('#shareSiteBtn, #rateSiteBtn, #sendNoteBtn, #helpBtn')) return true;
+
+  return false;
+};
+
 
     panel?.addEventListener('click', (e) => {
       const t = e.target;
@@ -841,6 +883,8 @@ setSplashProgress(70, 'ربط المزايا ومكوّنات الواجهة…'
     FeatureStats.init(ctx);
     FeatureIO.init(ctx);
     FeaturePrint.init(ctx);
+    FeatureEngage.init(ctx);
+
 setSplashProgress(85, 'تهيئة البحث والإحصاءات والطباعة…');
     // فتح التفاصيل مباشرة عند استقبال ui:openPersonById من البحث
     bus.on('ui:openPersonById', ({ id }) => onShowDetails(id, { silent: true }));

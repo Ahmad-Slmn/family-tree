@@ -46,7 +46,8 @@
 #advFilters,
   #sideToggle,
   #sideOverlay,
-  #sidePanel {
+  #sidePanel,
+  .scroll-buttons{
     display: none !important;
   }
 

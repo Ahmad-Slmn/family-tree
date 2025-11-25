@@ -1,5 +1,8 @@
 // منطق صرف بلا DOM: تطبيع/تحقق/بصمة/تركيب كائن الحفظ/لقطة النموذج
 import { cloneBio } from '../model/families.js';
+// مولّد _id موحّد لكل عناصر العائلة
+const newId = () =>
+  (crypto?.randomUUID?.() || ('id-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2)));
 
 /* ======================= أدوات عامة للنصوص ======================= */
 
@@ -100,11 +103,13 @@ export function normalizeAncestors(list = []) {
     delete bio.hobbiesTxt;
 
     return {
+      _id: x?._id || newId(),
       name: x.name,
       generation: idx + 1,
       role: `الجد ${idx + 1}`,
       bio
     };
+
   });
 }
 
@@ -284,15 +289,19 @@ function buildFather(fatherIn) {
   const fBirth = normalizeDateOrYear(fb.birthDate || fb.birthYear || '');
   const fDeath = normalizeDateOrYear(fb.deathDate || fb.deathYear || '');
 
-  const fBrothers = splitTextToNameObjects(fb.brothersTxt || '');
-  const fSisters  = splitTextToNameObjects(fb.sistersTxt  || '');
+ // new — تحويل الإخوة/الأخوات إلى كائنات {name}
+const fBrothers = splitTextToNameObjects(fb.brothersTxt || '');
+const fSisters  = splitTextToNameObjects(fb.sistersTxt  || '');
 
   const fAchievements = splitTextList(fb.achievementsTxt || '');
   const fHobbies      = splitTextList(fb.hobbiesTxt      || '');
 
-  return {
+   return {
+    _id: fatherIn._id || newId(),
     name: fatherIn.name,
     role: 'الأب',
+       fatherId: null,
+  motherId: null,
     bio: {
       ...cloneBio(),
       ...fb,
@@ -393,6 +402,9 @@ function buildWives({ wives, rootName, familyObj }) {
 
   return wives.map((w, i) => {
     const role = w.role && w.role.startsWith('الزوجة') ? w.role : `الزوجة ${i + 1}`;
+    const wifeId = w._id || newId();
+    const fatherIdForKids =
+      familyObj.father?._id || familyObj.rootPerson?._id || '';
 
     const wb        = w.bio || {};
     const wifeBirth = normalizeDateOrYear(wb.birthDate || wb.birthYear || '');
@@ -429,6 +441,10 @@ function buildWives({ wives, rootName, familyObj }) {
       const childAchievements = ensureStringArray(cb.achievements, childAchievementsTxt);
       const childHobbies      = ensureStringArray(cb.hobbies,      childHobbiesTxt);
 
+      const childId = cb._id || newId();
+      const motherId = wifeId;
+      const fatherId = fatherIdForKids;
+
       const childBio = {
         ...cloneBio(),
         birthDate:  cBirth.date,
@@ -443,7 +459,13 @@ function buildWives({ wives, rootName, familyObj }) {
         motherName: w.name || '',
 
         achievements: childAchievements,
-        hobbies:      childHobbies
+        hobbies:      childHobbies,
+
+        // روابط النسب الجديدة داخل bio أيضًا
+        fatherId,
+        motherId,
+        father: fatherId,
+  mother: motherId
       };
 
       // أجداد أم/أب
@@ -464,12 +486,20 @@ function buildWives({ wives, rootName, familyObj }) {
       childBio.motherClan           = wb.clan  || '';
       childBio.maternalGrandfather  = wb.fatherName || wb.fullName || '';
 
-      return {
-        name: cb.name || '',
-        role: cb.role || 'ابن',
-        bio:  childBio,
-        _id:  cb._id || undefined
-      };
+return {
+  _id: childId,
+  name: cb.name || '',
+  role: cb.role || 'ابن',
+  fatherId,
+  motherId,
+
+  // new — مراجع مباشرة كما يتوقعها Lineage
+  father: fatherId,
+  mother: motherId,
+
+  bio: childBio
+};
+
     });
 
     const wifeBio = {
@@ -495,7 +525,8 @@ function buildWives({ wives, rootName, familyObj }) {
       motherHobbies:      wifeMotherHobbies
     };
 
-    return { name: w.name || '', role, bio: wifeBio, children: mappedChildren };
+        return { _id: wifeId, name: w.name || '', role, bio: wifeBio, children: mappedChildren };
+
   });
 }
 
@@ -665,12 +696,19 @@ export function composeFamilyObject({ formFields, wives, ancestors, prevFamily, 
     motherHobbiesTxt
   });
 
-  // الزوجات + الأبناء + ميتا أب/أم الزوجة
+  // تثبيت _id لصاحب الشجرة (مع الحفاظ على القديم عند التعديل)
+  familyObj.rootPerson._id =
+    prevFamily?.rootPerson?._id || familyObj.rootPerson._id || newId();
+
   const wivesArr = buildWives({ wives, rootName, familyObj });
   if (wivesArr) {
     familyObj.wives = wivesArr;
+  } else {
+    familyObj.wives = [];
   }
 
+  // مرجع متوافق
+  familyObj.rootPerson.wives = familyObj.wives;
   // حمل الصور من العائلة السابقة إن وجدت
   if (prevFamily) {
     carryPrevImages(prevFamily, familyObj);

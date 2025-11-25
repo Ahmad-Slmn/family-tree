@@ -59,9 +59,10 @@ function _findContext(fam, ref){
       (t === fam.rootPerson) ? 'rootPerson' :
       `wives[${(fam.wives||[]).indexOf(t)}]`;
 
-    // إذا كان t زوجة على مستوى العائلة فالأطفال تحتها
-    const isTopWife = Array.isArray(t?.children);
-    if (visit(t, rootPath, isTopWife ? t : null)) break;
+   // إذا كان t زوجة على مستوى العائلة فالأطفال تحتها
+const isTopWife = (roleGroup(t) === 'زوجة');
+if (visit(t, rootPath, isTopWife ? t : null)) break;
+
   }
   return ctx;
 }
@@ -91,24 +92,29 @@ export function assignIdEverywhere(fam, targetRef, newId){
   // مطابقة أقوى:
   // - نفس المرجع، أو
   // - بلا _id + (name && group متساويان) + واحد على الأقل من birth/mother/clan
-  function strongMatch(p){
-    if (!p || p._id) return false;
-    if (p === targetRef) return true;
-    const fp = _fingerprint(p);
-    if (!fp.name || !tfp.name) return false;
-    if (fp.name !== tfp.name) return false;
-        if ((roleGroup(p) || '') !== (tfp.group || '')) return false;
-    const extra =
-      (fp.birth  && fp.birth  === tfp.birth) ||
-      (fp.mother && fp.mother === tfp.mother) ||
-      (fp.clan   && fp.clan   === tfp.clan);
-    return !!extra;
-  }
+function strongMatch(p){
+  if (!p) return false;
+  if (p === targetRef) return true;
+
+  const fp = _fingerprint(p);
+  if (!fp.name || !tfp.name) return false;
+  if (fp.name !== tfp.name) return false;
+  if ((roleGroup(p) || '') !== (tfp.group || '')) return false;
+
+  const extra =
+    (fp.birth  && fp.birth  === tfp.birth) ||
+    (fp.mother && fp.mother === tfp.mother) ||
+    (fp.clan   && fp.clan   === tfp.clan);
+
+  if (!extra) return false;
+
+  return true; // يسمح بالمطابقة حتى لو كان لدى p._id
+}
 
   // لمس آمن: الأطفال لا ينتشر إليهم المُعرّف إلا داخل نفس الزوجة الأم
   function touch(p, parentWife=null){
     if (!p) return;
-    const g = TreeUI.roleGroup(p);
+    const g = roleGroup(p);
     const isChild = (g==='ابن' || g==='بنت');
 
     if (isChild){
@@ -133,10 +139,10 @@ export function assignIdEverywhere(fam, targetRef, newId){
     if (Array.isArray(p.children)) p.children.forEach(c => visit(c, parentWife||p));
   };
 
-  tops.forEach(tp => {
-    const isTopWife = Array.isArray(tp?.children);
-    visit(tp, isTopWife ? tp : null);
-  });
+tops.forEach(tp => {
+  const isTopWife = (roleGroup(tp) === 'زوجة');
+  visit(tp, isTopWife ? tp : null);
+});
 
   // توافق قديم: مرآة rootPerson.wives
   if (fam.rootPerson && Array.isArray(fam.rootPerson.wives)){
@@ -189,7 +195,6 @@ function ensureIdsForFamily(famKey, fam){
   ].filter(Boolean);
 
   tops.forEach(walk);
-  if (fam.rootPerson && Array.isArray(fam.rootPerson.wives)) fam.rootPerson.wives.forEach(walk);
 
   // كشف تصادمات _id داخل العائلة ومعالجتها
   const seen = new Map(); // id -> ref
@@ -207,7 +212,6 @@ function ensureIdsForFamily(famKey, fam){
     (p.wives||[]).forEach(w => fixDup(w));
   };
   tops.forEach(fixDup);
-  if (fam.rootPerson && Array.isArray(fam.rootPerson.wives)) fam.rootPerson.wives.forEach(fixDup);
 
   return changed;
 }

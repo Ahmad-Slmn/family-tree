@@ -2,7 +2,7 @@
 
 import { showInfo, showSuccess, showConfirmModal, byId, highlight, getArabicOrdinal, getArabicOrdinalF } from '../utils.js';
 import { ModalManager } from './modalManager.js';
-import { generateFamilyKey, getFamily } from '../model/families.js';
+import { generateFamilyKey, getFamily, normalizeNewFamilyForLineage } from '../model/families.js';
 
 import * as Form from '../features/familyForm.js';
 import {
@@ -1511,6 +1511,7 @@ const ancestors = Array.from(ancList.querySelectorAll('.ancestor-row')).map(r=>(
     // 4) تركيب الكائن النهائي
     const prevFamily = (editKey ? getFamily(editKey) : null) || null;
     const familyObj = Form.composeFamilyObject({ formFields, wives, ancestors, prevFamily, father });
+normalizeNewFamilyForLineage(familyObj);
 
     // منع حفظ بلا تغيير في وضع التعديل
     if (editKey){

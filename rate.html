@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>تقييم الموقع</title>
+
+<style>
+:root{
+  --card-max: 520px;
+  --card-pad-y: 20px;
+  --card-pad-x: 18px;
+  --h1-size: 1.25rem;
+  --stars-size: 32px;
+  --stars-gap: 8px;
+  --ta-size: 1rem;
+  --ta-minh: 110px;
+  --btn-size: 1rem;
+  --btn-pad-y: 10px;
+  --btn-pad-x: 12px;
+}
+
+*{box-sizing:border-box;}
+
+body{
+  font-family:system-ui,Segoe UI,Tahoma,Arial;
+  margin:0;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+           max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#fff;
+
+  background:
+    radial-gradient(900px 500px at 80% -10%, rgba(240,192,0,.18), transparent 60%),
+    radial-gradient(700px 420px at 10% 110%, rgba(139,92,246,.12), transparent 60%),
+    linear-gradient(180deg,#070708 0%, #0d0d10 60%, #0a0a0c 100%);
+}
+
+.card{
+  max-width:var(--card-max);
+  width:100%;
+  background:linear-gradient(180deg,#1a1a21 0%, #141418 100%);
+  border:1px solid #3a2b00;
+  border-radius:18px;
+  padding:var(--card-pad-y) var(--card-pad-x);
+  text-align:center;
+  box-shadow:
+    0 12px 30px rgba(0,0,0,.55),
+    0 0 0 1px rgba(240,192,0,.12),
+    0 0 24px rgba(240,192,0,.12);
+
+  opacity:0;
+  transform:translateY(14px) scale(.985);
+  animation:cardIn .6s ease-out forwards;
+}
+@keyframes cardIn{
+  to{opacity:1; transform:translateY(0) scale(1);}
+}
+@media (prefers-reduced-motion:reduce){
+  .card{animation:none; opacity:1; transform:none;}
+}
+
+h1{
+  font-size:var(--h1-size);
+  margin:0 0 12px;
+  color:#ffd86a;
+  letter-spacing:.3px;
+}
+
+.stars{
+  display:flex;
+  justify-content:center;
+  gap:var(--stars-gap);
+  font-size:var(--stars-size);
+  user-select:none;
+  margin:18px auto 22px;
+  width:fit-content;
+}
+.star{opacity:.35;transition:.15s;}
+.star.active{opacity:1;color:#f2c94c; text-shadow:0 6px 18px rgba(242,201,76,.35);}
+
+textarea{
+  width:100%;
+  min-height:var(--ta-minh);
+  margin:12px auto 0;
+  background:#0f0f12;
+  color:#fff;
+  border:1px solid #2a2a2f;
+  border-radius:12px;
+  padding:12px;
+  font-size:var(--ta-size);
+  display:block;
+  resize:vertical;
+}
+textarea:focus{
+  outline:none;
+  border-color:#f0c000;
+  box-shadow:0 0 0 3px rgba(240,192,0,.12);
+}
+
+.row{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  margin-top:12px;
+}
+
+.row button{
+  flex:1;
+  padding:var(--btn-pad-y) var(--btn-pad-x);
+  border:0;
+  border-radius:12px;
+  cursor:pointer;
+  font-size:var(--btn-size);
+  position:relative;
+  overflow:hidden;
+  transition:transform .18s ease,box-shadow .18s ease,background .18s ease,border-color .18s ease,filter .18s ease;
+  will-change:transform;
+}
+
+.primary{
+  background:#e6b800;
+  color:#111;
+  box-shadow:0 4px 10px rgba(0,0,0,.35);
+}
+.primary:hover{
+  background:#ffd24d;
+  color:#000;
+  transform:translateY(-2px);
+  box-shadow:0 8px 16px rgba(0,0,0,.45);
+  filter:brightness(1.03);
+}
+.primary:active{
+  transform:translateY(0);
+  box-shadow:0 3px 8px rgba(0,0,0,.35);
+}
+
+.ghost{
+  background:#ffffff0a;
+  color:#fff;
+  border:1px solid #2a2a2f;
+  transition:.18s ease;
+}
+.ghost:hover{
+  background:#ffffff22;
+  border-color:#ffffff55;
+  transform:translateY(-2px);
+  box-shadow:0 8px 16px rgba(0,0,0,.35);
+}
+.ghost:active{
+  background:#ffffff18;
+  transform:translateY(0);
+  box-shadow:0 3px 8px rgba(0,0,0,.3);
+}
+
+.ripple{
+  position:absolute;border-radius:50%;transform:scale(0);
+  animation:ripple .55s ease-out;pointer-events:none;opacity:.5;background:currentColor;
+}
+@keyframes ripple{to{transform:scale(3.2);opacity:0;}}
+
+.hint{opacity:.9;font-size:.9rem;margin-top:8px;}
+.hint.success{color:#4caf50;}
+.hint.error{color:#f44336;}
+
+.sr-only{
+  position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;
+  overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;
+}
+
+.star{
+  background:transparent;border:0;padding:0;line-height:1;font-size:inherit;
+  cursor:pointer;color:inherit;
+}
+.star:focus-visible{
+  outline:2px solid #f0c000;outline-offset:4px;border-radius:6px;
+}
+.star.pop{animation:starPop .35s ease-out;}
+@keyframes starPop{
+  0%{transform:translateY(0) scale(1);}
+  50%{transform:translateY(-2px) scale(1.25);}
+  100%{transform:translateY(0) scale(1);}
+}
+
+/* =========================================================
+   Breakpoints المطلوبة منك بالضبط
+   ========================================================= */
+
+/* 1) أقل من 23.9rem */
+@media (max-width:23.9rem){
+  :root{
+    --card-max: 96vw;
+    --card-pad-y: 14px; --card-pad-x: 12px;
+    --h1-size: 1.05rem;
+    --stars-size: 26px; --stars-gap: 6px;
+    --ta-size: .95rem; --ta-minh: 90px;
+    --btn-size: .98rem; --btn-pad-y: 9px; --btn-pad-x: 10px;
+  }
+  .row{flex-direction:column;}
+}
+
+/* 2) 24rem → 29.9rem */
+@media (min-width:24rem) and (max-width:29.9rem){
+  :root{
+    --card-max: 94vw;
+    --card-pad-y: 16px; --card-pad-x: 14px;
+    --h1-size: 1.12rem;
+    --stars-size: 28px; --stars-gap: 7px;
+    --ta-size: .98rem; --ta-minh: 95px;
+    --btn-size: 1rem;
+  }
+  .row{flex-direction:column;}
+}
+
+/* 3) 30rem → 39.9rem */
+@media (min-width:30rem) and (max-width:39.9rem){
+  :root{
+    --card-max: 540px;
+    --card-pad-y: 18px; --card-pad-x: 16px;
+    --h1-size: 1.2rem;
+    --stars-size: 30px;
+    --ta-minh: 105px;
+  }
+}
+
+/* 4) 40rem → 47.9rem */
+@media (min-width:40rem) and (max-width:47.9rem){
+  :root{
+    --card-max: 560px;
+    --card-pad-y: 20px; --card-pad-x: 18px;
+    --h1-size: 1.28rem;
+    --stars-size: 32px;
+    --ta-minh: 115px;
+  }
+}
+
+/* 5) 48rem → 63.9rem */
+@media (min-width:48rem) and (max-width:63.9rem){
+  :root{
+    --card-max: 600px;
+    --card-pad-y: 22px; --card-pad-x: 20px;
+    --h1-size: 1.35rem;
+    --stars-size: 34px; --stars-gap: 9px;
+    --ta-size: 1.02rem; --ta-minh: 125px;
+    --btn-size: 1.02rem; --btn-pad-y: 11px; --btn-pad-x: 14px;
+  }
+}
+
+/* 6) 64rem فأكثر */
+@media (min-width:64rem){
+  :root{
+    --card-max: 640px;
+    --card-pad-y: 24px; --card-pad-x: 22px;
+    --h1-size: 1.45rem;
+    --stars-size: 36px; --stars-gap: 10px;
+    --ta-size: 1.05rem; --ta-minh: 135px;
+    --btn-size: 1.05rem; --btn-pad-y: 12px; --btn-pad-x: 16px;
+  }
+}
+</style>
+</head>
+
+<body>
+<div class="card">
+  <h1>قيّم موقع شجرة العائلة</h1>
+
+  <div class="stars" id="stars" role="radiogroup" aria-labelledby="ratingLabel">
+    <span id="ratingLabel" class="sr-only">تقييم بالنجوم</span>
+    <button type="button" class="star" role="radio" aria-checked="false" data-v="1">★</button>
+    <button type="button" class="star" role="radio" aria-checked="false" data-v="2">★</button>
+    <button type="button" class="star" role="radio" aria-checked="false" data-v="3">★</button>
+    <button type="button" class="star" role="radio" aria-checked="false" data-v="4">★</button>
+    <button type="button" class="star" role="radio" aria-checked="false" data-v="5">★</button>
+  </div>
+
+  <textarea id="note" placeholder="اكتب ملاحظتك أو اقتراحك (اختياري)"></textarea>
+
+  <div class="row">
+    <button id="sendBtn" class="primary">إرسال</button>
+    <button id="closeBtn" class="ghost">العودة إلى الصفحة الرئيسية</button>
+  </div>
+
+  <div class="hint" id="status"></div>
+</div>
+
+<script>
+const stars=[...document.querySelectorAll('.star')];
+const starsWrap=document.getElementById('stars');
+const statusEl=document.getElementById('status');
+const noteEl=document.getElementById('note');
+let value=0;
+
+function paint(v){
+  stars.forEach(btn=>{
+    const sv=+btn.dataset.v;
+    btn.classList.toggle('active',sv<=v);
+    btn.setAttribute('aria-checked',sv===v?'true':'false');
+    btn.tabIndex=(sv===v||(v===0&&sv===1))?0:-1;
+  });
+}
+function setValue(v){
+  value=v; 
+  paint(v);
+  const target=stars.find(b=>+b.dataset.v===v);
+  if(target){
+    target.classList.remove('pop');
+    void target.offsetWidth;
+    target.classList.add('pop');
+  }
+}
+
+stars.forEach(btn=>btn.addEventListener('click',()=>setValue(+btn.dataset.v)));
+
+starsWrap.addEventListener('keydown',e=>{
+  if(!['ArrowRight','ArrowLeft','ArrowUp','ArrowDown','Home','End',' ','Enter'].includes(e.key))return;
+  e.preventDefault();
+  if(e.key==='Home')return setValue(1);
+  if(e.key==='End')return setValue(5);
+  if(e.key==='ArrowRight'||e.key==='ArrowUp')return setValue(Math.min(5,(value||1)+1));
+  if(e.key==='ArrowLeft'||e.key==='ArrowDown')return setValue(Math.max(1,(value||1)-1));
+  if(e.key===' '||e.key==='Enter'){
+    const f=document.activeElement;
+    if(f?.classList.contains('star'))return setValue(+f.dataset.v);
+  }
+});
+paint(0);
+
+document.getElementById('closeBtn').onclick = ()=>{
+  const isLocal =
+    location.hostname === "localhost" ||
+    location.hostname.startsWith("127.") ||
+    location.protocol === "file:";
+
+  const base = location.pathname.replace(/rate\.html.*$/i, "");
+  const homeUrl = isLocal
+    ? (location.origin + base + "index.html")
+    : (base + "index.html");
+
+  location.href = homeUrl;
+};
+
+document.getElementById('sendBtn').onclick=()=>{
+  if(!value){
+    statusEl.className="hint error";
+    statusEl.textContent="اختر عدد النجوم أولاً.";
+    return;
+  }
+  const note=(noteEl.value||'').trim();
+  const payload={value,note,at:new Date().toISOString()};
+  localStorage.setItem("lastRating",JSON.stringify(payload));
+  const to=localStorage.getItem("feedbackEmail")||"";
+  const subject=encodeURIComponent("تقييم موقع شجرة العائلة ("+value+"/5)");
+  const body=encodeURIComponent(
+    "التقييم: "+value+"/5\n\nملاحظة:\n"+(note||"-")+
+    "\n\nرابط الموقع:\n"+location.origin+location.pathname.replace("rate.html","")
+  );
+  if(to){
+    location.href=`mailto:${to}?subject=${subject}&body=${body}`;
+  }else{
+    navigator.clipboard?.writeText(JSON.stringify(payload,null,2));
+    statusEl.className="hint success";
+    statusEl.textContent="تم حفظ التقييم. شكرًا لك. سيتم الرجوع للصفحة الرئيسية الآن...";
+    setTimeout(()=>{
+      const isLocal =
+        location.hostname === "localhost" ||
+        location.hostname.startsWith("127.") ||
+        location.protocol === "file:";
+
+      const base = location.pathname.replace(/rate\.html.*$/i, "");
+      const homeUrl = isLocal
+        ? (location.origin + base + "index.html")
+        : (base + "index.html");
+
+      location.href = homeUrl;
+    }, 2200);
+  }
+};
+
+document.querySelectorAll('.row button').forEach(btn=>{
+  btn.addEventListener('click',function(e){
+    const old=this.querySelector('.ripple');if(old)old.remove();
+    const rect=this.getBoundingClientRect();
+    const size=Math.max(rect.width,rect.height);
+    const x=e.clientX-rect.left-size/2;
+    const y=e.clientY-rect.top-size/2;
+    const ripple=document.createElement('span');
+    ripple.className='ripple';
+    ripple.style.width=ripple.style.height=size+'px';
+    ripple.style.left=x+'px';
+    ripple.style.top=y+'px';
+    this.appendChild(ripple);
+    ripple.addEventListener('animationend',()=>ripple.remove(),{once:true});
+  });
+});
+</script>
+</body>
+</html>

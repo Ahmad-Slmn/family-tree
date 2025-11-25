@@ -221,7 +221,7 @@ body{background:var(--bg-gradient);min-height:100vh;color:var(--text-main); over
 /* ================== التوست ================== */
 #toastContainer{
   position:fixed;top:0;left:50%;transform:translateX(-50%);
-  z-index:9999;display:flex;flex-direction:column;gap:.625rem;pointer-events:none
+  z-index:99999;display:flex;flex-direction:column;gap:.625rem;pointer-events:none
 }
 .toast{
   display:flex;align-items:center;justify-content:center;gap:.75rem;
@@ -282,7 +282,7 @@ body{background:var(--bg-gradient);min-height:100vh;color:var(--text-main); over
 .suggestions .suggest-tag{display:inline-block;margin-top:.2rem;padding:.1rem .35rem;border-radius:.4rem;background:color-mix(in oklab,var(--chip-bg) 70%,transparent)}
 
 /* أزرار العائلة والفلاتر */
-.family-button{height:var(--h);display:inline-flex;align-items:center;gap:.5rem;padding:0 .9rem;background:var(--card-bg);color:var(--text-main);border:1px solid var(--surface-border);border-radius:.65rem;font-size:.95rem;font-weight:600;line-height:1;box-shadow:0 1px 4px color-mix(in oklab,var(--text-main) 8%,transparent);cursor:pointer}
+.family-button{height:var(--h);display:flex;align-items:center;justify-content: center;gap:.3rem;padding:0 .3rem;background:var(--card-bg);color:var(--text-main);border:1px solid var(--surface-border);border-radius:.65rem;font-size:.95rem;font-weight:600;line-height:1;box-shadow:0 1px 4px color-mix(in oklab,var(--text-main) 8%,transparent);cursor:pointer}
 .family-button i{font-size:.95rem;opacity:.8}
 
 /* التاريخ والوقت */
@@ -417,6 +417,10 @@ body{background:var(--bg-gradient);min-height:100vh;color:var(--text-main); over
 :where(button,[role="button"],.family-button,.theme-button):focus-visible{
   outline:3px solid var(--focus-ring);outline-offset:2px !important;border-radius:.5rem !important
 }
+
+/* تلميح صغير للنص الموجود تحت أزرار تفاعل ومساعدة */
+.side-hint{margin:8px 2px 0;font-size:.9em;opacity:.8;line-height:1.4;}
+
 
 /* ========== تجاوبية ========== */
 @media (max-width:48rem){.top-bar{flex-direction:column;align-items:stretch}}
@@ -557,6 +561,7 @@ body{background:var(--bg-gradient);min-height:100vh;color:var(--text-main); over
 .danger-btn i{margin-inline-start:.25rem}
 @media (prefers-reduced-motion:reduce){.btn{transition:none;transform:none!important}}
 
+
 .close-button{
   display:inline-flex;align-items:center;justify-content:center;width:2.25rem;height:2.25rem;
   border:.0625rem solid color-mix(in oklab,var(--modal-fg) 20%,transparent);border-radius:999px;background:transparent;cursor:pointer;
@@ -633,10 +638,10 @@ content:"";position:absolute;inset-inline:2rem;inset-block-start:.75rem;
 }
 
 .tree-tools-wrap{
-  display:grid;grid-template-columns:1fr 1fr;gap:.5rem;
-  align-items:center;justify-content:space-between;text-align:center;
-  margin-block-end:.6rem;
+  display: flex;justify-content: center;align-items: center;
+  flex-wrap: wrap;gap: 1rem;margin-block-end: .6rem;
 }
+
 .mother-toggle{
   display:flex;align-items:center;justify-content:center;gap:.5rem;
   padding:.4rem .6rem;border-radius:.5rem;
@@ -655,10 +660,10 @@ content:"";position:absolute;inset-inline:2rem;inset-block-start:.75rem;
   display:flex;flex-direction:column;align-items:center;
   padding:1rem;background:var(--card-bg);
   border:1px solid var(--surface-border);border-radius:1rem;
-  flex:1 1 16rem;max-width:18rem;height:fit-content
+  flex:1 1 16rem;max-width:20rem;height:fit-content
 }
 
-.children-grid{margin-top:2rem;display:grid;gap:1.5rem}
+.children-grid{display:grid;gap:1.5rem}
 
 /* عدادات */
 .wife-counter,.grandson .sibling-counter,.grandson .wife-count,.grandson .Create_Children_CountBox{
@@ -684,8 +689,8 @@ content:"";position:absolute;inset-inline:2rem;inset-block-start:.75rem;
   flex-direction:column;
   align-items:center;
   justify-content:flex-start;
-  width:17rem;
-  min-height:17rem;
+  width:19rem;
+  min-height:19rem;
   padding:1.5rem 1.25rem;
   text-align:center;
   border-radius:1rem;
@@ -949,6 +954,7 @@ content:"";position:absolute;inset-inline:2rem;inset-block-start:.75rem;
   display:flex;justify-content:center;align-items:center;opacity:0;visibility:hidden;transition:opacity .8s,visibility .8s;z-index:1000
 }
 .modal.active{opacity:1;visibility:visible}
+
 .modal-content{
   background:var(--modal-bg);color:var(--modal-fg);border:1px solid var(--modal-border);
   border-radius:1.5rem;width:90%;max-width:31.25rem;max-height:85vh;overflow-y:auto;
@@ -1070,19 +1076,18 @@ content:"";position:absolute;inset-inline:2rem;inset-block-start:.75rem;
   color:var(--title-color);margin:.3rem 0 .45rem;font-size:.96rem;
 }
 
-/* القوائم داخل الأقسام (الإخوة، الزوجات، الأبناء…) */
-.bio-section ul{
-  list-style:none;padding:0;margin:0;
-  display:flex;flex-direction:column;gap:.45rem;
-}
-.bio-section li{
-  background:var(--list-item-bg);border:.0625rem solid var(--surface-border);
-  padding:.5rem .9rem;border-radius:.55rem;font-size:.93rem;color:var(--text-main);
-  transition:background .2s,color .2s,transform .16s;
-}
-.bio-section li:hover{
-  background:var(--list-item-hover);color:var(--list-item-hover-fg);transform:translateY(-1px);
-}
+/* القوائم داخل الأقسام */
+.bio-section ul{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:.45rem;}
+.bio-section li{background:var(--list-item-bg);border:.0625rem solid var(--surface-border);padding:.5rem .9rem;border-radius:.55rem;font-size:.93rem;color:var(--text-main);transition:background .2s,color .2s,transform .16s;}
+.bio-section li:hover{background:var(--list-item-hover);color:var(--list-item-hover-fg);transform:translateY(-1px);}
+
+/* تقليل الزحمة للإخوة/الأخوات التفصيلية */
+.bio-sublist ul{list-style:none;padding:0;margin:.25rem 0;}
+.bio-sublist li.bio-li{padding:.55rem .8rem;margin:.35rem 0;border:1px solid var(--ancestor-border);border-radius:12px;line-height:1.55;display:flex;flex-direction:column;gap:.2rem;white-space:normal;}
+.bio-sublist li.bio-li .sib-name{font-weight:700;font-size:1rem;}
+.bio-sublist li.bio-li .sib-meta{font-size:.85rem;opacity:.8;}
+
+
 
 /* الهوايات (إن استُخدمت) */
 .hobbies{display:flex;flex-wrap:wrap;gap:.5rem;}
@@ -1095,7 +1100,7 @@ content:"";position:absolute;inset-inline:2rem;inset-block-start:.75rem;
 .suggestions.show{display:block}
 .suggestions .item{padding:.5rem .75rem;cursor:pointer}
 .suggestions .item:hover,.suggestions .item[aria-selected="true"]{background:var(--chip-bg)}
-#searchSuggestions{position:absolute;max-height:17.5rem;overflow:auto;z-index:5}
+#searchSuggestions{position:absolute;max-height:17.5rem;overflow:auto;touch-action: pan-y;overscroll-behavior: contain;z-index:5}
 
 /* ================== ترويسة السيرة بصورة ================== */
 .bio-photo{display:flex;align-items:center;gap:1rem;margin-bottom:1rem}
@@ -1164,7 +1169,7 @@ input[type="search"]::-webkit-search-cancel-button{ -webkit-appearance:none; }
   .search-wrap{flex:1 1 100%;min-width:0}
 
   .generation{justify-content:center;gap:1.75rem}
-  .wife-section{flex:1 1 calc(50% - 1rem);max-width:20rem}
+  .wife-section{flex:1 1 calc(50% - 1rem);max-width:22rem}
 }
 
 @media (min-width:30rem) and (max-width:39.9rem){
@@ -1172,7 +1177,7 @@ input[type="search"]::-webkit-search-cancel-button{ -webkit-appearance:none; }
   .search-wrap{flex:1 1 clamp(240px,45vw,500px)}
 
   .generation{justify-content:center;gap:2rem}
-  .wife-section{flex:1 1 calc(50% - 1.2rem);max-width:21rem}
+  .wife-section{flex:1 1 calc(50% - 1.2rem);max-width:23rem}
 }
 
 @media (min-width:40rem) and (max-width:47.9rem){
@@ -1180,7 +1185,7 @@ input[type="search"]::-webkit-search-cancel-button{ -webkit-appearance:none; }
   .search-wrap{flex:1 1 clamp(260px,48vw,520px)}
 
   .generation{justify-content:center;gap:2.25rem}
-  .wife-section{flex:1 1 calc(50% - 1.5rem);max-width:22rem}
+  .wife-section{flex:1 1 calc(50% - 1.5rem);max-width:24rem}
 }
 
 @media (min-width:48rem) and (max-width:63.9rem){
@@ -1188,12 +1193,23 @@ input[type="search"]::-webkit-search-cancel-button{ -webkit-appearance:none; }
   .search-wrap{flex:1 1 clamp(280px,42vw,540px)}
 
   .generation{justify-content:center;gap:2.5rem}
-  .wife-section{flex:1 1 calc(33.333% - 1.5rem);max-width:22rem}
+  .wife-section{flex:1 1 calc(33.333% - 1.5rem);max-width:24rem}
 }
 
 @media (min-width:64rem){
   .search-wrap{flex:1 1 clamp(320px,36vw,560px)}
   .generation{flex-wrap:wrap;justify-content:center;gap:4rem}
-  .wife-section{flex:0 1 18rem;max-width:18rem}
+  .wife-section{flex:0 1 18rem;max-width:20rem}
 }
+
+/* أزرار الصعود/النزول متناسقة مع الثيم */
+.scroll-buttons{position:fixed;right:22px;bottom:22px;display:flex;flex-direction:column;gap:10px;z-index:9999;pointer-events:none}
+.scroll-btn{pointer-events:auto;width:46px;height:46px;border-radius:999px;border:1px solid color-mix(in srgb,var(--modal-primary)35%,transparent);color:var(--modal-primary-fg,#111);background:radial-gradient(120% 120% at 30% 20%,color-mix(in srgb,#fff 35%,transparent),transparent 55%),linear-gradient(135deg,color-mix(in srgb,var(--modal-primary)88%,#fff 12%),color-mix(in srgb,var(--modal-primary)70%,#000 30%));box-shadow:0 .6rem 1.2rem rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.45),inset 0 -2px 6px rgba(0,0,0,.15);display:grid;place-items:center;font-size:18px;cursor:pointer;opacity:0;transform:translateY(8px) scale(.88);transition:opacity .25s,transform .25s,box-shadow .25s,filter .25s,border-color .25s;backdrop-filter:blur(6px)}
+/* زر النزول أفتح قليلًا بنفس لون الأساسي */
+#scrollDownBtn{border-color:color-mix(in srgb,var(--modal-primary)28%,transparent);background:radial-gradient(120% 120% at 30% 20%,color-mix(in srgb,#fff 45%,transparent),transparent 58%),linear-gradient(135deg,color-mix(in srgb,var(--modal-primary)78%,#fff 22%),color-mix(in srgb,var(--modal-primary)60%,#000 40%))}
+.scroll-btn.show{opacity:1;transform:translateY(0) scale(1)}
+.scroll-btn:hover{filter:saturate(1.05) brightness(1.03);transform:translateY(-2px) scale(1.06);box-shadow:0 .85rem 1.5rem rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.55)}
+.scroll-btn:active{transform:translateY(0) scale(.98);box-shadow:0 .45rem 1rem rgba(0,0,0,.20),inset 0 2px 8px rgba(0,0,0,.20)}
+.scroll-btn:focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--ctl-ring,var(--modal-primary))55%,transparent),0 .85rem 1.5rem rgba(0,0,0,.22)}
+@media (max-width:520px){.scroll-buttons{right:14px;bottom:14px;gap:8px}.scroll-btn{width:42px;height:42px;font-size:17px}}
 

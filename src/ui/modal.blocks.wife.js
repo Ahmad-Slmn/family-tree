@@ -8,6 +8,7 @@ import { attachYearModeToggle } from './modal.yearToggle.js';
 import { markGlobalDirty } from './modal.skeleton.js';
 import { updateChildrenCount } from './modal.blocks.child.js';
 import { initDirtyIndicators } from './modal.dirtyIndicators.js';
+import {createChildEditItem} from './modal.view.js';
 
 /* ======================= ثوابت عامة لحقول الزوجة ======================= */
 
@@ -642,6 +643,12 @@ function setupParentMetaBlock({
 export function createWifeBlock(index) {
   const wrapper = el('div', 'wife-block');
   wrapper.dataset.index = index;
+
+  // === (جديد) تأكيد وجود _id للزوجة ===
+  if (!wrapper.dataset.wifeId) {
+    wrapper.dataset.wifeId = crypto.randomUUID();
+  }
+
   const ord = getArabicOrdinalF(index);
 
   wrapper.innerHTML = `
@@ -682,6 +689,40 @@ export function createWifeBlock(index) {
   const onQuickRoleUpdate = () => setQuickPlaceholders(quickRoleEl.value);
   setQuickPlaceholders(quickRoleEl.value);
   quickRoleEl.addEventListener('change', onQuickRoleUpdate);
+  // ===== (جديد) إضافة طفل سريع مع زرع IDs للنسب الجديد =====
+  const addInlineBtn = wrapper.querySelector('.add-child-inline-btn');
+  const childrenList = wrapper.querySelector('.children-list-editor');
+
+  if (addInlineBtn && childrenList) {
+    addInlineBtn.addEventListener('click', () => {
+      const name = (quickNameEl.value || '').trim();
+      const role = (quickRoleEl.value || 'ابن').trim();
+
+      // منع إضافة طفل بلا اسم
+      if (!name) return;
+
+      // motherId = الزوجة الحالية
+      const motherId = wrapper.dataset.wifeId || (wrapper.dataset.wifeId = crypto.randomUUID());
+
+      // fatherId = rootPerson في العائلة الحالية
+      const root = window.__CURRENT_FAMILY__?.rootPerson;
+      const fatherId = root?._id || (root ? (root._id = crypto.randomUUID()) : crypto.randomUUID());
+
+      // إنشاء عنصر الطفل
+      const cid = crypto.randomUUID();
+      const childItem = createChildEditItem(name, role, cid);
+
+      // زرع روابط الأب/الأم في dataset للطفل
+      childItem.dataset.motherId = motherId;
+      childItem.dataset.fatherId = fatherId;
+
+      childrenList.appendChild(childItem);
+      updateChildrenCount(wrapper);
+
+      // تفريغ الاسم بعد الإضافة
+      quickNameEl.value = '';
+    });
+  }
 
   /* ========= ميتا أب الزوجة ========= */
 

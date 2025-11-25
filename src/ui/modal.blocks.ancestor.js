@@ -57,6 +57,7 @@ export function createAncestorItem(name = '', index = 1) {
   const row = document.createElement('div');
   row.className = 'ancestor-row';
   row.dataset.initialIndex = String(index);
+row.dataset.generation   = String(index); 
 
   /* ---------- قالب HTML الأساسي (نفس البنية السابقة) ---------- */
 

@@ -86,10 +86,19 @@ export function createChildEditItem(name, role, givenId) {
   const li = el('div', 'child-item');
   li.dataset.childId = cid;
 
+  // === (جديد) ربط الطفل بنظام النسب الجديد ===
+  // ملاحظة: هذا ربط افتراضي، وسيتم ضبطه بدقة من caller داخل بلوك الزوجة
+  const wBlock = li.closest('.wife-block') || document.querySelector('.wife-block[data-index]');
+  const motherId = wBlock?.dataset?.wifeId || '';
+
+  const root = window.__CURRENT_FAMILY__?.rootPerson || null;
+  const fatherId = root?._id || '';
+
+  if (motherId) li.dataset.motherId = motherId;
+  if (fatherId) li.dataset.fatherId = fatherId;
+
   /* ---------- جزء العرض (meta-view) ---------- */
-
   const view = el('div', 'meta-view child-view');
-
   const head = el('div', 'child-head');
   head.innerHTML = `
   <div class="child-index-badge dnd-handle" tabindex="0" role="button"

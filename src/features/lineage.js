@@ -13,30 +13,467 @@ function getLineageMeta(family){
   };
 }
 
+// مساعد: مرن لاستخراج parentId
+function getParentIdAny(p, which, ctx){
+  const w = which === 'father' ? 'father' : 'mother';
+  const id = p?._id || p?.id;
+  return (
+    p?.[`${w}Id`] || p?.[`${w}_id`] ||
+    p?.bio?.[`${w}Id`] || p?.bio?.[`${w}_id`] ||
+    (ctx?.parentsOf?.get?.(id)?.[w]) ||
+    (ctx?.parentByChild?.get?.(id)?.[w]) ||
+    null
+  );
+}
+
 // بناء سياق للعائلة لتجميع أهم المراجع
 export function buildLineageContext(family){
+  const fam = family || null;
+
   const ctx = {
-    family: family || null,
-    rootPerson: family?.rootPerson || null,
-    father: family?.father || null,
-    wives: Array.isArray(family?.wives) ? family.wives : [],
-    ancestors: Array.isArray(family?.ancestors) ? family.ancestors : [],
+    family: fam,
+    rootPerson: fam?.rootPerson || null,
+    father: fam?.father || null,
+    wives: Array.isArray(fam?.wives) ? fam.wives : [],
+    ancestors: Array.isArray(fam?.ancestors) ? fam.ancestors : [],
+    persons: fam?.persons || {},
     byId: new Map(),
-    meta: getLineageMeta(family)
+    allById: new Map(),
+    connectedIds: new Set(),
+    parentByChild: new Map(),
+    meta: getLineageMeta(fam)
   };
 
-  // تسجيل الأشخاص الرئيسيين في خريطة byId
-  ctx.ancestors.forEach(p => { if (p && p._id) ctx.byId.set(p._id, p); });
-  if (ctx.father && ctx.father._id) ctx.byId.set(ctx.father._id, ctx.father);
-  if (ctx.rootPerson && ctx.rootPerson._id) ctx.byId.set(ctx.rootPerson._id, ctx.rootPerson);
+  /* ============================================================
+     (A) helpers
+     ============================================================ */
 
-  ctx.wives.forEach(w => {
-    if (w && w._id) ctx.byId.set(w._id, w);
-    (w?.children || []).forEach(c => { if (c && c._id) ctx.byId.set(c._id, c); });
+  // نسخة واحدة فقط: لا نُظلّلها مرة ثانية
+  function getParentIdAnyLocal(p, which){
+    const w = which === 'father' ? 'father' : 'mother';
+    const id = p?._id || p?.id;
+
+    return (
+      p?.[`${w}Id`] || p?.[`${w}_id`] ||
+      p?.bio?.[`${w}Id`] || p?.bio?.[`${w}_id`] ||
+      (ctx.parentsOf?.get?.(id)?.[w]) ||            // إن وُجدت لاحقاً
+      (ctx.parentByChild.get(String(id||''))?.[w]) ||
+      null
+    );
+  }
+
+  function addSiblingsOfParent(parentId){
+    if (!parentId) return false;
+    const pid = String(parentId);
+    let changed = false;
+
+    for (const p of ctx.allById.values()){
+      if (!p?._id) continue;
+
+      const pf = getParentIdAnyLocal(p, 'father');
+      const pm = getParentIdAnyLocal(p, 'mother');
+
+      const sameF = pf && String(pf) === pid;
+      const sameM = pm && String(pm) === pid;
+      if (!sameF && !sameM) continue;
+
+      const sid = String(p._id);
+
+      // NEW: ثبّت علاقة الأب/الأم ضمنيًا لهذا الشخص
+      const stored = ctx.parentByChild.get(sid) || {};
+      if (sameF && !stored.father) stored.father = pid;
+      if (sameM && !stored.mother) stored.mother = pid;
+      ctx.parentByChild.set(sid, stored);
+
+      // NEW: مادّية IDs على الكائن للجلسة حتى تعمل المطابقات
+      if (sameF && !p.fatherId && !p.bio?.fatherId) p.fatherId = pid;
+      if (sameM && !p.motherId && !p.bio?.motherId) p.motherId = pid;
+
+      // سلوكك القديم: فقط إدخالهم للاتصال
+      if (!ctx.byId.has(sid)){
+        ctx.byId.set(sid, p);
+        ctx.connectedIds.add(sid);
+        changed = true;
+      } else if (!ctx.connectedIds.has(sid)){
+        ctx.connectedIds.add(sid);
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  // تطبيع عربي بسيط للمطابقة بالاسم (بدون imports)
+  const _norm = (s)=> String(s||'')
+    .replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]/g,'') // حركات
+    .replace(/\u0640/g,'')                                         // تطويل
+    .replace(/[اأإآ]/g,'ا')
+    .replace(/[يى]/g,'ي')
+    .replace(/[هة]/g,'ه')
+    .replace(/\s+/g,' ')
+    .trim();
+
+  function findByName(name){
+    const key = _norm(name);
+    if (!key) return null;
+    for (const p of ctx.allById.values()){
+      if (!p) continue;
+      const nm = _norm(p.name || p.bio?.fullName || p.bio?.fullname || '');
+      if (nm && nm === key) return p;
+    }
+    return null;
+  }
+
+  /* ============================================================
+     (B) register all persons into allById
+     ============================================================ */
+  const regAll = (p)=>{
+    if (!p) return;
+    const id = p._id ? String(p._id) : null;
+    if (id && !ctx.allById.has(id)) ctx.allById.set(id, p);
+
+    (p.wives || []).forEach(regAll);
+    (p.children || []).forEach(regAll);
+  };
+
+  Object.values(ctx.persons).forEach(regAll);
+  ctx.ancestors.forEach(regAll);
+  if (ctx.father) regAll(ctx.father);
+  if (ctx.rootPerson) regAll(ctx.rootPerson);
+  ctx.wives.forEach(regAll);
+
+  /* ============================================================
+     (C) add connected recursively + build parentByChild for kids
+     ============================================================ */
+  function addConnectedRec(p, implied=null){
+    if (!p) return;
+    const id = p._id ? String(p._id) : null;
+
+    if (id){
+      if (!ctx.byId.has(id)) ctx.byId.set(id, p);
+      ctx.connectedIds.add(id);
+
+      if (implied){
+        const stored = ctx.parentByChild.get(id) || {};
+        if (implied.father && !stored.father) stored.father = implied.father;
+        if (implied.mother && !stored.mother) stored.mother = implied.mother;
+        ctx.parentByChild.set(id, stored);
+      }
+    }
+
+    const wives = Array.isArray(p.wives) ? p.wives : [];
+    wives.forEach(w=>{
+      addConnectedRec(w);
+      (w.children||[]).forEach(ch=>{
+        addConnectedRec(ch, {
+          father: p?._id ? String(p._id):null,
+          mother: w?._id ? String(w._id):null
+        });
+      });
+    });
+
+    const kids = Array.isArray(p.children) ? p.children : [];
+    kids.forEach(ch=>{
+      addConnectedRec(ch, {
+        father: p?._id ? String(p._id):null,
+        mother: null
+      });
+    });
+  }
+
+ function connectChildWithParents(child, fatherId, motherId){
+  addConnectedRec(child, {
+    father: fatherId,
+    mother: motherId
   });
+}
+
+ctx.ancestors.forEach(addConnectedRec);
+if (ctx.father) addConnectedRec(ctx.father);
+if (ctx.rootPerson) addConnectedRec(ctx.rootPerson);
+
+// NEW: ربط الزوجات كزوجات لصاحب الشجرة، وأبناؤهن بأبيهم الحقيقي
+const husbandId =
+  (ctx.rootPerson?._id ? String(ctx.rootPerson._id)
+   : (ctx.father?._id ? String(ctx.father._id) : null));
+
+for (const w of ctx.wives){
+  if (!w) continue;
+
+  // 1) سجّل الزوجة نفسها
+  addConnectedRec(w);
+
+  // 2) أبناء الزوجة
+  const mid = w._id ? String(w._id) : null;
+  const kids = w.children || [];
+  for (const ch of kids){
+    connectChildWithParents(ch, husbandId, mid);
+  }
+}
+
+  /* ============================================================
+     (J) wives' parents:
+         1) by id if exists
+         2) else infer by fatherName/motherName
+     ============================================================ */
+  for (const w of ctx.wives){
+    if (!w?._id) continue;
+    const wid = String(w._id);
+
+    let wf = getParentIdAnyLocal(w, 'father');
+    let wm = getParentIdAnyLocal(w, 'mother');
+
+    // NEW: infer by name if ids missing
+    if (!wf){
+      const fn = w.bio?.fatherName || w.fatherName || '';
+      const fp = findByName(fn);
+      if (fp?._id) wf = String(fp._id);
+    }
+    if (!wm){
+      const mn = w.bio?.motherName || w.motherName || '';
+      const mp = findByName(mn);
+      if (mp?._id) wm = String(mp._id);
+    }
+
+    // سجّلهم كـ implied parents للزوجة (ديناميكي)
+    if (wf || wm){
+      const stored = ctx.parentByChild.get(wid) || {};
+      if (wf && !stored.father) stored.father = wf;
+      if (wm && !stored.mother) stored.mother = wm;
+      ctx.parentByChild.set(wid, stored);
+
+      // ضع ids على كائن الزوجة للجلسة (غير محفوظ في bio)
+      if (wf && !w.fatherId && !w.bio?.fatherId) w.fatherId = wf;
+      if (wm && !w.motherId && !w.bio?.motherId) w.motherId = wm;
+    }
+
+    // أدخل الأب/الأم في الاتصال
+    const addParentDirect = (pid)=>{
+      if (!pid) return;
+      const id = String(pid);
+      const p = ctx.allById.get(id);
+      if (p){
+        ctx.byId.set(id, p);
+        ctx.connectedIds.add(id);
+      }
+    };
+
+    addParentDirect(wf);
+    addParentDirect(wm);
+
+    // وأدخل إخوتهم (أعمام/عمات/أخوال/خالات)
+    if (wf) addSiblingsOfParent(wf);
+    if (wm) addSiblingsOfParent(wm);
+  }
+
+  /* ============================================================
+     (D) link ancestors chain fatherId
+     ============================================================ */
+  if (ctx.ancestors.length){
+    const a = ctx.ancestors;
+    for (let i = 0; i < a.length; i++){
+      const child = a[i];
+      const parent = a[i+1] || null;
+      if (child && parent && parent._id){
+        if (!child.fatherId && !child.bio?.fatherId){
+          child.fatherId = parent._id;
+        }
+      }
+    }
+  }
+  
+    /* ============================================================
+     (D2) NEW: ensure paternal chain links (rootPerson -> father -> nearest ancestor)
+     ============================================================ */
+
+  // NEW 1) rootPerson يعتبر ابنًا للأب (ديناميكيًا داخل الجلسة)
+  if (ctx.rootPerson?._id && ctx.father?._id){
+    const rid = String(ctx.rootPerson._id);
+    const fid = String(ctx.father._id);
+
+    // ضع fatherId على صاحب الشجرة إن كان مفقودًا (غير محفوظ في bio)
+    if (!ctx.rootPerson.fatherId && !ctx.rootPerson.bio?.fatherId){
+      ctx.rootPerson.fatherId = fid;
+    }
+
+    // سجّلها أيضًا كـ implied parent
+    const storedR = ctx.parentByChild.get(rid) || {};
+    if (!storedR.father) storedR.father = fid;
+    ctx.parentByChild.set(rid, storedR);
+  }
+
+  // NEW 2) الأب يعتبر ابنًا لأقرب جدّ في ancestors[] (ancestor[0])
+  if (ctx.father?._id && Array.isArray(ctx.ancestors) && ctx.ancestors.length){
+    const fid = String(ctx.father._id);
+    const nearest = ctx.ancestors[0]; // الأقرب للأب
+
+    if (nearest?._id){
+      const afid = String(nearest._id);
+
+      if (!ctx.father.fatherId && !ctx.father.bio?.fatherId){
+        ctx.father.fatherId = afid;
+      }
+
+      const storedF = ctx.parentByChild.get(fid) || {};
+      if (!storedF.father) storedF.father = afid;
+      ctx.parentByChild.set(fid, storedF);
+    }
+  }
+
+
+  /* ============================================================
+     (E) add parents of connected
+     ============================================================ */
+  function addParentToCtx(pid){
+    if (!pid) return false;
+    const id = String(pid);
+
+    if (ctx.byId.has(id)){
+      if (!ctx.connectedIds.has(id)){
+        ctx.connectedIds.add(id);
+        return true;
+      }
+      return false;
+    }
+
+    const p = ctx.allById.get(id);
+    if (p){
+      ctx.byId.set(id, p);
+      ctx.connectedIds.add(id);
+      return true;
+    }
+    return false;
+  }
+
+  /* ============================================================
+     (F) expand (parents + siblings)
+     ============================================================ */
+  let expandChanged = true;
+  for (let loop = 0; loop < 3 && expandChanged; loop++){
+    expandChanged = false;
+
+    const snapshot = Array.from(ctx.connectedIds);
+    for (const cid of snapshot){
+      const child = ctx.byId.get(cid);
+      if (!child) continue;
+
+      const implied = ctx.parentByChild.get(cid) || {};
+      const fId = getParentIdAnyLocal(child,'father') || implied.father || null;
+      const mId = getParentIdAnyLocal(child,'mother') || implied.mother || null;
+
+      if (fId && addParentToCtx(fId)) expandChanged = true;
+      if (mId && addParentToCtx(mId)) expandChanged = true;
+
+      if (fId && addSiblingsOfParent(fId)) expandChanged = true;
+      if (mId && addSiblingsOfParent(mId)) expandChanged = true;
+    }
+  }
+  
+    /* ============================================================
+     (F2) NEW: expand descendants (children + grandchildren ...)
+     ============================================================ */
+  let descChanged = true;
+  for (let loop = 0; loop < 4 && descChanged; loop++){
+    descChanged = false;
+
+    const snapshot = Array.from(ctx.connectedIds); // الآباء المتصلون حاليًا
+    for (const pid of snapshot){
+      // ابحث في كل أشخاص العائلة (حتى غير المتصلين) عن من أبوه/أمه = pid
+      for (const p of ctx.allById.values()){
+        if (!p?._id) continue;
+        const cid = String(p._id);
+
+        // لا تعالج من هو متصل أصلًا
+        if (ctx.connectedIds.has(cid)) continue;
+
+        const implied = ctx.parentByChild.get(cid) || {};
+        const fId = getParentIdAnyLocal(p,'father') || implied.father || null;
+        const mId = getParentIdAnyLocal(p,'mother') || implied.mother || null;
+
+        const isChild =
+          (fId && String(fId) === String(pid)) ||
+          (mId && String(mId) === String(pid));
+
+        if (!isChild) continue;
+
+        // أدخل الابن في الاتصال
+        ctx.byId.set(cid, p);
+        ctx.connectedIds.add(cid);
+
+        // وثّق parentIds ديناميكيًا على الابن (مثل منطق G)
+        if (fId && !p.fatherId && !p.bio?.fatherId) p.fatherId = fId;
+        if (mId && !p.motherId && !p.bio?.motherId) p.motherId = mId;
+
+        descChanged = true;
+      }
+    }
+  }
+
+
+  /* ============================================================
+     (G) rebuild childrenIds from scratch
+     ============================================================ */
+  for (const p of ctx.byId.values()){
+    if (p) p.childrenIds = [];
+  }
+
+  function pushChild(parentId, childId){
+    if (!parentId || !childId) return;
+    const pid = String(parentId), cid = String(childId);
+    const parent = ctx.byId.get(pid);
+    if (!parent) return;
+
+    if (!Array.isArray(parent.childrenIds)) parent.childrenIds = [];
+    if (!parent.childrenIds.includes(cid)) parent.childrenIds.push(cid);
+  }
+
+  for (const p of ctx.byId.values()){
+    if (!p?._id) continue;
+    const cid = String(p._id);
+
+    const implied = ctx.parentByChild.get(cid) || {};
+    const fId = getParentIdAnyLocal(p,'father') || implied.father || null;
+    const mId = getParentIdAnyLocal(p,'mother') || implied.mother || null;
+
+    // NEW: materialize implied IDs on the object for this session
+    // حتى تعمل getParents/resolveSiblings/resolveUnclesAunts بدقة
+    if (fId && !p.fatherId && !p.bio?.fatherId) p.fatherId = fId;
+    if (mId && !p.motherId && !p.bio?.motherId) p.motherId = mId;
+
+    if (fId) pushChild(fId,cid);
+    if (mId) pushChild(mId,cid);
+  }
+
+
+  /* ============================================================
+     (H) link ancestors via childrenIds
+     ============================================================ */
+  const chain = ctx.ancestors;
+  for (let i = 0; i < chain.length; i++){
+    const ch = chain[i], pr = chain[i+1];
+    if (!ch?._id || !pr?._id) continue;
+    pushChild(pr._id, ch._id);
+
+    ctx.connectedIds.add(String(ch._id));
+    ctx.connectedIds.add(String(pr._id));
+  }
+
+  /* ============================================================
+     (I) father inherits rootPerson kids (legacy)
+     ============================================================ */
+  if (ctx.father && ctx.rootPerson?._id){
+    const rootId = String(ctx.rootPerson._id);
+    const fatherId = String(ctx.father._id);
+
+    for (const [cid, pr] of ctx.parentByChild.entries()){
+      if (pr?.father && String(pr.father) === rootId){
+        pushChild(fatherId, cid);
+      }
+    }
+  }
 
   return ctx;
 }
+
 
 // مساعد داخلي: احصل على الـ ctx إن لم يُمرَّر
 function ensureCtx(family, ctx){
@@ -53,7 +490,6 @@ function parseList(txt){
     .filter(Boolean)
     .map(name => ({ name }));
 }
-
 
 // البحث عن قيمة حقل معيّن في الأسلاف (ancestors[]) من الأقرب إلى الأبعد
 function findAncestorField(family, field){
@@ -73,109 +509,72 @@ function findAncestorField(family, field){
 export function getParents(person, family, ctx){
   const fam = family || (ctx && ctx.family) || null;
   const c = ensureCtx(fam, ctx);
-  if (!person || !fam) return { father: null, mother: null };
+  if (!person || !fam || !c) return { father: null, mother: null };
 
-  const role = String(person.role || '').trim();
-  const bio  = person.bio || {};
+  const P = (pid)=> pid ? (c.byId.get(String(pid)) || null) : null;
 
-  // 1) صاحب الشجرة
-  if (person === fam.rootPerson || role === 'صاحب الشجرة'){
-    const father = fam.father || null;
-
-    // الأم ليست شخصًا في الموديل، نبني كائنًا خفيفًا عند الحاجة
-    const motherBrothers = parseList(bio.motherBrothersTxt);
-    const motherSisters  = parseList(bio.motherSistersTxt);
-
-    const hasMother =
-      (bio.motherName || bio.motherClan ||
-       bio.motherBrothersTxt || bio.motherSistersTxt);
-
-    const mother = hasMother ? {
-      _virtual: true,
-      role: 'الأم',
-      name: bio.motherName || '',
-      bio: {
-        clan:  bio.motherClan || '',
-        tribe: '',
-        // إخوة/أخوات الأم → تُستخدم في resolveUnclesAunts كأخوال/خالات
-        siblingsBrothers: motherBrothers,
-        siblingsSisters:  motherSisters
-      }
-    } : null;
-
-    return { father, mother };
+  // 1) روابط مباشرة (النموذج الواقعي)
+  if (person.fatherId || person.motherId){
+    return { father: P(person.fatherId), mother: P(person.motherId) };
   }
 
+  // 2) fallback للسلوك القديم إن لم توجد روابط
+  const role = String(person.role||'').trim();
 
-  // 2) ابن/بنت ضمن أطفال زوجة
   if (role === 'ابن' || role === 'بنت'){
     let mother = null;
-    const wives = c?.wives || fam.wives || [];
-    let found = false;
+    const pid = person._id;
 
-    for (const w of wives){
-      if (!w || !Array.isArray(w.children)) continue;
-      for (const ch of w.children){
-        if (ch && ch._id === person._id){
+    for (let i = 0; i < c.wives.length; i++){
+      const w = c.wives[i];
+      const kids = w && Array.isArray(w.children) ? w.children : null;
+      if (!kids) continue;
+      for (let j = 0; j < kids.length; j++){
+        const ch = kids[j];
+        if (ch && ch._id === pid){
           mother = w;
-          found = true;
+          i = c.wives.length;
           break;
         }
       }
-      if (found) break;
     }
 
     const father = fam.rootPerson || fam.father || null;
     return { father, mother };
   }
 
-
-  // 3) الزوجة: أب/أم الزوجة من bio فقط (أشخاص افتراضيون)
-  if (role === 'زوجة' || role.startsWith('الزوجة')){
-    // إخوة/أخوات أب الزوجة
-    const fatherBrothers = parseList(bio.fatherBrothersTxt);
-    const fatherSisters  = parseList(bio.fatherSistersTxt);
-
-    // إخوة/أخوات أم الزوجة
-    const motherBrothers = parseList(bio.motherBrothersTxt);
-    const motherSisters  = parseList(bio.motherSistersTxt);
-
-    const father = (bio.fatherName || bio.fatherClan) ? {
-      _virtual: true,
-      role: 'أب الزوجة',
-      name: bio.fatherName || '',
-      bio: {
-        clan:  bio.fatherClan || '',
-        tribe: bio.tribe     || '',
-        siblingsBrothers: fatherBrothers,
-        siblingsSisters:  fatherSisters
-      }
-    } : null;
-
-    const mother = (bio.motherName || bio.motherClan) ? {
-      _virtual: true,
-      role: 'أم الزوجة',
-      name: bio.motherName || '',
-      bio: {
-        clan:  bio.motherClan || '',
-        tribe: '', // يمكن توسيعها لاحقًا
-        siblingsBrothers: motherBrothers,
-        siblingsSisters:  motherSisters
-      }
-    } : null;
-
-
-    return { father, mother };
+  if (person === fam.rootPerson || role === 'صاحب الشجرة'){
+    return {
+      father: fam.father || null,
+      mother: person.motherId ? P(person.motherId) : null
+    };
   }
 
-  // 4) الأب نفسه: نحاول ربطه بأقرب جدّ (إن وُجد)
-  if (role === 'الأب'){
+  if (role === 'زوجة' || role.startsWith('الزوجة')){
+    return { father: P(person.fatherId), mother: P(person.motherId) };
+  }
+
+  if (role === 'الأب' || person === fam.father){
     const anc = Array.isArray(fam.ancestors) ? fam.ancestors : [];
-    const nearest = anc.length ? anc[0] : null;
+    const nearest = anc[0] || null;
     return { father: nearest || null, mother: null };
   }
 
-  // 5) أسلاف/آخرون: لا نحاول الذهاب أبعد من ذلك الآن
+  // صاحب الشجرة يُعتبر ابنًا للأب إن وجد
+  if (person === fam.rootPerson && fam.father){
+    return { father: fam.father, mother: null };
+  }
+
+  // إذا كان الشخص من ancestors[] ولم يكن لديه fatherId صريح
+  if (Array.isArray(fam.ancestors) && person?._id){
+    const anc = fam.ancestors;
+    const idx = anc.findIndex(a => a && String(a._id) === String(person._id));
+    if (idx >= 0){
+      const upperFather = anc[idx + 1] || null;
+      return { father: upperFather, mother: null };
+    }
+  }
+
   return { father: null, mother: null };
 }
 
@@ -188,25 +587,32 @@ export function resolveTribe(person, family, ctx){
   const meta = c?.meta || getLineageMeta(family);
   const rule = meta.tribeRule || 'father';
   const bio  = person.bio || {};
+  const role = String(person.role || '').trim();
 
-  // 1) قيمة مباشرة في الشخص
+  // 1) قيمة مباشرة
   if (bio.tribe && bio.tribe !== '-') return String(bio.tribe).trim();
 
-  // 2) من الوالدين حسب القاعدة
   const parents = getParents(person, family, c);
   const fTribe  = parents.father?.bio?.tribe;
   const mTribe  = parents.mother?.bio?.tribe;
 
+  // الزوجة ترث فقط من والديها لا من الزوج/الأبناء
+  if (role === 'زوجة' || role.startsWith('الزوجة')){
+    if (rule === 'father' && fTribe) return String(fTribe).trim();
+    if (rule === 'mother' && mTribe) return String(mTribe).trim();
+    if (fTribe) return String(fTribe).trim();
+    if (mTribe) return String(mTribe).trim();
+    return '';
+  }
+
   if (rule === 'father' && fTribe) return String(fTribe).trim();
   if (rule === 'mother' && mTribe) return String(mTribe).trim();
 
-  // 3) من الأسلاف (أول جدّ مذكور)
-  if (rule === 'firstAncestor'){
+  if (rule === 'firstAncestor' || rule === 'firstKnown'){
     const ancTribe = findAncestorField(family, 'tribe');
     if (ancTribe) return ancTribe;
   }
 
-  // 4) fallback عام إن لم تنجح القاعدة المحددة
   if (fTribe) return String(fTribe).trim();
   if (mTribe) return String(mTribe).trim();
 
@@ -228,25 +634,32 @@ export function resolveClan(person, family, ctx){
   const meta = c?.meta || getLineageMeta(family);
   const rule = meta.clanRule || 'father';
   const bio  = person.bio || {};
+  const role = String(person.role || '').trim();
 
-  // 1) قيمة مباشرة في الشخص
+  // 1) قيمة مباشرة
   if (bio.clan && bio.clan !== '-') return String(bio.clan).trim();
 
   const parents = getParents(person, family, c);
-
   const fClan = parents.father?.bio?.clan;
-  const mClan = parents.mother?.bio?.clan || parents.mother?.bio?.motherClan || bio.motherClan; // دعم بسيط لسلوكك الحالي
+  const mClan = parents.mother?.bio?.clan || parents.mother?.bio?.motherClan || bio.motherClan;
 
+  // الزوجة ترث فقط من والديها
+  if (role === 'زوجة' || role.startsWith('الزوجة')){
+    if (rule === 'father' && fClan) return String(fClan).trim();
+    if (rule === 'mother' && mClan) return String(mClan).trim();
+    if (fClan) return String(fClan).trim();
+    if (mClan) return String(mClan).trim();
+    return '';
+  }
 
   if (rule === 'father' && fClan) return String(fClan).trim();
   if (rule === 'mother' && mClan) return String(mClan).trim();
 
-  if (rule === 'firstAncestor'){
+  if (rule === 'firstAncestor' || rule === 'firstKnown'){
     const ancClan = findAncestorField(family, 'clan');
     if (ancClan) return ancClan;
   }
 
-  // fallback عام
   if (fClan) return String(fClan).trim();
   if (mClan) return String(mClan).trim();
 
@@ -261,20 +674,17 @@ export function resolveClan(person, family, ctx){
 
 // ---------------------------------------
 // 4) resolveFullName: اسم مركّب ديناميكي
-//    (يُستخدم عند الحاجة فقط، لا يغيّر name/bio.fullName)
 // ---------------------------------------
-export function resolveFullName(person, family, ctx){
+export function resolveFullName(person){
   if (!person) return '';
   const bio = person.bio || {};
 
-  // 1) إن كان لديك fullName مخزَّنًا صراحة
   if (bio.fullName && bio.fullName !== '-') return String(bio.fullName).trim();
   if (bio.fullname && bio.fullname !== '-') return String(bio.fullname).trim();
 
-  // 2) تركيب بسيط: الاسم + اسم الأب + اسم الجد (إن وُجدت)
-  const name    = (person.name || '').trim();
-  const father  = (bio.fatherName || '').trim();
-  const grand   = (bio.paternalGrandfather || '').trim();
+  const name   = (person.name || '').trim();
+  const father = (bio.fatherName || '').trim();
+  const grand  = (bio.paternalGrandfather || '').trim();
 
   const parts = [name];
   if (father) parts.push(father);
@@ -285,13 +695,11 @@ export function resolveFullName(person, family, ctx){
 }
 
 // ---------------------------------------
-// 5) resolveGrandparents: تجميع بيانات الأجداد
-//    (حاليًا مجرد تجميع للحقول المخزَّنة مع إمكانية توسعة لاحقة)
+// 5) resolveGrandparents: تجميع بيانات الأجداد المخزّنة
 // ---------------------------------------
-export function resolveGrandparents(person, family, ctx){
+export function resolveGrandparents(person){
   if (!person) return {};
   const bio = person.bio || {};
-
   return {
     paternalGrandfather:      bio.paternalGrandfather      || '',
     paternalGrandmother:      bio.paternalGrandmother      || '',
@@ -299,124 +707,233 @@ export function resolveGrandparents(person, family, ctx){
     maternalGrandfather:      bio.maternalGrandfather      || '',
     maternalGrandmother:      bio.maternalGrandmother      || '',
     maternalGrandmotherClan:  bio.maternalGrandmotherClan  || '',
-    // يمكن لاحقًا استكمال/توريث هذه القيم من ancestors حسب الحاجة
   };
 }
 
 // ---------------------------------------
-// 6) resolveSiblings: استنتاج الإخوة والأخوات ديناميكيًا
+// 6) resolveSiblings: استنتاج الإخوة والأخوات ديناميكيًا (مرن)
 // ---------------------------------------
 export function resolveSiblings(person, family, ctx){
-  if (!person || !family) return { brothers: [], sisters: [] };
-  const fam = family;
-  const c   = ensureCtx(fam, ctx);
-  const bio = person.bio || {};
-  const role = String(person.role || '').trim();
+  if (!person || !family) return { brothers:[], sisters:[], types:{} };
+  const c = ensureCtx(family, ctx);
+  const onlyConnected = p => !c.connectedIds || c.connectedIds.has(String(p?._id));
 
-  // 0) لو المستخدم أدخل الإخوة/الأخوات يدويًا في الـ bio نحترمها كما هي
+  // احترم الإدخال اليدوي إن وُجد
+  const bio = person.bio || {};
   const manualBro = Array.isArray(bio.siblingsBrothers) ? bio.siblingsBrothers : [];
   const manualSis = Array.isArray(bio.siblingsSisters)  ? bio.siblingsSisters  : [];
   if (manualBro.length || manualSis.length){
-    return { brothers: manualBro, sisters: manualSis };
+    return { brothers: manualBro, sisters: manualSis, types:{} };
   }
 
-  const addCandidate = (accById, list, p) => {
-    if (!p) return;
-    const nm = (p.name || '').trim();
-    if (!nm) return;
-    const id = p._id || `nr:${nm}|${(p.role||'').trim()}`;
-    if (accById.has(id)) return;
-    const item = { name: nm };
-    if (p._id) item._id = p._id;
-    accById.set(id, { item, role: (p.role || '').trim() });
-  };
+  const { father, mother } = getParents(person, family, c);
+  if (!father && !mother) return { brothers:[], sisters:[], types:{} };
 
-  const parents = getParents(person, fam, c);
-  const allById = new Map();
+  const selfId = person._id;
+  const fid = x => (x && (x.fatherId || x.bio?.fatherId || null));
+  const mid = x => (x && (x.motherId || x.bio?.motherId || null));
 
-  // 1) حالة الابن/البنت: نعتبر كل أبناء "الأب" (الجذر) إخوة/أخوات (حتى لو من أمهات مختلفات)
-  if (role === 'ابن' || role === 'بنت'){
-    const wives = c?.wives || fam.wives || [];
-    for (const w of wives){
-      if (!w || !Array.isArray(w.children)) continue;
-      for (const ch of w.children){
-        if (!ch || ch === person || ch._id === person._id) continue;
-        addCandidate(allById, allById, ch);
+  // مرشّحو الإخوة من childrenIds إن وُجدت
+  let candidates = father?.childrenIds
+    ?.map(id => c.byId.get(String(id)))
+    .filter(Boolean) || [];
+
+  if (!candidates.length){
+    // fallback: اجمع كل أبناء العائلة المتصلين
+    const allKids = [];
+    (c.wives || []).forEach(w => (w?.children||[]).forEach(ch => { if (onlyConnected(ch)) allKids.push(ch); }));
+    (family.rootPerson?.children||[]).forEach(ch => { if (onlyConnected(ch)) allKids.push(ch); });
+    (family.father?.children||[]).forEach(ch => { if (onlyConnected(ch)) allKids.push(ch); });
+
+    if (c.persons && typeof c.persons === 'object'){
+      Object.values(c.persons).forEach(p=>{
+        if (p && onlyConnected(p) && (p.role === 'ابن' || p.role === 'بنت')) allKids.push(p);
+      });
+    }
+
+    const seen = new Set();
+    candidates = allKids.filter(k=>{
+      const id = k?._id;
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+
+    const selfFatherId = fid(person) || father?._id || null;
+    const selfMotherId = mid(person) || mother?._id || null;
+
+    if (selfFatherId || selfMotherId){
+      candidates = candidates.filter(k=>{
+        if (!k || k._id === selfId) return false;
+        const kFatherId = fid(k);
+        const kMotherId = mid(k);
+        const sameFather = selfFatherId && kFatherId && String(selfFatherId) === String(kFatherId);
+        const sameMother = selfMotherId && kMotherId && String(selfMotherId) === String(kMotherId);
+        return sameFather || sameMother;
+      });
+    } else {
+      candidates = candidates.filter(k => k && k._id !== selfId);
+    }
+  }
+
+  candidates = candidates.filter(onlyConnected);
+
+  const outBro = [];
+  const outSis = [];
+  const types  = { full:[], paternal:[], maternal:[] };
+
+  const selfFatherId = fid(person) || father?._id || null;
+  const selfMotherId = mid(person) || mother?._id || null;
+
+  for (const s of candidates){
+    if (!s || s._id === selfId) continue;
+
+    const sFatherId = fid(s);
+    const sMotherId = mid(s);
+
+    const sameFather = selfFatherId && sFatherId && String(selfFatherId) === String(sFatherId);
+    const sameMother = selfMotherId && sMotherId && String(selfMotherId) === String(sMotherId);
+
+    if (sameFather && sameMother) types.full.push(s);
+    else if (sameFather)         types.paternal.push(s);
+    else if (sameMother)         types.maternal.push(s);
+
+    if ((s.role||'').trim() === 'بنت') outSis.push(s);
+    else outBro.push(s);
+  }
+
+  return { brothers: outBro, sisters: outSis, types };
+}
+
+// ---------------------------------------
+// 7) resolveGrandchildren: أحفاد الشخص
+// ---------------------------------------
+export function resolveGrandchildren(person, family, ctx){
+  if (!person || !family) return [];
+  const c = ensureCtx(family, ctx);
+  const pid = person._id;
+  if (!pid) return [];
+
+  const onlyConnected = p => !c.connectedIds || c.connectedIds.has(String(p?._id));
+
+  // 1) أبناءه المباشرون
+  const kids = [];
+  for (const p of c.byId.values()){
+    if (!onlyConnected(p)) continue;
+    const fId = p.fatherId || p.bio?.fatherId;
+    const mId = p.motherId || p.bio?.motherId;
+    if (String(fId) === String(pid) || String(mId) === String(pid)){
+      kids.push(p);
+    }
+  }
+  if (!kids.length) return [];
+
+  // 2) أحفاد = أبناء هؤلاء الأبناء
+  const gkids = [];
+  for (const k of kids){
+    for (const p of c.byId.values()){
+      if (!onlyConnected(p)) continue;
+      const fId = p.fatherId || p.bio?.fatherId;
+      const mId = p.motherId || p.bio?.motherId;
+      if (String(fId) === String(k._id) || String(mId) === String(k._id)){
+        gkids.push(p);
       }
     }
   }
 
-  // 2) لو الأب شخص آخر وله children (في نموذج آخر لاحقًا) يمكن توسيعها هنا
-  // (حاليًا لا يوجد هيكل أبناء للأب خارج الزوجات، لذلك نكتفي بأبناء الجذر)
-
-  // 3) fallback: لو الشخص هو صاحب الشجرة أو زوجة، نستخدم ما في bio فقط (وقد عالجناه في البداية)
-
-  const brothers = [];
-  const sisters  = [];
-
-  for (const { item, role: r } of allById.values()){
-    const rr = String(r || '').trim();
-    if (rr === 'ابن'){
-      brothers.push(item);
-    } else if (rr === 'بنت'){
-      sisters.push(item);
-    } else {
-      // دور غير محدّد: نضعه في الإخوة احتياطًا
-      brothers.push(item);
-    }
-  }
-
-  return { brothers, sisters };
+  const seen = new Set();
+  return gkids.filter(g=>{
+    const id = g?._id;
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
 }
 
 // ---------------------------------------
-// 7) resolveUnclesAunts: استنتاج الأعمام/العمّات/الأخوال/الخالات
+// 8) resolveUnclesAunts: الأعمام/العمّات/الأخوال/الخالات
 // ---------------------------------------
 export function resolveUnclesAunts(person, family, ctx){
   if (!person || !family) return {
-    paternalUncles: [], paternalAunts: [],
-    maternalUncles: [], maternalAunts: []
+    paternalUncles:[], paternalAunts:[],
+    maternalUncles:[], maternalAunts:[]
+  };
+  const c = ensureCtx(family, ctx);
+  const { father, mother } = getParents(person, family, c);
+
+  const getSibsOf = (p)=>{
+    if (!p) return [];
+    const gp = getParents(p, family, c);
+
+    // أولاً من childrenIds
+    let kids = gp.father?.childrenIds
+      ?.map(id=>c.byId.get(String(id)))
+      .filter(Boolean) || [];
+
+    if (!kids.length){
+      // fallback: من يشترك في نفس والديه
+      let all = Array.from(c.byId.values());
+      if (c.connectedIds && c.connectedIds.size){
+        all = all.filter(x => x && c.connectedIds.has(String(x._id)));
+      }
+
+      const pFatherId = p.fatherId || p.bio?.fatherId || gp.father?._id || null;
+      const pMotherId = p.motherId || p.bio?.motherId || gp.mother?._id || null;
+
+      kids = all.filter(x=>{
+        if (!x || x._id === p._id) return false;
+        const xFatherId = x.fatherId || x.bio?.fatherId || null;
+        const xMotherId = x.motherId || x.bio?.motherId || null;
+        const sameFather = pFatherId && xFatherId && String(pFatherId) === String(xFatherId);
+        const sameMother = pMotherId && xMotherId && String(pMotherId) === String(xMotherId);
+        return sameFather || sameMother;
+      });
+    }
+
+    return kids.filter(x=>x._id!==p._id);
   };
 
-  const fam = family;
-  const c   = ensureCtx(fam, ctx);
-  const parents = getParents(person, fam, c);
+  const fatherSibs = getSibsOf(father);
+  const motherSibs = getSibsOf(mother);
 
-  const mapList = (arr) => {
-    if (!Array.isArray(arr)) return [];
-    return arr
-      .map(x => {
-        if (!x) return null;
-        if (typeof x === 'string') return { name: x };
-        const nm = (x.name || '').trim();
-        if (!nm) return null;
-        const obj = { name: nm };
-        if (x._id) obj._id = x._id;
-        return obj;
-      })
-      .filter(Boolean);
+  const mapPeople = (arr, wantRole)=> (arr||[])
+    .filter(x=> (x.role||'').trim()===wantRole)
+    .map(x=> ({ name:x.name, _id:x._id }));
+
+  // fallback يدوي من bio
+  const manualSibsOf = (p)=>{
+    if (!p) return { bro:[], sis:[] };
+    const b = p.bio || {};
+    return {
+      bro: Array.isArray(b.siblingsBrothers) ? b.siblingsBrothers : [],
+      sis: Array.isArray(b.siblingsSisters)  ? b.siblingsSisters  : []
+    };
   };
 
-  let paternalUncles = [];
-  let paternalAunts  = [];
-  let maternalUncles = [];
-  let maternalAunts  = [];
+  const fMan = manualSibsOf(father);
+  const mMan = manualSibsOf(mother);
 
-  // أعمام/عمّات من جهة الأب
-  if (parents.father && parents.father.bio){
-    const fbio = parents.father.bio;
-    // نفترض أن siblingsBrothers للأب = أعمام، siblingsSisters = عمّات للولد
-    paternalUncles = mapList(fbio.siblingsBrothers);
-    paternalAunts  = mapList(fbio.siblingsSisters);
-  }
+  const mergeByNameOrId = (a,b)=>{
+    const out = [];
+    const seen = new Set();
+    const push = (x)=>{
+      if (!x) return;
+      const nm = String(x.name||'').trim();
+      if (!nm) return;
+      const idk = x._id ? `id:${x._id}` : `nm:${nm}`;
+      if (seen.has(idk)) return;
+      seen.add(idk);
+      out.push({ name:nm, _id:x._id });
+    };
+    (a||[]).forEach(push);
+    (b||[]).forEach(push);
+    return out;
+  };
 
-  // أخوال/خالات من جهة الأم
-  if (parents.mother && parents.mother.bio){
-    const mbio = parents.mother.bio;
-    // نفترض أن siblingsBrothers للأم = أخوال، siblingsSisters = خالات
-    maternalUncles = mapList(mbio.siblingsBrothers);
-    maternalAunts  = mapList(mbio.siblingsSisters);
-  }
+  const paternalUncles = mergeByNameOrId(mapPeople(fatherSibs,'ابن'), fMan.bro);
+  const paternalAunts  = mergeByNameOrId(mapPeople(fatherSibs,'بنت'), fMan.sis);
+  const maternalUncles = mergeByNameOrId(mapPeople(motherSibs,'ابن'), mMan.bro);
+  const maternalAunts  = mergeByNameOrId(mapPeople(motherSibs,'بنت'), mMan.sis);
 
   return { paternalUncles, paternalAunts, maternalUncles, maternalAunts };
 }

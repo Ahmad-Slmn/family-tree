@@ -403,167 +403,205 @@ function wireFiltersToggle(){
 
 /* ===== التهيئة العامة للبحث ===== */
 export function init(ctx){
-  mountAdvancedFilters(); wireFiltersToggle();
+  mountAdvancedFilters(); 
+  wireFiltersToggle();
 
-  ctx.dom.searchInput=byId('quickSearch');
-  ctx.dom.suggestBox=byId('searchSuggestions');
+  const dom = ctx.dom || (ctx.dom = {});
+  const input = dom.searchInput = byId('quickSearch');
+  const box   = dom.suggestBox  = byId('searchSuggestions');
+  const btn   = byId('searchBtn');
+  const clearBtn = byId('clearQuick');
 
-  // إغلاق قائمة الاقتراحات وتحديث aria
-  const closeSuggestions = ()=>{
-    ctx.dom.suggestBox?.classList.remove('show');
-    ctx.dom.searchInput?.setAttribute('aria-expanded','false');
+  const setExpanded = v => input?.setAttribute('aria-expanded', v ? 'true' : 'false');
+  const closeSug    = () => { box?.classList.remove('show'); setExpanded(false); };
+  const showSug     = q => { renderSuggestions(buildSuggestions(q), dom); setExpanded(box?.classList.contains('show')); };
+
+  const syncClear = () => {
+    if(!input || !clearBtn) return;
+    if(input.value.trim()) clearBtn.removeAttribute('hidden');
+    else clearBtn.setAttribute('hidden','');
   };
 
-  const searchBtn = byId('searchBtn');
-
-  searchBtn?.addEventListener('pointerdown', e => e.preventDefault());
-
-  searchBtn?.addEventListener('click', ()=>{
-    ctx.dom.searchInput?.focus();
-    const q = (ctx.dom.searchInput?.value || '').trim();
+  btn?.addEventListener('pointerdown', e => e.preventDefault());
+  btn?.addEventListener('click', ()=>{
+    input?.focus();
+    const q = (input?.value || '').trim();
     if(!q) return;
 
-    const isOpen = ctx.dom.suggestBox?.classList.contains('show');
-
-    if(isOpen){
-      closeSuggestions();
-      return;
-    }
-
-    renderSuggestions(buildSuggestions(q), ctx.dom);
-    ctx.dom.searchInput?.setAttribute(
-      'aria-expanded',
-      ctx.dom.suggestBox?.classList.contains('show') ? 'true' : 'false'
-    );
+    if(box?.classList.contains('show')) closeSug();
+    else showSug(q);
   });
 
-
-  window.addEventListener('keydown',e=>{
+  window.addEventListener('keydown', e=>{
     if((e.ctrlKey||e.metaKey) && (e.key||'').toLowerCase()==='k'){
-      e.preventDefault();
-      ctx.dom.searchInput?.focus();
-      ctx.dom.searchInput?.select();
+      e.preventDefault(); input?.focus(); input?.select();
     }
   });
 
-  const clearQuickBtn=byId('clearQuick');
-const syncQuickClear=()=>{
-  if(!ctx.dom.searchInput||!clearQuickBtn) return;
-  const has=!!(ctx.dom.searchInput.value&&ctx.dom.searchInput.value.trim());
-  if(has) clearQuickBtn.removeAttribute('hidden');
-  else clearQuickBtn.setAttribute('hidden','');
-};
-
-  clearQuickBtn?.addEventListener('click',()=>{
-    if(!ctx.dom.searchInput) return;
-    ctx.dom.searchInput.value='';
+  clearBtn?.addEventListener('click', ()=>{
+    if(!input) return;
+    input.value='';
     setState({search:''});
     localStorage.removeItem('searchText');
-    renderSuggestions([],ctx.dom);
-    ctx.dom.searchInput.setAttribute('aria-expanded','false');
-    syncQuickClear();
-    ctx.dom.searchInput.focus();
+    renderSuggestions([], dom);
+    setExpanded(false);
+    syncClear();
+    input.focus();
   });
-  ctx.dom.searchInput?.addEventListener('input',syncQuickClear);
-  syncQuickClear();
 
-  const savedSearch=(localStorage.getItem('searchText')||'').trim();
-  if(savedSearch && ctx.dom.searchInput){
-    ctx.dom.searchInput.value=savedSearch;
-    setState({search:savedSearch});
-    syncQuickClear();
+  syncClear();
+  input?.addEventListener('input', syncClear);
+
+  const saved = (localStorage.getItem('searchText')||'').trim();
+  if(saved && input){
+    input.value = saved;
+    setState({search:saved});
+    syncClear();
   }
 
-  ctx.dom.searchInput?.addEventListener('focus',()=>{
-    const q=ctx.dom.searchInput.value||'';
-    if(!q.trim()) return;
-    renderSuggestions(buildSuggestions(q),ctx.dom);
-    if(ctx.dom.suggestBox)
-      ctx.dom.searchInput.setAttribute('aria-expanded',ctx.dom.suggestBox.classList.contains('show')?'true':'false');
-  });
-  ctx.dom.searchInput?.addEventListener('blur',()=>{
-    ctx.dom.suggestBox?.classList.remove('show');
-    ctx.dom.searchInput?.setAttribute('aria-expanded','false');
+  input?.addEventListener('focus', ()=>{
+    const q=input.value||'';
+    if(q.trim()) showSug(q);
   });
 
-  let _qTimer=null;
-  const debounceRun=(fn,ms=150)=>{ if(_qTimer) clearTimeout(_qTimer); _qTimer=setTimeout(fn,ms); };
+  input?.addEventListener('blur', closeSug);
 
-  ctx.dom.searchInput?.addEventListener('input',e=>{
+  let tmr=null;
+  const debounce = (fn,ms=150)=>{
+    if(tmr) clearTimeout(tmr);
+    tmr=setTimeout(fn,ms);
+  };
+
+  input?.addEventListener('input', e=>{
     const q=e.target.value||'';
     setState({search:q});
     localStorage.setItem('searchText',q);
-    debounceRun(()=>{
-      renderSuggestions(buildSuggestions(q),ctx.dom);
-      if(ctx.dom.suggestBox)
-        ctx.dom.searchInput.setAttribute('aria-expanded',ctx.dom.suggestBox.classList.contains('show')?'true':'false');
-    },150);
+    debounce(()=>showSug(q),150);
   });
 
-  ctx.dom.searchInput?.addEventListener('keydown',e=>{
-    if(e.key==='Escape' || e.key==='Enter'){
-      closeSuggestions();
-    }
+  input?.addEventListener('keydown', e=>{
+    if(e.key==='Escape' || e.key==='Enter') closeSug();
   });
 
+  /* ===== اختيار اقتراح (آمن للمس/التمرير) ===== */
+  const selectItem = it=>{
+    if(!it) return;
 
-  ctx.dom.suggestBox?.addEventListener('pointerdown',e=>{
-    const it=e.target.closest('.item'); if(!it) return;
-    e.preventDefault();
+    const id   = it.dataset.id   || '';
+    const name = it.dataset.name || '';
+    const role = it.dataset.role || '';
+    const display = role ? `${name} (${role})` : name;
 
-    const id=it.dataset.id||'',name=it.dataset.name||'',role=it.dataset.role||'';
-    const displayName=role?`${name} (${role})`:name;
-
-    if(ctx.dom.searchInput){
-      ctx.dom.searchInput.value=displayName;
-      setState({search:displayName});
-      localStorage.setItem('searchText',displayName);
+    if(input){
+      input.value = display;
+      setState({search:display});
+      localStorage.setItem('searchText',display);
     }
 
-    ctx.dom.suggestBox.classList.remove('show');
-    ctx.dom.searchInput?.setAttribute('aria-expanded','false');
+    closeSug();
+    input?.blur();
+    if(!id) return;
 
-    if(!id){ctx.dom.searchInput?.focus();return;}
+    const prevFilters = getState().filters || {};
+    const panel=byId('advFilters'), fbtn=byId('filtersToggle');
+    const wasOpen   = !!panel?.classList.contains('open');
+    const storedOpen= localStorage.getItem('advFiltersOpen');
 
-    const prevFilters=getState().filters||{};
     setState({filters:{role:'',clan:'',birthFrom:'',birthTo:''}});
     ctx.redrawUI?.();
+
     requestAnimationFrame(()=>{
       ctx.bus.emit('ui:openPersonById',{id,force:true});
       setState({filters:prevFilters});
-      ctx.dom.searchInput?.focus();
-    });
-  });
 
-  // تطبيع مسبق للأشخاص (مرة أولى)
-  const walkCache=(p)=>{
+      if(panel){
+        panel.classList.toggle('open', wasOpen);
+        panel.style.maxHeight = wasOpen ? panel.scrollHeight+'px' : '0px';
+      }
+
+      if(fbtn){
+        fbtn.setAttribute('aria-expanded', String(wasOpen));
+        const txt=fbtn.querySelector('.btn-text');
+        if(txt) txt.textContent = wasOpen ? 'إخفاء الفلاتر' : 'إظهار الفلاتر';
+      }
+
+      if(storedOpen!=null) localStorage.setItem('advFiltersOpen', storedOpen);
+    });
+  };
+
+  /* ===== دعم اللمس بدون نقر خاطئ ===== */
+  if(box){
+    let pid=null, sx=0, sy=0, moved=false, target=null;
+    const TH=8;
+
+    const reset=()=>{ pid=null; moved=false; target=null; };
+
+    box.addEventListener('pointerdown', e=>{
+      const it = e.target.closest('.item');
+      if(!it) return;
+
+      if(e.pointerType==='touch'){
+        pid=e.pointerId;
+        sx=e.clientX; sy=e.clientY;
+        moved=false;
+        target=it;
+        return;
+      }
+
+      e.preventDefault();
+      selectItem(it);
+    });
+
+    box.addEventListener('pointermove', e=>{
+      if(pid!==e.pointerId) return;
+      if(Math.abs(e.clientX-sx)>TH || Math.abs(e.clientY-sy)>TH) moved=true;
+    },{passive:true});
+
+    box.addEventListener('pointerup', e=>{
+      if(pid!==e.pointerId) return;
+      if(!moved){
+        const it=e.target.closest('.item') || target;
+        if(it) selectItem(it);
+      }
+      reset();
+    });
+
+    box.addEventListener('pointercancel', reset);
+  }
+
+  /* ===== تطبيع مسبق + كسول ===== */
+  const walk = p=>{
     if(!p) return;
     cacheNorm(p);
-    (p.children||[]).forEach(walkCache);
-    (p.wives||[]).forEach(walkCache);
+    (p.children||[]).forEach(walk);
+    (p.wives||[]).forEach(walk);
   };
-  const iterateTops=(f)=>{
-    const tops=[...(Array.isArray(f?.ancestors)?f.ancestors:[]),f?.father,f?.rootPerson,...(f?.wives||[])].filter(Boolean);
-    tops.forEach(walkCache);
-  };
-  const fams=Model.getFamilies();
-  Object.keys(fams).forEach(k=>iterateTops(fams[k]));
 
-  // تطبيع كسول عند الخمول (نفس النتيجة، حمل أقل)
+  const iterate = f=>{
+    const tops=[...(Array.isArray(f?.ancestors)?f.ancestors:[]), f?.father, f?.rootPerson, ...(f?.wives||[])].filter(Boolean);
+    tops.forEach(walk);
+  };
+
+  const fams=Model.getFamilies();
+  Object.keys(fams).forEach(k=>iterate(fams[k]));
+
   if('requestIdleCallback' in window){
     requestIdleCallback(()=>{
       const fams=Model.getFamilies();
-      Object.keys(fams).forEach(k=>iterateTops(fams[k]));
+      Object.keys(fams).forEach(k=>iterate(fams[k]));
     },{timeout:1500});
   }
 
-  // فتح بطاقة شخص بالمعرّف
-  ctx.bus.on('ui:openPersonById',({id})=>{
+  /* ===== فتح بطاقة شخص ===== */
+  ctx.bus.on('ui:openPersonById', ({id})=>{
     if(!id) return;
     ctx.redrawUI?.();
     ctx.TreeUI?.refreshAvatarById?.(id);
-    if(typeof ctx?.onShowDetails==='function') ctx.onShowDetails(id);
-    else ctx.bus.emit('person:open',{person:{_id:id}});
+
+    if(typeof ctx?.onShowDetails==='function')
+      ctx.onShowDetails(id);
+    else
+      ctx.bus.emit('person:open',{person:{_id:id}});
   });
 
   return { cacheNorm, updatePersonEverywhere };
