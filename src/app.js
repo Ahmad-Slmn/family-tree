@@ -700,51 +700,86 @@ initScrollButtons();
       onSelectFamily(id);
     });
 
-    /* ===== الشريط الجانبي: فتح/إغلاق + فخ تركيز ===== */
-    const panel    = byId('sidePanel');
-    const overlay  = byId('sideOverlay');
-    const toggle   = byId('sideToggle');
-    const closeBtn = byId('sideClose');
-    let prevFocus = null;
+/* ===== الشريط الجانبي: فتح/إغلاق + فخ تركيز ===== */
+const panel   = byId('sidePanel');
+const overlay = byId('sideOverlay');
+const toggle  = byId('sideToggle');
+let prevFocus = null;
 
-    const openPanel = () => {
-      if (!panel) return;
-      prevFocus = document.activeElement;
-      panel.inert = false;
-      panel.classList.add('open');
-      panel.setAttribute('aria-hidden','false');
-      if (overlay) overlay.hidden = false;
-      if (toggle)  toggle.setAttribute('aria-expanded','true');
-      const target = panel.querySelector('.side-header h3') || panel;
-      setTimeout(() => target?.focus?.(), 0);
-      document.documentElement.style.overflow = 'hidden';
-    };
+// حفظ مكان الزر الأصلي لإرجاعه عند إغلاق اللوحة
+const toggleHomeParent = toggle ? toggle.parentNode : null;
+const toggleHomeNext   = toggle ? toggle.nextSibling : null;
 
-    const closePanel = () => {
-      if (!panel) return;
-      (toggle || document.body).focus?.();     // سحب التركيز قبل الإخفاء
-      panel.classList.remove('open');
-      panel.setAttribute('aria-hidden','true');
-      panel.inert = true;
-      if (overlay) overlay.hidden = true;
-      if (toggle)  toggle.setAttribute('aria-expanded','false');
-      try { prevFocus?.focus?.(); } catch {}
-      prevFocus = null;
-      document.documentElement.style.overflow = '';
-    };
+const openPanel = () => {
+  if (!panel) return;
+  prevFocus = document.activeElement;
+  panel.inert = false;
+  panel.classList.add('open');
+  panel.setAttribute('aria-hidden', 'false');
 
-    const togglePanel = () => {
-      if (panel?.classList.contains('open')) closePanel();
-      else openPanel();
-    };
+  if (overlay) overlay.hidden = false;
 
-    // قنوات إغلاق من باقي الوحدات
-    bus.on('side:requestClose', closePanel);
+  // نقل زر التبديل إلى رأس الشريط ليصبح جزءًا منه (غير fixed)
+  if (toggle) {
+    const header = panel.querySelector('.side-header');
+    if (header && !header.contains(toggle)) {
+      header.insertBefore(toggle, header.firstChild);
+    }
+    toggle.setAttribute('aria-expanded', 'true');
+    toggle.setAttribute('aria-label', 'إغلاق لوحة الإعدادات');
+    toggle.classList.add('close-button');
+  }
 
-    // أحداث فتح/إغلاق
-    toggle?.addEventListener('click', togglePanel);
-    closeBtn?.addEventListener('click', closePanel);
-    overlay?.addEventListener('click', closePanel);
+  const target = panel.querySelector('.side-header h3') || panel;
+  setTimeout(() => target?.focus?.(), 0);
+  document.documentElement.style.overflow = 'hidden';
+};
+
+const closePanel = () => {
+  if (!panel) return;
+
+  // سحب التركيز إلى الزر قبل الإخفاء لسهولة التنقّل بلوحة المفاتيح
+  (toggle || document.body).focus?.();
+
+  panel.classList.remove('open');
+  panel.setAttribute('aria-hidden', 'true');
+  panel.inert = true;
+
+  if (overlay) overlay.hidden = false;
+  if (overlay) overlay.hidden = true;
+
+  // إعادة الزر إلى مكانه الأصلي ليعود fixed فوق المحتوى
+  if (toggle) {
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.setAttribute('aria-label', 'فتح لوحة الإعدادات');
+    toggle.classList.remove('close-button');
+
+    if (toggleHomeParent) {
+      if (toggleHomeNext && toggleHomeNext.parentNode === toggleHomeParent) {
+        toggleHomeParent.insertBefore(toggle, toggleHomeNext);
+      } else {
+        toggleHomeParent.appendChild(toggle);
+      }
+    }
+  }
+
+  try { prevFocus?.focus?.(); } catch {}
+  prevFocus = null;
+  document.documentElement.style.overflow = '';
+};
+
+
+const togglePanel = () => {
+  if (panel?.classList.contains('open')) closePanel();
+  else openPanel();
+};
+
+// قنوات إغلاق من باقي الوحدات
+bus.on('side:requestClose', closePanel);
+
+// أحداث فتح/إغلاق: زر واحد فقط + النقر على الـ overlay
+toggle?.addEventListener('click', togglePanel);
+overlay?.addEventListener('click', closePanel);
 
     // إغلاق بـ ESC
     panel?.addEventListener('keydown', (e)=>{ if (e.key === 'Escape') closePanel(); });
@@ -775,7 +810,6 @@ const shouldCloseOnClick = (t) => {
   if (t.closest('input, select, textarea')) return false;
 
   // تُغلق عند هذه الأزرار
-  if (t.closest('#sideClose')) return true;
   if (t.closest('.theme-button')) return true;
   if (t.closest('#printBtn, #exportBtn, #statsBtn')) return true;
   if (t.closest('#shareSiteBtn, #rateSiteBtn, #sendNoteBtn, #helpBtn')) return true;

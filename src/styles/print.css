@@ -1,141 +1,157 @@
 /* ========================= print.css — أنماط الطباعة ========================= */
 
-/* اطلب من المتصفح طباعة الألوان كما هي (عند الدعم) */
-* { print-color-adjust: exact }
-
-/* تحسينات عامة للطباعة */
-@media print{
-  /* حماية العناوين من الانقسام بين الصفحات */
-  h1, h2, h3 { break-after: avoid; page-break-after: avoid; }
-  .section-title { break-after: avoid; }
-
-  /* تقليل الأيتام/الأرامل في بطاقات الأشخاص */
-  .member-card { orphans: 2; widows: 2; }
-
-  /* رفع دقة الصور وطريقة عرضها على الورق */
-  img { image-rendering: auto; }
-  .member-card img { max-width: 100% !important; height: auto !important; }
-}
+/* طلب طباعة الألوان كما هي (عند الدعم) */
+*{print-color-adjust:exact}
 
 /* ====== وضع الطباعة ====== */
-@media print {
+@media print{
 
-  /* خلفية بيضاء نظيفة للورق */
-  html, body { background: #fff !important; }
+  /* خلفية بيضاء للورق + إلغاء أي ظلال عامة */
+  html,
+  body{
+    background:#fff !important;
+    box-shadow:none !important;
+    color:var(--text-main);
+    overflow:visible !important;
+  }
 
-  /* إخفاء كل عناصر الشاشة غير الضرورية في النسخة الورقية */
+  /* إخفاء عناصر الواجهة التفاعلية التي لا داعي لها في الورق */
+  #app-splash,
   .top-bar,
-  .theme-buttons,
   #toastContainer,
-  .toast-container,
-  .suggestions,
   .modal,
   .confirm-modal,
   .form-modal,
-  .btn,
-  .controls,
-  .tree-tools,
-  .screen-only,
-  .family-item .edit-family,
-  .family-item .del-family,
-  #searchSuggestions,
-  #addFamilyBtn,
-  #exportBtn,
-  #importInput,
-  #printBtn,
-#advFilters,
+  .side-toggle,
   #sideToggle,
   #sideOverlay,
+  .side-overlay,
   #sidePanel,
-  .scroll-buttons{
-    display: none !important;
+  .side-panel,
+  .scroll-buttons,
+  .site-tagline,
+  .site-title{
+    display:none !important;
   }
 
-  /* تمديد الحاوية بعرض الصفحة */
-  .container {
-    max-width: 100% !important;
-    margin: 0 auto !important;
-    padding: 0 !important;
-    box-shadow: none !important;
-    background: #fff !important;
+  /* تهيئة رأس الصفحة في الطباعة */
+  .site-header{
+    max-width:60rem;
+    margin:1rem auto .75rem !important;
+    padding:1rem 1.5rem !important;
+    text-align:center !important;
   }
 
-  /* شجرة العائلة */
-  #familyTree {
-    justify-content: center !important;
-    align-items: flex-start !important;
-    gap: 12px !important;
-    padding: 0 !important;
+  /* إبقاء اسم العائلة كرأس واضح في الطباعة */
+  .site-subtitle{
+    margin-top:1rem !important;
   }
 
-  /* شبكات تتجنب الانقسام بين الصفحات */
-  .generation,
-  .wives-section,
-  .children-results,
-  .children-grid {
-    justify-content: center !important;
-    align-items: flex-start !important;
-    justify-items: center !important;
-    gap: 12px !important;
-    flex-wrap: wrap !important;
-    break-inside: auto !important;
-    page-break-inside: auto !important;
+  /* حماية العناوين من الانقسام بين الصفحات */
+  h1,
+  h2,
+  h3,
+  .section-title{
+    break-after:avoid-page;
+    page-break-after:avoid;
   }
 
-  .children-grid { grid-auto-rows: min-content !important; }
+  /* تحسين الصور داخل البطاقات مع الحفاظ على تصميمها */
+  img{image-rendering:auto}
+  .member-card img{
+    max-width:100% !important;
+    height:auto !important;
+  }
 
-  /* بطاقات الأشخاص والزوجات: إطار واضح، بلا ظلال */
+  /* منع انقسام العناصر المناسبة بين الصفحات (بدون #familyTree) */
   .member-card,
-  .wife-section {
-    background: #fff !important;
-    border: 1px solid #bbb !important;
-    box-shadow: none !important;
-    margin-left: auto !important;
-    margin-right: auto !important;
-    break-inside: avoid !important;
-    page-break-inside: avoid !important;
+  .wife-section,
+  .generation,
+  .wives-section{
+    break-inside:avoid;
+    page-break-inside:avoid;
   }
 
-  /* خطوط وموصلات أوضح في الطباعة (تحسين الوضوح) */
-  .connector,
-  .vertical-line,
-  .horizontal-children-line,
-  .child-connector {
-    background: #444 !important; /* أدكن لزيادة التباين */
-    opacity: 1 !important;
-  }
+  /* ================== خيارات الطباعة (تتحكم بها أصناف على الـ body) ================== */
 
-  /* منع انقسام أقسام رئيسية */
-  #familyTree > .generation:not(.wives-section) {
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-  #familyTree > .generation:not(.wives-section) + .wives-section {
-    page-break-before: always;
-  }
-  .wives-section .wife-section {
-    page-break-before: always;
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-  .wives-section .wife-section:first-child {
-    page-break-before: auto;
-  }
-
-  /* إحصاءات لا تُطبع */
-  .statsModal { display: none !important; }
-
-  /* وضع مدمج: إخفاء الحقول الثانوية لتقليل الحِبر والمساحة */
+  /* 1) وضع مبسّط – إخفاء الحقول الثانوية */
   body.print-compact .member-card .role,
   body.print-compact .member-card .dob,
   body.print-compact .member-card .counter-box,
-  body.print-compact .member-card .mini-strip {
-    display: none !important;
+  body.print-compact .member-card .mini-strip{
+    display:none !important;
   }
+
+  /* 2) إخفاء العدّادات فقط */
+  body.print-hide-counters .member-card .counter-box{
+    display:none !important;
+  }
+
+  /* 3) إخفاء الصور واستبدالها بأيقونة داخل نفس دائرة الأفتار */
+  body.print-hide-photos .member-card .avatar[data-print-avatar]{
+    position:relative;
+  }
+  body.print-hide-photos .member-card .avatar[data-print-avatar]::before{
+    content:attr(data-print-avatar);
+    position:absolute;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:2.5rem;
+    line-height:1;
+  }
+  body.print-hide-photos .member-card .avatar img{
+    visibility:hidden !important; /* نحافظ على إطار الأفتار كما هو */
+  }
+
+  /* 4) إزالة الألوان (طباعة أبيض وأسود) */
+  body.print-no-colors{
+    filter:grayscale(1) !important;
+  }
+
+  /* 5) بطاقات الشجرة فقط: إظهار شجرة العائلة وحدها */
+  body.print-cards-only *:not(#familyTree):not(#familyTree *){
+    display:none !important;
+  }
+  body.print-cards-only #familyTree{
+    display:block !important;
+  }
+
+  /* 6) كل زوجة في صفحة مستقلة تقريبًا */
+  body.print-wife-per-page #familyTree>.generation:not(.wives-section)+.wives-section{
+    page-break-before:always;
+  }
+  body.print-wife-per-page .wives-section .wife-section{
+    page-break-before:always;
+    break-inside:avoid;
+    page-break-inside:avoid;
+  }
+  body.print-wife-per-page .wives-section .wife-section:first-child{
+    page-break-before:auto;
+  }
+
+  /* 7) حجم خط أصغر للطباعة */
+  body.print-small-font{
+    font-size:.85rem;
+  }
+  
+/* 8) جديد: إخفاء الوصلات (الخطوط) بين البطاقات مع الحفاظ على المسافات */
+body.print-hide-connectors .connector,
+body.print-hide-connectors .connector::before,
+body.print-hide-connectors .connector::after,
+body.print-hide-connectors .wife-connector,
+body.print-hide-connectors .wife-connector::after,
+body.print-hide-connectors .vertical-line,
+body.print-hide-connectors .child-line{
+  visibility:hidden !important;
+}
+
+
 }
 
 /* ====== إعدادات الصفحة (A4 عموديًا) ====== */
-@page {
-  size: A4 portrait; /* W3C CSS Paged Media */
-  margin: 1.5cm;
+@page{
+  size:A4 portrait;
+  margin:1.5cm;
 }

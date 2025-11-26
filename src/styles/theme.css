@@ -36,7 +36,7 @@
   --role-fg:var(--text-main);
 
   --avatar-bg:#f3f3f3;
-  --side-overlay:rgba(0,0,0,.25);
+  --side-overlay:rgba(0,0,0,.60);
 
   /* Modal Tokens */
   --modal-bg:#fff;--modal-fg:#1a202c;--modal-muted:#555;
@@ -104,7 +104,7 @@
   --label-fg:#256c2c;
 
   --role-bg:#ecf9ef;--role-fg:#1b5e20;--avatar-bg:#eef7f0;
-  --side-overlay:rgba(0,0,0,.22);
+  --side-overlay:rgba(0,0,0,.60);
 
   --modal-bg:#fff;--modal-fg:#1b5e20;--modal-muted:#2e7d32;--modal-overlay:rgba(0,0,0,.75);
   --modal-border:#e0f2f1;--modal-shadow:0 .375rem 1.25rem rgba(0,0,0,.18);
@@ -163,7 +163,7 @@
   --label-fg:#02598f;
 
   --role-bg:#e6f4ff;--role-fg:#01579b;--avatar-bg:#edf7ff;
-  --side-overlay:rgba(0,0,0,.24);
+  --side-overlay:rgba(0,0,0,.60);
 
   --modal-bg:#fff;--modal-fg:#01579b;--modal-muted:#0277bd;--modal-overlay:rgba(0,0,0,.75);
   --modal-border:#e1f5fe;
@@ -221,7 +221,7 @@
   --label-fg:#7a2a3d;
 
   --role-bg:#ffe7ef;--role-fg:#5a2130;--avatar-bg:#ffedf4;
-  --side-overlay:rgba(0,0,0,.22);
+  --side-overlay:rgba(0,0,0,.60);
 
   --modal-bg:#fff0f5;--modal-fg:#5a2130;--modal-muted:#7a2a3d;--modal-overlay:rgba(0,0,0,.72);
   --modal-border:#ffd6e8;
@@ -298,7 +298,7 @@
   --role-bg:linear-gradient(135deg,#1b1029,#2d1347);
   --role-fg:#f9fafb;
   --avatar-bg:#221034;
-  --side-overlay:rgba(0,0,0,.5);
+  --side-overlay:rgba(0,0,0,.60);
 
   --modal-bg:#1c0f2b;
   --modal-fg:#f9fafb;
@@ -369,7 +369,7 @@
   --label-fg:#cbd5e1;
 
   --role-bg:#1c2330;--role-fg:#e5e7eb;--avatar-bg:#252a33;
-  --side-overlay:rgba(0,0,0,.45);
+  --side-overlay:rgba(0,0,0,.60);
 
   --modal-bg:#1e222a;--modal-fg:#e5e7eb;--modal-muted:#cbd5e1;--modal-overlay:rgba(0,0,0,.85);
   --modal-border:#2d3748;--modal-shadow:0 .375rem 1.25rem rgba(0,0,0,.5);

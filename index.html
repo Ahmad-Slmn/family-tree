@@ -138,17 +138,17 @@
 
     <!-- ───── الشريط الجانبي (يسار) ───── -->
     <button id="sideToggle" class="side-toggle" type="button" aria-label="فتح لوحة الإعدادات" aria-controls="sidePanel" aria-expanded="false">
-        <i class="fa-solid fa-sliders"></i>
+        <i class="fa-solid fa-sliders icon-open" aria-hidden="true"></i>
+        <i class="fa-solid fa-xmark icon-close" aria-hidden="true"></i>
     </button>
+
 
     <div id="sideOverlay" class="side-overlay" hidden></div>
     <aside id="sidePanel" class="side-panel" aria-hidden="true" aria-label="لوحة الإعدادات">
         <header class="side-header">
             <h3>الإعدادات</h3>
-            <button id="sideClose" class="close-button" type="button" aria-label="إغلاق">
-                <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-            </button>
         </header>
+
 
         <!-- 👪 العائلات -->
         <section class="side-section" id="familiesSection">
@@ -163,25 +163,29 @@
         <section class="side-section">
             <h4>عمليات</h4>
             <div class="side-grid">
-                <button id="printBtn" class="family-button" type="button" title="طباعة أو حفظ PDF">
-                    <i class="fa-solid fa-print" aria-hidden="true"></i> طباعة / PDF
+                <button id="printBtn" class="family-button" type="button" title="طباعة العائلة">
+                    <i class="fa-solid fa-print"></i>طباعة العائلة
                 </button>
-                <button id="exportBtn" class="family-button" type="button" title="تصدير JSON">
-                    <i class="fa-solid fa-download" aria-hidden="true"></i> تصدير
-                </button>
+
                 <label for="importInput" class="family-button" title="استيراد JSON" style="cursor:pointer;">
-                    <i class="fa-solid fa-upload" aria-hidden="true"></i> استيراد
+                    <i class="fa-solid fa-upload"></i> استيراد
                 </label>
                 <input id="importInput" type="file" accept="application/json" hidden />
-                <button id="statsBtn" class="family-button" type="button" title="لوحة الإحصاءات">
-                    <i class="fa-solid fa-chart-simple" aria-hidden="true"></i> إحصاءات
+
+                <button id="exportBtn" class="family-button" type="button" title="تصدير JSON">
+                    <i class="fa-solid fa-download"></i> تصدير
                 </button>
-                <button id="hardResetBtn" class="family-button danger-btn" type="button" title="تفريغ جميع البيانات (العائلات + الصور)" aria-label="تفريغ جميع البيانات: حذف العائلات والصور نهائيًا">
-                    <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
-                    حذف جميع البيانات نهائيًا
+
+                <button id="statsBtn" class="family-button" type="button" title="لوحة الإحصاءات">
+                    <i class="fa-solid fa-chart-simple"></i> إحصاءات
+                </button>
+
+                <button id="hardResetBtn" class="family-button danger-btn" type="button">
+                    <i class="fa-solid fa-triangle-exclamation"></i> حذف جميع البيانات نهائيًا
                 </button>
             </div>
         </section>
+
 
         <!-- 🎨 الثيمات -->
         <section class="side-section">

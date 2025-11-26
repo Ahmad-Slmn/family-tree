@@ -1,4 +1,3 @@
-
 // tree.js
 // ===============================
 // عرض الشجرة وبطاقات الأشخاص + البحث والفلاتر + صور IndexedDB
@@ -1648,6 +1647,33 @@ function getHierarchyRank(orderMap, p){
   return Number.MAX_SAFE_INTEGER;
 }
 
+function updatePrintButtonLabel(families = {}, selectedKey = null){
+  const printBtn = byId('printBtn');
+  if (!printBtn) return;
+
+  const fam = families && families[selectedKey];
+  const keys = Object.keys(families || {});
+  // لو أردت احتساب العائلات الظاهرة فقط:
+  // const count = keys.filter(k => families[k] && !families[k].hidden).length;
+  const count = keys.length;
+
+  // حالة: لا توجد أو عائلة واحدة فقط → النص القديم
+  if (!fam || count <= 1){
+    printBtn.innerHTML = '<i class="fa-solid fa-print"></i> طباعة العائلة';
+    printBtn.title = 'طباعة العائلة';
+    return;
+  }
+
+  // أكثر من عائلة، نضيف اسم العائلة الحالية
+  const name =
+    (fam.familyName || fam.title || fam.rootPerson?.name || '').trim();
+
+  const label = name ? `طباعة عائلة: ${name}` : 'طباعة العائلة';
+
+  printBtn.innerHTML = `<i class="fa-solid fa-print"></i> ${label}`;
+  printBtn.title = label;
+}
+
 
 // ===== رسم الشجرة الرئيسية (بحث/فلاتر/زوجات/أبناء) =====
 export function drawFamilyTree(families = {}, selectedKey = null, domRefs = {}, handlers = {}){
@@ -1785,25 +1811,29 @@ if(q){
 
   const showMotherHint = !!q;
 
-  // عنوان الشجرة
+// عنوان الشجرة
 const titleEl = (domRefs && domRefs.treeTitle) || byId('treeTitle');
 if (titleEl) {
   const full  = (fam.fullRootPersonName || '').trim();
   const short = (fam.familyName || fam.title || fam.rootPerson?.name || '').trim();
 
-  // العنوان المرئي
-  titleEl.textContent = short ? `عائلة: ${short}` : 'عائلة';
+  const label = short || full || '';
 
-  // تفاصيل كاملة عند المرور بالماوس + دعم الوصول
-  if (full) {
-    titleEl.title = full;
-    titleEl.setAttribute('aria-label', `عائلة: ${full}`);
+  // النص الظاهر
+  titleEl.textContent = label ? `عائلة: ${label}` : 'عائلة';
+
+  // نفس الشيء في title و aria-label (اسم العائلة فقط إن وجد)
+  if (label) {
+    titleEl.title = `عائلة: ${label}`;
+    titleEl.setAttribute('aria-label', `عائلة: ${label}`);
   } else {
     titleEl.removeAttribute('title');
     titleEl.removeAttribute('aria-label');
   }
 }
 
+  // تحديث نص زر الطباعة بحسب عدد العائلات واسم العائلة الحالية
+  updatePrintButtonLabel(families, selectedKey);
 
   const ancestors = orderAncestors(fam);
   const filteredAncestors = ancestors.filter(p => match(p) && passFilters(p));

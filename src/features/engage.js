@@ -38,6 +38,14 @@ function openInlineNoteModal({ onSend }){
           #noteInlineHistoryBtn:hover{background:#ffffff12;border-color:#ffffff55;transform:translateY(-2px);box-shadow:0 8px 16px rgba(0,0,0,.35);}
           #noteInlineHistoryBtn:active{transform:translateY(0);box-shadow:0 3px 8px rgba(0,0,0,.3);}
           #noteInlineClearHistory:hover{background:#ffffff10;transform:translateY(-1px);}
+          @media (max-width:23.9rem){#noteInlineOverlay .modal-box{width:96vw;padding:12px;border-radius:14px}#noteInlineOverlay h2{font-size:1.05rem}#noteInlineOverlay p{font-size:.9rem}#noteInlineText{min-height:90px;font-size:.95rem}#noteInlineHistory{max-height:180px}#noteInlineOverlay .buttons{flex-direction:column}#noteInlineSend,#noteInlineCancel,#noteInlineHistoryBtn{font-size:.95rem;padding:9px}}
+          @media (min-width:24rem) and (max-width:29.9rem){#noteInlineOverlay .modal-box{width:94vw;padding:14px}#noteInlineOverlay h2{font-size:1.1rem}#noteInlineText{min-height:100px;font-size:.97rem}#noteInlineHistory{max-height:200px}#noteInlineOverlay .buttons{flex-direction:column}}
+          @media (min-width:30rem) and (max-width:39.9rem){#noteInlineOverlay .modal-box{width:min(520px,92vw);padding:16px}#noteInlineOverlay h2{font-size:1.15rem}#noteInlineText{min-height:110px}}
+          @media (min-width:40rem) and (max-width:47.9rem){#noteInlineOverlay .modal-box{width:min(540px,90vw);padding:18px}#noteInlineOverlay h2{font-size:1.2rem}#noteInlineText{min-height:120px}}
+          @media (min-width:48rem) and (max-width:63.9rem){#noteInlineOverlay .modal-box{width:min(560px,88vw);padding:18px 20px}#noteInlineOverlay h2{font-size:1.25rem}#noteInlineText{min-height:130px}}
+          @media (min-width:64rem){#noteInlineOverlay .modal-box{width:min(580px,80vw);padding:20px}#noteInlineOverlay h2{font-size:1.3rem}#noteInlineText{min-height:140px}}
+
+
         </style>
 
         <h2 style="margin:0 0 8px;">إرسال ملاحظة</h2>
@@ -368,10 +376,17 @@ function openInlineHelpModal(){
           #helpInlineOverlay .help-item,
           #helpInlineOverlay .help-list li{color:#e7e7ea; font-weight:500;}
           #helpInlineOverlay .help-item p, #helpInlineOverlay .help-item small{color:#c9c9cf;}
+          @media (max-width:23.9rem){#helpInlineOverlay .modal-box{width:96vw;max-height:88vh;padding:12px;border-radius:14px}#helpInlineOverlay .help-title{font-size:1.05rem}#helpInlineOverlay .help-search{font-size:.95rem;padding:8px 10px}#helpInlineOverlay .help-footer{flex-direction:column;align-items:flex-start}#helpInlineOverlay .help-footer button{width:100%;text-align:center}#helpInlineOverlay .help-list li{font-size:.95rem;padding:6px 22px 6px 6px}}
+          @media (min-width:24rem) and (max-width:29.9rem){#helpInlineOverlay .modal-box{width:94vw;max-height:88vh;padding:14px}#helpInlineOverlay .help-title{font-size:1.12rem}#helpInlineOverlay .help-search{font-size:.97rem}#helpInlineOverlay .help-list li{font-size:.97rem}}
+          @media (min-width:30rem) and (max-width:39.9rem){#helpInlineOverlay .modal-box{width:min(640px,94vw);padding:16px}#helpInlineOverlay .help-title{font-size:1.18rem}}
+          @media (min-width:40rem) and (max-width:47.9rem){#helpInlineOverlay .modal-box{width:min(680px,94vw);padding:18px}#helpInlineOverlay .help-title{font-size:1.22rem}}
+          @media (min-width:48rem) and (max-width:63.9rem){#helpInlineOverlay .modal-box{width:min(720px,92vw);padding:18px 20px}#helpInlineOverlay .help-title{font-size:1.26rem}}
+          @media (min-width:64rem){#helpInlineOverlay .modal-box{width:min(760px,80vw);padding:20px 22px}#helpInlineOverlay .help-title{font-size:1.3rem}}
+
         </style>
 
         <div class="help-head">
-          <h2 class="help-title"><i class="fa-solid fa-circle-info"></i>دليل سريع</h2>
+          <h2 class="help-title"><i class="fa-solid fa-circle-info"></i>دليل الاستخدام</h2>
           <button id="helpInlineClose" class="help-close" type="button">إغلاق</button>
         </div>
 
