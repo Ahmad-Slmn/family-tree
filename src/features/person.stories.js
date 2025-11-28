@@ -83,6 +83,7 @@ export function sortStories(person, mode = 'latest') {
 // ====================== واجهة القسم داخل نافذة السيرة ======================
 
 const STORY_TYPE_LABELS = {
+  general: 'عام',
   childhood: 'الطفولة',
   study: 'الدراسة',
   marriage: 'الزواج',
@@ -92,7 +93,8 @@ const STORY_TYPE_LABELS = {
 };
 
 const STORY_TYPE_OPTIONS = [
-  ['', 'كل الأنواع'],
+  ['all', 'كل الأنواع'],
+  ['general', 'عام'],
   ['childhood', 'الطفولة'],
   ['study', 'الدراسة'],
   ['marriage', 'الزواج'],
@@ -302,7 +304,7 @@ export function createStoriesSection(person, handlers = {}) {
     opt.textContent = label;
     typeFilterSelect.appendChild(opt);
   });
-  typeFilterSelect.value = '';
+  typeFilterSelect.value = 'all';
 
   const sortSelect = el('select', 'stories-sort');
   sortSelect.name = 'stories_sort';
@@ -561,33 +563,59 @@ export function createStoriesSection(person, handlers = {}) {
       head.append(titleInput, dates);
       editBox.appendChild(head);
 
-      const body = el('div', 'story-body');
+         const body = el('div', 'story-body');
       const metaRow = el('div', 'story-meta-row');
 
+      // حقل نوع القصة
       const typeSelect = el('select', 'story-type-select');
-      STORY_TYPE_OPTIONS.filter(([val]) => val !== '').forEach(
-        ([val, label]) => {
+      typeSelect.name = `story_type_${story.id}`;
+
+      const defaultOpt = el('option');
+      defaultOpt.value = '';
+      defaultOpt.textContent = 'عام';
+      typeSelect.appendChild(defaultOpt);
+
+        STORY_TYPE_OPTIONS
+        .filter(([val]) => val && val !== 'all') // استبعاد القيمة الفارغة و"كل الأنواع"
+        .forEach(([val, label]) => {
           const opt = el('option');
           opt.value = val;
           opt.textContent = label;
           typeSelect.appendChild(opt);
-        }
-      );
-      typeSelect.value = original.type || '';
-      typeSelect.name = `story_type_${story.id}`;
+        });
 
+      typeSelect.value = original.type || '';
+
+          const typeField = el('div', 'story-meta-field');
+      const typeLabelBox = el('div', 'story-meta-label');
+      typeLabelBox.innerHTML = '<span class="story-meta-icon">🏷️</span> نوع القصة';
+      typeField.append(typeLabelBox, typeSelect);
+
+      // حقل تاريخ الحدث
       const eventInput = el('input');
       eventInput.type = 'date';
       eventInput.name = `story_event_${story.id}`;
       eventInput.value = original.eventDate || '';
 
+      const eventField = el('div', 'story-meta-field');
+      const eventLabel = el('div', 'story-meta-label');
+      eventLabel.innerHTML = '<span class="story-meta-icon">📅</span> تاريخ الحدث';
+      eventField.append(eventLabel, eventInput);
+
+      // حقل المكان
       const placeInput = el('input');
       placeInput.type = 'text';
       placeInput.name = `story_place_${story.id}`;
       placeInput.placeholder = 'المكان (مدينة / دولة / حيّ)...';
       placeInput.value = original.place;
 
-      metaRow.append(typeSelect, eventInput, placeInput);
+      const placeField = el('div', 'story-meta-field');
+      const placeLabel = el('div', 'story-meta-label');
+      placeLabel.innerHTML = '<span class="story-meta-icon">📍</span> المكان';
+      placeField.append(placeLabel, placeInput);
+
+      metaRow.append(typeField, eventField, placeField);
+
 
       const textArea = el('textarea', 'story-textarea');
       textArea.rows = 5;
@@ -603,8 +631,9 @@ export function createStoriesSection(person, handlers = {}) {
       const tagsInput = el('input');
       tagsInput.type = 'text';
       tagsInput.name = `story_tags_${story.id}`;
-      tagsInput.placeholder =
-        'وسوم القصة (افصل بينها بفواصل مثل: الطفولة, الدراسة, طرائف)';
+            tagsInput.placeholder =
+        'وسوم القصة (افصل بينها بفواصل مثل: عام, الطفولة, الدراسة, طرائف)';
+
       tagsInput.value = original.tags.join(', ');
 
       const imagesBlock = el('div', 'story-images-block');
