@@ -264,7 +264,9 @@ const dom = {
   pendingPhoto: null,
   familyButtons: null, themeButtons: null, closeModalBtn: null, toastContainer: null,
   familyTree: null, treeTitle: null, bioModal: null, modalName: null, modalRole: null, modalContent: null,
-  searchInput: null, suggestBox: null, activeFamily: null
+  searchInput: null, suggestBox: null, activeFamily: null,
+   bioModeSelect: null,
+  bioSectionsContainer: null
 };
 
 /* =========================
@@ -343,8 +345,10 @@ function initScrollButtons(){
 const handlers = {
   showSuccess, showInfo, showWarning, showError, highlight,
   getSearch: () => (getState().search || ''),
-  getFilters: () => (getState().filters || {})
+  getFilters: () => (getState().filters || {}),
+  onUpdateStories  // NEW: تمرير هاندلر القصص إلى واجهة الشجرة
 };
+
 
 /* =========================
    رسم الواجهة
@@ -509,6 +513,55 @@ function onModalSave(key, familyObj) {
   syncActiveFamilyUI();
 }
 
+/* حفظ القصص والمذكّرات لشخص معيّن */
+function onUpdateStories(personId, stories) {
+  const famKey = Model.getSelectedKey();
+  const fam = Model.getFamilies()[famKey];
+  if (!fam || !personId) return;
+
+  // ابحث عن الشخص داخل العائلة الحالية
+  const person = findPersonByIdInFamily(fam, personId);
+  if (!person) return;
+
+  // ضمان أن القصص مصفوفة
+  if (!Array.isArray(stories)) stories = [];
+
+  // احفظ القصص على الشخص نفسه مع كل الحقول الجديدة
+  person.stories = stories.map(s => {
+    const now       = new Date().toISOString();
+    const createdAt = s.createdAt || now;
+    const updatedAt = s.updatedAt || createdAt;
+
+    return {
+      id: s.id || (crypto?.randomUUID?.() || ('s_' + Math.random().toString(36).slice(2))),
+
+      // الحقول الأساسية
+      title: String(s.title || '').trim(),
+      text:  String(s.text  || '').trim(),
+      images: Array.isArray(s.images) ? s.images.slice() : [],
+
+      // الحقول الإضافية (الجديدة)
+      type: (s.type || '').trim(),                 // childhood / study / ...
+      eventDate: s.eventDate || null,
+      place: (s.place || '').trim(),
+      tags: Array.isArray(s.tags) ? s.tags.map(t => String(t).trim()).filter(Boolean)
+        : [],
+      relatedPersonIds: Array.isArray(s.relatedPersonIds) ? s.relatedPersonIds.map(String)
+        : [],
+      note: (s.note || '').trim(),
+      pinned: !!s.pinned,
+
+      // التواريخ
+      createdAt,
+      updatedAt
+    };
+  });
+
+  // التزام العائلة وحفظها في IndexedDB
+  Model.commitFamily(famKey);
+}
+
+
 /* إعادة تسمية سريعة داخل البطاقة */
 async function onInlineRename(personId, patch) {
   const famKey = Model.getSelectedKey();
@@ -553,10 +606,12 @@ if (patch.role != null) {
 /* عرض السيرة وتهيئة أدوات الصورة */
 async function onShowDetails(person, opts = {}) {
   if (!dom.bioModal || !dom.modalContent) {
-    dom.bioModal = byId('bioModal');
-    dom.modalName = byId('modalName');
-    dom.modalRole = byId('modalRole');
-    dom.modalContent = byId('modalContent');
+    dom.bioModal       = byId('bioModal');
+    dom.modalName      = byId('modalName');
+    dom.modalRole      = byId('modalRole');
+    dom.modalContent   = byId('modalContent');
+    dom.bioModeSelect  = byId('bioModeSelect');        // NEW
+    dom.bioSectionsContainer = byId('bioSectionsContainer'); // NEW
   }
   if (!dom.bioModal || !dom.modalContent) return;
 
@@ -593,7 +648,9 @@ async function onShowDetails(person, opts = {}) {
 
   const bio = Object.assign({}, personObj.bio || {});
   bio.fullName = (bio.fullName || bio.fullname || personObj.name || '').toString();
-  dom.modalName.textContent = (personObj.name ? String(personObj.name).trim() : '') || (bio.fullName || '');
+
+  dom.modalName.textContent =
+    (personObj.name ? String(personObj.name).trim() : '') || (bio.fullName || '');
 
   dom.pendingPhoto = null;
 
@@ -601,20 +658,86 @@ async function onShowDetails(person, opts = {}) {
   bus.emit('person:open', { person: personObj });
 
   dom.modalRole.textContent = personObj.role || '';
-  dom.modalContent.textContent = '';
 
-TreeUI.renderBioSections(dom.modalContent, bio, personObj, fam, {
-  ...handlers,
-  onShowDetails, onInlineRename, onEditFamily, onDeleteFamily, onModalSave
-});
+  // لا نمسح modalContent كله حتى لا نحذف شريط الـ <select>
+  const modeSelect = dom.bioModeSelect || byId('bioModeSelect');
+  const sectionsContainer = dom.bioSectionsContainer || byId('bioSectionsContainer');
+  if (sectionsContainer) sectionsContainer.innerHTML = '';
 
-  if (personObj?._id) location.hash = `#person=${encodeURIComponent(personObj._id)}`;
+  // 1) قراءة الأوضاع المتاحة من TreeUI وملء القائمة تلقائيًا (ديناميكيًا حسب الشخص)
+  let modes = [];
+  if (typeof TreeUI.getAvailableBioModes === 'function') {
+    try {
+      modes = TreeUI.getAvailableBioModes(bio, personObj, fam) || [];
+    } catch {
+      modes = [];
+    }
+  }
+
+
+  if (modeSelect) {
+    modeSelect.innerHTML = '';
+    modes.forEach(m => {
+      if (!m || !m.value) return;
+      const opt = document.createElement('option');
+      opt.value = m.value;
+      opt.textContent = m.label || m.value;
+      modeSelect.appendChild(opt);
+    });
+  }
+
+  // 2) تحديد الوضع الافتراضي للسيرة
+  let mode = 'summary';
+  if (Array.isArray(modes) && modes.length) {
+    const preferred = modes.find(m => m.value === 'summary') || modes[0];
+    if (preferred && preferred.value) mode = preferred.value;
+  }
+
+  if (modeSelect) {
+    modeSelect.value = mode;
+  }
+
+  // 3) دالة إعادة الرسم حسب الوضع الحالي
+  const rerenderBio = () => {
+    const target = dom.bioSectionsContainer || byId('bioSectionsContainer') || dom.modalContent;
+    if (!target) return;
+
+    target.innerHTML = '';
+    TreeUI.renderBioSections(target, bio, personObj, fam, {
+      ...handlers,
+      onShowDetails,
+      onInlineRename,
+      onEditFamily,
+      onDeleteFamily,
+      onModalSave,
+      // تمرير وضع السيرة الحالي
+      bioMode: mode
+    });
+  };
+
+  // 4) ربط تغيير select بإعادة الرسم
+  if (modeSelect) {
+    modeSelect.onchange = () => {
+      mode = modeSelect.value || 'summary';
+      rerenderBio();
+    };
+  }
+
+  // 5) أول رسم
+  rerenderBio();
+
+  if (personObj?._id) {
+    location.hash = `#person=${encodeURIComponent(personObj._id)}`;
+  }
 
   FeaturePhotos.updatePhotoControls(dom);
 
   ModalManager.open(dom.bioModal);
-  if (!opts.silent) showSuccess(`تم عرض تفاصيل ${highlight(personObj.name || 'هذا الشخص')}`);
+  if (!opts.silent) {
+    showSuccess(`تم عرض تفاصيل ${highlight(personObj.name || 'هذا الشخص')}`);
+  }
 }
+
 
 /* تمرير الأحداث كواجهات للميزات */
 handlers.onHideFamily   = (key) => FeatureVisibility.onHideFamily(key, {
@@ -676,6 +799,8 @@ setSplashProgress(55, 'تحضير الواجهة…');
     dom.modalName      = byId('modalName');
     dom.modalRole      = byId('modalRole');
     dom.modalContent   = byId('modalContent');
+    dom.bioModeSelect      = byId('bioModeSelect');
+dom.bioSectionsContainer = byId('bioSectionsContainer');
     dom.searchInput    = byId('quickSearch');
     dom.suggestBox     = byId('searchSuggestions');
     dom.activeFamily   = byId('activeFamily');

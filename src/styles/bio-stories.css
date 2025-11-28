@@ -1,0 +1,969 @@
+/* ===== bio-stories.css قسم القصص والمذكّرات ===== */
+.bio-section-stories{
+  margin-top:1rem;
+  padding:1rem 1.1rem 1.2rem;
+  background:linear-gradient(135deg,
+    color-mix(in oklab,var(--panel-bg) 80%,#fff) 0%,
+    var(--card-bg) 55%);
+  border:1px solid color-mix(in oklab,var(--surface-border) 80%,transparent);
+  border-radius:1rem;
+  box-shadow:0 .3rem 1rem rgba(0,0,0,.06);
+}
+.bio-section-stories > h3{
+  margin:0 0 .55rem;
+  font-size:1.02rem;
+  font-weight:800;
+  color:var(--title-color);
+}
+
+/* رأس القسم (شريط الأدوات) */
+.stories-header{margin-bottom:.35rem;}
+.stories-tools{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:.6rem;
+  flex-wrap:wrap;
+}
+.stories-tools-left,
+.stories-tools-right{
+  display:flex;
+  align-items:center;
+}
+.stories-tools-left{flex-wrap:wrap;gap:.5rem;}
+
+/* قائمة الترتيب */
+.stories-sort{
+  min-width:9.5rem;
+  padding:.3rem .75rem;
+  border-radius:.6rem;
+  border:1px solid var(--surface-border);
+  background:var(--card-bg);
+  font-size:.9rem;
+  color:var(--text-main);
+  box-shadow:0 .12rem .3rem rgba(0,0,0,.04);
+  cursor:pointer;
+  outline:none!important;
+  transition:border-color .16s,box-shadow .16s,background-color .16s,transform .12s;
+}
+.stories-sort:hover{
+  border-color:color-mix(in oklab,var(--modal-primary) 55%,var(--surface-border));
+  background:color-mix(in oklab,var(--card-bg) 90%,#fff);
+  transform:translateY(-1px);
+}
+.stories-sort:focus-visible{
+  border-color:var(--modal-primary);
+  box-shadow:0 0 0 .09rem color-mix(in oklab,var(--modal-primary) 45%,transparent);
+}
+
+/* فلتر نوع القصة */
+.stories-type-filter{
+  min-width:8.5rem;
+  padding:.3rem .65rem;
+  border-radius:.6rem;
+  border:1px solid var(--surface-border);
+  background:var(--card-bg);
+  font-size:.84rem;
+  color:var(--text-main);
+  box-shadow:0 .12rem .3rem rgba(0,0,0,.04);
+  cursor:pointer;
+  outline:none!important;
+  transition:border-color .16s,box-shadow .16s,background-color .16s,transform .12s;
+}
+.stories-type-filter:hover{
+  border-color:color-mix(in oklab,var(--modal-primary) 45%,var(--surface-border));
+  background:color-mix(in oklab,var(--card-bg) 92%,#fff);
+  transform:translateY(-1px);
+}
+.stories-type-filter:focus-visible{
+  border-color:var(--modal-primary);
+  box-shadow:0 0 0 .09rem color-mix(in oklab,var(--modal-primary) 45%,transparent);
+}
+
+/* مبدّل وضع القصص (إن استخدم لاحقًا) */
+.stories-mode{
+  display:inline-flex;
+  align-items:center;
+  gap:.15rem;
+  padding:.12rem;
+  border-radius:999px;
+  background:color-mix(in oklab,var(--panel-bg) 92%,#fff);
+  box-shadow:0 .06rem .25rem rgba(0,0,0,.05);
+}
+.stories-mode-btn{
+  border:0;
+  background:transparent;
+  padding:.16rem .7rem;
+  border-radius:999px;
+  font-size:.8rem;
+  cursor:pointer;
+  color:color-mix(in oklab,var(--text-muted) 90%,var(--text-main));
+  transition:background .14s,color .14s,transform .12s;
+}
+.stories-mode-btn.is-active{
+  background:var(--modal-primary);
+  color:var(--modal-fg);
+  transform:translateY(-1px);
+}
+
+/* ميتا الوصف */
+.stories-meta{
+  margin:-.15rem 0 .65rem;
+  font-size:.8rem;
+  color:color-mix(in oklab,var(--text-muted) 92%,var(--text-main));
+  opacity:.98;
+}
+
+/* زر إضافة قصة */
+.stories-add-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:.3rem;
+  padding:.35rem .9rem;
+  border-radius:.7rem;
+  border:none;
+  background:var(--modal-primary);
+  color:var(--modal-primary-fg,var(--modal-fg));
+  font-size:.9rem;
+  font-weight:600;
+  cursor:pointer;
+  box-shadow:0 .18rem .45rem rgba(0,0,0,.16);
+  transition:transform .12s,box-shadow .12s,background-color .18s,opacity .12s;
+}
+.stories-add-btn:hover{
+  transform:translateY(-1px);
+  box-shadow:0 .28rem .7rem rgba(0,0,0,.18);
+  background:color-mix(in oklab,var(--modal-primary) 88%,#fff);
+}
+.stories-add-btn:active{
+  transform:translateY(0);
+  box-shadow:0 .14rem .35rem rgba(0,0,0,.16);
+  opacity:.9;
+}
+
+/* قائمة القصص + حالة فارغة */
+.stories-list{
+  display:flex;
+  flex-direction:column;
+  gap:.85rem;
+}
+.stories-empty{
+  padding:1rem 1.1rem;
+  border-radius:.8rem;
+  border:1px dashed color-mix(in oklab,var(--surface-border) 80%,transparent);
+  background:color-mix(in oklab,var(--panel-bg) 88%,#fff);
+  font-size:.9rem;
+  color:color-mix(in oklab,var(--text-muted) 90%,var(--text-main));
+  text-align:center;
+}
+
+/* كرت القصة */
+.story-card{
+  background:var(--card-bg);
+  border-radius:.9rem;
+  border:1px solid var(--surface-border);
+  box-shadow:0 .22rem .7rem rgba(0,0,0,.05);
+  padding:.8rem .9rem .85rem;
+  display:flex;
+  flex-direction:column;
+  gap:.6rem;
+  transition:box-shadow .16s,transform .16s,border-color .16s;
+  max-height:20rem;
+  overflow-y:auto;
+}
+.story-card:hover{
+  border-color:color-mix(in oklab,var(--modal-primary) 40%,var(--surface-border));
+  box-shadow:0 .32rem 1rem rgba(0,0,0,.08);
+  transform:translateY(-1px);
+}
+
+.story-card-top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:.5rem;
+}
+
+.story-card-index{
+  font-size:.8rem;
+  font-weight:700;
+  color:color-mix(in oklab,var(--text-muted) 80%,var(--text-main));
+  background:color-mix(in oklab,var(--panel-bg) 96%,#fff);
+  padding:.12rem .6rem;
+  border-radius:999px;
+  border:1px solid color-mix(in oklab,var(--surface-border) 80%,transparent);
+  margin-bottom:.15rem;
+}
+/* نفس الكرت لكن في وضع التعديل فقط يكون له حدّ ارتفاع + سكرول داخلي */
+.story-card--edit{
+  max-height:20rem;   /* غيّر الرقم لما يناسبك: 20–26rem مثلاً */
+  overflow-y:auto;
+}
+
+/* شارة قصة مميّزة */
+.story-pinned-badge{
+  align-self:flex-start;
+  font-size:.75rem;
+  font-weight:700;
+  color:#f7ca3e;
+  background:rgba(247,202,62,.1);
+  border-radius:999px;
+  padding:.1rem .6rem;
+  border:1px solid rgba(247,202,62,.45);
+  display:inline-flex;
+  align-items:center;
+  gap:.25rem;
+}
+.story-pinned-badge::before{
+  content:"★";
+  font-size:.85rem;
+}
+
+/* وضع المعاينة / التحرير */
+.story-preview{
+  display:flex;
+  flex-direction:column;
+  gap:.25rem;
+}
+.story-preview-title{
+  font-weight:700;
+  font-size:.96rem;
+  color:var(--title-color);
+}
+.story-preview-meta{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.4rem;
+  font-size:.78rem;
+  color:var(--text-muted);
+  margin:.1rem 0 .2rem;
+}
+
+/* بادجات المكان / السنة / النوع */
+.story-preview-badges{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.3rem;
+  margin:.1rem 0 .15rem;
+}
+.story-badge{
+  display:inline-flex;
+  align-items:center;
+  padding:.06rem .5rem;
+  border-radius:999px;
+  font-size:.74rem;
+  border:1px solid color-mix(in oklab,var(--surface-border) 80%,transparent);
+  background:color-mix(in oklab,var(--panel-bg) 94%,#fff);
+  color:color-mix(in oklab,var(--text-muted) 85%,var(--text-main));
+}
+.story-badge--place::before{
+  content:"📍";
+  margin-inline-end:.25rem;
+}
+.story-badge--year::before{
+  content:"📅";
+  margin-inline-end:.25rem;
+}
+.story-badge--type::before{
+  content:"🏷️";
+  margin-inline-end:.25rem;
+}
+
+/* شريط طول القصة */
+.story-length-chip{
+  display:inline-flex;
+  align-items:center;
+  gap:.3rem;
+  padding:.04rem .45rem;
+  border-radius:999px;
+  background:color-mix(in oklab,var(--panel-bg) 95%,#fff);
+  border:1px solid color-mix(in oklab,var(--surface-border) 80%,transparent);
+}
+.story-length-meter{
+  width:44px;
+  height:4px;
+  border-radius:999px;
+  background:color-mix(in oklab,var(--panel-bg) 88%,#fff);
+  overflow:hidden;
+}
+/* نزيل العرض واللون الافتراضيين من الشريط
+   ونتركهما للمستويات الثلاثة فقط */
+.story-length-meter-bar{
+  display:block;        /* مهم: حتى تعمل الـ width% */
+  height:100%;
+  width:0;              /* افتراضيًا صفر، ويُستبدَل في مستويات 1/2/3 */
+  border-radius:999px;
+  transform-origin:left center;
+}
+/* قصيرة */
+.story-length-meter[data-level="1"] .story-length-meter-bar{
+  width:30%;
+  background:color-mix(in oklab,#4caf50 70%,#fff); /* أخضر هادئ */
+}
+/* متوسطة */
+.story-length-meter[data-level="2"] .story-length-meter-bar{
+  width:65%;
+  background:color-mix(in oklab,#ff9800 75%,#fff); /* برتقالي */
+}
+/* طويلة */
+.story-length-meter[data-level="3"] .story-length-meter-bar{
+  width:100%;
+  background:color-mix(in oklab,#f44336 80%,#fff); /* أحمر */
+}
+
+.story-preview-meta span+span{
+  position:relative;
+  padding-inline-start:.75rem;
+}
+.story-preview-meta span+span::before{
+  content:"•";
+  position:absolute;
+  inset-inline-start:.25rem;
+  top:0;
+}
+.story-preview-text{
+  margin:0;
+  font-size:.9rem;
+  line-height:1.7;
+  color:var(--text-main)
+}
+
+/* التحرير */
+.story-edit{
+  display:flex;
+  flex-direction:column;
+  gap:.5rem;
+}
+.story-card--preview .story-edit{display:none;}
+.story-card--edit .story-preview{display:none;}
+
+/* رأس القصة في التحرير */
+.story-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:.7rem;
+}
+.story-title-input{
+  flex:1 1 auto;
+  min-width:0;
+  padding:.35rem .7rem;
+  border-radius:.6rem;
+  border:1px solid var(--surface-border);
+  background:var(--panel-bg);
+  font-size:.92rem;
+  color:var(--text-main);
+  outline:none!important;
+  transition:border-color .16s,box-shadow .16s,background-color .16s;
+}
+.story-title-input::placeholder{color:var(--text-muted);}
+.story-title-input:focus-visible{
+  border-color:var(--modal-primary);
+  box-shadow:0 0 0 .09rem color-mix(in oklab,var(--modal-primary) 40%,transparent);
+  background:var(--card-bg);
+}
+.story-dates{
+  flex:0 0 auto;
+  font-size:.8rem;
+  color:var(--text-muted);
+  white-space:nowrap;
+}
+
+/* جسم القصة */
+.story-body{
+  display:flex;
+  flex-direction:column;
+  gap:.45rem;
+}
+.story-textarea{
+  width:100%;
+  border-radius:.7rem;
+  border:1px solid var(--surface-border);
+  background:var(--panel-bg);
+  padding:.45rem .7rem;
+  font-size:.9rem;
+  color:var(--text-main);
+  outline:none!important;
+  resize:vertical;
+  transition:border-color .16s,box-shadow .16s,background-color .16s;
+}
+.story-textarea::placeholder{color:var(--text-muted);}
+.story-textarea:focus-visible{
+  border-color:var(--modal-primary);
+  box-shadow:0 0 0 .09rem color-mix(in oklab,var(--modal-primary) 40%,transparent);
+  background:var(--card-bg);
+}
+
+/* صف الحقول الإضافية: نوع القصة + تاريخ الحدث + المكان */
+.story-meta-row{
+  display:grid;
+  grid-template-columns:minmax(0,9.5rem) minmax(0,8.5rem) minmax(0,1.4fr);
+  gap:.4rem;
+  align-items:stretch;
+  margin-top:.15rem;
+}
+
+/* تنسيق عناصر صف الميتا */
+.story-meta-row select,
+.story-meta-row input[type="date"],
+.story-meta-row input[type="text"]{
+  width:100%;
+  padding:.32rem .65rem;
+  border-radius:.6rem;
+  border:1px solid var(--surface-border);
+  background:var(--panel-bg);
+  font-size:.84rem;
+  color:var(--text-main);
+  outline:none!important;
+  box-shadow:0 .06rem .18rem rgba(0,0,0,.03);
+  transition:
+    border-color .16s,
+    box-shadow .16s,
+    background-color .16s,
+    transform .12s;
+}
+.story-meta-row select::placeholder,
+.story-meta-row input[type="date"]::placeholder,
+.story-meta-row input[type="text"]::placeholder{
+  color:var(--text-muted);
+}
+
+/* تفاعلات hover / focus */
+.story-meta-row select:hover,
+.story-meta-row input[type="date"]:hover,
+.story-meta-row input[type="text"]:hover{
+  border-color:color-mix(in oklab,var(--modal-primary) 40%,var(--surface-border));
+  background:color-mix(in oklab,var(--panel-bg) 94%,#fff);
+  transform:translateY(-1px);
+  box-shadow:0 .12rem .32rem rgba(0,0,0,.06);
+}
+.story-meta-row select:focus-visible,
+.story-meta-row input[type="date"]:focus-visible,
+.story-meta-row input[type="text"]:focus-visible{
+  border-color:var(--modal-primary);
+  box-shadow:0 0 0 .09rem color-mix(in oklab,var(--modal-primary) 40%,transparent);
+  background:var(--card-bg);
+}
+
+/* حقل الوسوم في وضع التعديل */
+.story-body input[name^="story_tags_"]{
+  width:100%;
+  padding:.32rem .65rem;
+  border-radius:.6rem;
+  border:1px dashed color-mix(in oklab,var(--surface-border) 80%,transparent);
+  background:color-mix(in oklab,var(--panel-bg) 96%,#fff);
+  font-size:.84rem;
+  color:var(--text-main);
+  outline:none!important;
+  margin-top:.15rem;
+  box-shadow:0 .06rem .18rem rgba(0,0,0,.03);
+  transition:
+    border-color .16s,
+    box-shadow .16s,
+    background-color .16s,
+    transform .12s;
+}
+.story-body input[name^="story_tags_"]::placeholder{
+  color:color-mix(in oklab,var(--text-muted) 92%,var(--text-main));
+}
+.story-body input[name^="story_tags_"]:hover{
+  border-color:color-mix(in oklab,var(--modal-primary) 40%,var(--surface-border));
+  background:color-mix(in oklab,var(--panel-bg) 94%,#fff);
+  transform:translateY(-1px);
+  box-shadow:0 .12rem .32rem rgba(0,0,0,.06);
+}
+.story-body input[name^="story_tags_"]:focus-visible{
+  border-color:var(--modal-primary);
+  box-shadow:0 0 0 .09rem color-mix(in oklab,var(--modal-primary) 40%,transparent);
+  background:var(--card-bg);
+}
+
+/* الصور داخل التحرير */
+.story-images-block{
+  display:flex;
+  flex-direction:column;
+  gap:.35rem;
+}
+.story-images-empty-hint{
+  font-size:.8rem;
+  color:color-mix(in oklab,var(--text-muted) 90%,var(--text-main));
+}
+.story-images-thumbs{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.4rem;
+}
+.story-image-thumb{
+  position:relative;
+  width:72px;
+  height:72px;
+  border-radius:.6rem;
+  overflow:hidden;
+  border:1px solid var(--surface-border);
+  background:var(--panel-bg);
+  box-shadow:0 .06rem .25rem rgba(0,0,0,.08);
+}
+.story-image-thumb img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
+.story-image-thumb--preview{
+  width:64px;
+  height:64px;
+}
+
+/* معاينة الصورة (زر + إزالة) */
+.story-image-thumb-view{
+  position:absolute;
+  inset-inline-start:.18rem;
+  bottom:.18rem;
+  padding:.05rem .35rem;
+  border-radius:999px;
+  border:none;
+  background:rgba(0,0,0,.7);
+  color:#fff;
+  font-size:.65rem;
+  line-height:1.2;
+  cursor:pointer;
+  box-shadow:0 .04rem .2rem rgba(0,0,0,.4);
+}
+.story-image-thumb-view:hover{background:rgba(0,0,0,.82);}
+.story-image-thumb-remove{
+  position:absolute;
+  top:.18rem;
+  inset-inline-end:.18rem;
+  width:1.4rem;
+  height:1.4rem;
+  border-radius:999px;
+  border:none;
+  background:rgba(0,0,0,.58);
+  color:#fff;
+  font-size:.9rem;
+  line-height:1;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:0;
+  box-shadow:0 .08rem .25rem rgba(0,0,0,.35);
+}
+.story-image-thumb-remove:hover{background:rgba(0,0,0,.8);}
+
+/* زر إضافة الصور */
+.story-image-add-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:.3rem;
+  padding:.28rem .9rem;
+  border-radius:.7rem;
+  border:1px dashed color-mix(in oklab,var(--surface-border) 85%,transparent);
+  background:color-mix(in oklab,var(--panel-bg) 96%,#fff);
+  font-size:.82rem;
+  font-weight:500;
+  cursor:pointer;
+  color:color-mix(in oklab,var(--text-muted) 90%,var(--text-main));
+  box-shadow:0 .06rem .2rem rgba(0,0,0,.04);
+  transition:background-color .16s,border-color .16s,color .16s,transform .12s,box-shadow .12s;
+}
+.story-image-add-btn:hover{
+  background:color-mix(in oklab,var(--panel-bg) 92%,#fff);
+  border-color:color-mix(in oklab,var(--surface-border) 70%,transparent);
+  transform:translateY(-1px);
+  box-shadow:0 .12rem .35rem rgba(0,0,0,.08);
+}
+.story-image-add-btn:active{
+  transform:translateY(0);
+  box-shadow:0 .04rem .18rem rgba(0,0,0,.12);
+}
+.story-image-add-icon{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:1.4rem;
+  height:1.4rem;
+  border-radius:999px;
+  font-size:.9rem;
+  background:color-mix(in oklab,var(--panel-bg) 90%,#fff);
+  box-shadow:0 .06rem .2rem rgba(0,0,0,.05);
+}
+.story-image-add-text{
+  white-space:nowrap;
+  text-overflow:ellipsis;
+  overflow:hidden;
+}
+
+/* وسوم القصة */
+.story-tags-list{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.3rem;
+  margin-top:.25rem;
+}
+.story-tag-chip{
+  padding:.06rem .5rem;
+  border-radius:999px;
+  font-size:.72rem;
+  cursor:pointer;
+  border:1px solid color-mix(in oklab,var(--surface-border) 80%,transparent);
+  background:color-mix(in oklab,var(--panel-bg) 96%,#fff);
+  color:color-mix(in oklab,var(--text-muted) 88%,var(--text-main));
+  transition:background-color .14s,border-color .14s,color .14s,transform .1s;
+}
+.story-tag-chip:hover{
+  background:color-mix(in oklab,var(--panel-bg) 90%,#fff);
+  border-color:color-mix(in oklab,var(--modal-primary) 40%,var(--surface-border));
+  transform:translateY(-1px);
+}
+.story-tag-chip.is-active{
+  background:color-mix(in oklab,var(--modal-primary) 88%,#fff);
+  border-color:color-mix(in oklab,var(--modal-primary) 65%,var(--surface-border));
+  color:var(--modal-primary-fg,var(--modal-fg));
+}
+
+/* صور المعاينة داخل النص */
+.story-preview-images{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.4rem;
+  margin-top:.3rem;
+}
+
+/* زر فتح السلايد للصور */
+.story-images-slider-btn{
+  margin-top:.25rem;
+  align-self:flex-start;
+  padding:.18rem .7rem;
+  border-radius:.7rem;
+  border:1px solid color-mix(in oklab,var(--surface-border) 85%,transparent);
+  background:color-mix(in oklab,var(--panel-bg) 96%,#fff);
+  font-size:.8rem;
+  cursor:pointer;
+  color:color-mix(in oklab,var(--text-muted) 92%,var(--text-main));
+  box-shadow:0 .04rem .16rem rgba(0,0,0,.06);
+  transition:background-color .16s,border-color .16s,color .16s,transform .12s,box-shadow .12s;
+}
+.story-images-slider-btn:hover{
+  background:color-mix(in oklab,var(--panel-bg) 92%,#fff);
+  border-color:color-mix(in oklab,var(--surface-border) 70%,transparent);
+  transform:translateY(-1px);
+  box-shadow:0 .12rem .35rem rgba(0,0,0,.08);
+}
+
+/* عارض الصورة المكبّرة (overlay) بحركة ناعمة */
+.story-image-viewer-overlay{
+  position:fixed;
+  inset:0;
+  z-index:9999;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .25s ease-out;
+}
+.story-image-viewer-overlay.is-open{
+  opacity:1;
+  pointer-events:auto;
+}
+.story-image-viewer-backdrop{
+  position:absolute;
+  inset:0;
+  background:var(--modal-overlay,rgba(0,0,0,.72));
+}
+
+/* الحاوية (الديالوج) */
+.story-image-viewer-dialog{
+  position:absolute;
+  inset:12%;
+  max-width:fit-content;
+  margin:auto;
+  background:transparent;
+  box-shadow:none;
+  padding:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  opacity:0;
+  transform:scale(.96) translateY(10px);
+  transition:opacity .25s ease-out,transform .25s ease-out;
+}
+.story-image-viewer-overlay.is-open .story-image-viewer-dialog{
+  opacity:1;
+  transform:scale(1) translateY(0);
+}
+
+/* زر الإغلاق */
+.story-image-viewer-close{
+  position:absolute;
+  top:.50rem;
+  inset-inline-start:.70rem;
+  width:2rem;
+  height:2rem;
+  border-radius:999px;
+  border:none;
+  background:rgba(0,0,0,.65);
+  color:#fff;
+  font-size:1.1rem;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  line-height:1;
+  box-shadow:0 .18rem .6rem rgba(0,0,0,.55);
+  z-index:2;
+}
+.story-image-viewer-close:hover{background:rgba(0,0,0,.85);}
+
+/* الصورة داخل العارض */
+.story-image-viewer-img{
+  width:100%;
+  height:100%;
+  max-width:100%;
+  max-height:100%;
+  object-fit:contain;
+  border-radius:1.2rem;
+  box-shadow:0 .6rem 2rem rgba(0,0,0,.45);
+  transition:opacity .2s ease-out;
+}
+
+/* شريط التنقل داخل العارض */
+.story-image-viewer-nav{
+  position:absolute;
+  bottom:7%;
+  width:100%;
+  padding:0 .50rem;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  pointer-events:none;
+}
+.story-image-viewer-arrow{
+  pointer-events:auto;
+  width:2.4rem;
+  height:2.4rem;
+  border-radius:999px;
+  border:none;
+  background:rgba(0,0,0,.65);
+  color:#fff;
+  font-size:1.2rem;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  box-shadow:0 .18rem .6rem rgba(0,0,0,.55);
+}
+.story-image-viewer-arrow:disabled{
+  opacity:.35;
+  cursor:default;
+}
+.story-image-viewer-counter{
+  pointer-events:none;
+  padding:.2rem .7rem;
+  border-radius:999px;
+  background:rgba(0,0,0,.55);
+  color:#fff;
+  font-size:.8rem;
+}
+
+/* حقل العبرة / الخلاصة */
+.story-note-preview{
+  margin-top:.25rem;
+  font-size:.82rem;
+  line-height:1.6;
+  color:color-mix(in oklab,var(--text-muted) 88%,var(--text-main));
+}
+.story-note-preview strong{font-weight:700;}
+.story-note-input{
+  width:100%;
+  border-radius:.6rem;
+  border:1px solid var(--surface-border);
+  background:var(--panel-bg);
+  padding:.35rem .7rem;
+  font-size:.86rem;
+  color:var(--text-main);
+  outline:none!important;
+  resize:vertical;
+  min-height:3rem;
+  transition:border-color .16s,box-shadow .16s,background-color .16s;
+}
+.story-note-input::placeholder{color:var(--text-muted);}
+.story-note-input:focus-visible{
+  border-color:var(--modal-primary);
+  box-shadow:0 0 0 .09rem color-mix(in oklab,var(--modal-primary) 40%,transparent);
+  background:var(--card-bg);
+}
+
+/* مفتاح تثبيت القصة كمميّزة */
+.story-pin-toggle{
+  display:inline-flex;
+  align-items:center;
+  gap:.45rem;
+  margin-top:.2rem;
+  padding:.35rem .65rem;
+  border-radius:.8rem;
+  background:color-mix(in oklab,var(--panel-bg) 96%,#fff);
+  border:1px dashed color-mix(in oklab,var(--surface-border) 85%,transparent);
+  cursor:pointer;
+  font-size:.86rem;
+  color:color-mix(in oklab,var(--text-muted) 88%,var(--text-main));
+  box-shadow:0 .06rem .2rem rgba(0,0,0,.03);
+  transition:
+    background-color .16s,
+    border-color .16s,
+    box-shadow .16s,
+    transform .12s,
+    color .14s;
+}
+/* إخفاء الـ checkbox */
+.story-pin-toggle > input[type="checkbox"]{
+  position:absolute;
+  opacity:0;
+  pointer-events:none;
+}
+/* أيقونة النجمة */
+.story-pin-toggle::before{
+  content:"★";
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:1.4rem;
+  height:1.4rem;
+  border-radius:999px;
+  font-size:.9rem;
+  background:color-mix(in oklab,var(--panel-bg) 90%,#fff);
+  color:color-mix(in oklab,var(--text-muted) 88%,var(--text-main));
+  box-shadow:0 .06rem .2rem rgba(0,0,0,.06);
+  transition:
+    background-color .16s,
+    color .16s,
+    transform .12s,
+    box-shadow .12s;
+}
+/* نص الوصف */
+.story-pin-toggle > span{
+  flex:1;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+/* Hover */
+.story-pin-toggle:hover{
+  background:color-mix(in oklab,var(--panel-bg) 92%,#fff);
+  border-color:color-mix(in oklab,var(--modal-primary) 40%,var(--surface-border));
+  transform:translateY(-1px);
+  box-shadow:0 .12rem .35rem rgba(0,0,0,.08);
+}
+/* حالة التفعيل باستخدام :has */
+.story-pin-toggle:has(> input[type="checkbox"]:checked){
+  background:color-mix(in oklab,var(--modal-primary) 14%,var(--panel-bg));
+  border-style:solid;
+  border-color:color-mix(in oklab,var(--modal-primary) 55%,transparent);
+  color:color-mix(in oklab,var(--modal-primary) 40%,var(--text-main));
+}
+.story-pin-toggle:has(> input[type="checkbox"]:checked)::before{
+  background:color-mix(in oklab,#f7ca3e 90%,#fff);
+  color:#5b4600;
+  box-shadow:0 .12rem .38rem rgba(0,0,0,.18);
+  transform:scale(1.06);
+}
+
+/* تذييل القصة */
+.story-footer{
+  display:flex;
+  justify-content:flex-end;
+  gap:.45rem;
+  margin-top:.25rem;
+}
+.story-save-btn,
+.story-delete-btn{
+  min-width:4.2rem;
+  padding:.28rem .8rem;
+  border-radius:.7rem;
+  border:1px solid transparent;
+  font-size:.86rem;
+  font-weight:600;
+  cursor:pointer;
+  transition:background-color .16s,border-color .16s,color .16s,transform .12s,box-shadow .12s;
+}
+.story-save-btn{
+  background:var(--modal-primary);
+  color:var(--modal-primary-fg,var(--modal-fg));
+  box-shadow:0 .18rem .45rem rgba(0,0,0,.16);
+}
+.story-save-btn:hover{
+  background:color-mix(in oklab,var(--modal-primary) 90%,#fff);
+  transform:translateY(-1px);
+  box-shadow:0 .26rem .75rem rgba(0,0,0,.18);
+}
+.story-save-btn:active{
+  transform:translateY(0);
+  box-shadow:0 .14rem .35rem rgba(0,0,0,.16);
+}
+.story-delete-btn{
+  background:transparent;
+  color:var(--modal-danger);
+  border-color:color-mix(in oklab,var(--modal-danger) 55%,transparent);
+  box-shadow:0 .08rem .25rem rgba(0,0,0,.08);
+}
+.story-delete-btn:hover{
+  background:color-mix(in oklab,var(--modal-danger) 10%,transparent);
+}
+.story-delete-btn:active{
+  transform:translateY(0);
+  box-shadow:0 .04rem .16rem rgba(0,0,0,.12);
+}
+.story-cancel-btn{
+  min-width:4.2rem;
+  padding:.28rem .8rem;
+  border-radius:.7rem;
+  border:1px solid color-mix(in oklab,var(--surface-border) 90%,transparent);
+  background:color-mix(in oklab,var(--panel-bg) 96%,#fff);
+  font-size:.86rem;
+  font-weight:600;
+  cursor:pointer;
+  color:color-mix(in oklab,var(--text-muted) 90%,var(--text-main));
+  box-shadow:0 .06rem .2rem rgba(0,0,0,.04);
+  transition:background-color .16s,border-color .16s,color .16s,transform .12s,box-shadow .12s;
+}
+.story-cancel-btn:hover{
+  background:color-mix(in oklab,var(--panel-bg) 92%,#fff);
+  border-color:color-mix(in oklab,var(--surface-border) 70%,transparent);
+  transform:translateY(-1px);
+  box-shadow:0 .12rem .35rem rgba(0,0,0,.08);
+}
+.story-cancel-btn:active{
+  transform:translateY(0);
+  box-shadow:0 .04rem .18rem rgba(0,0,0,.12);
+}
+
+/* استجابة للجوال (مجمّعة) */
+@media (max-width:720px){
+  .story-meta-row{
+    grid-template-columns:1fr;
+  }
+  .story-pin-toggle{
+    width:100%;
+  }
+  .stories-header{
+    flex-direction:column;
+    align-items:stretch;
+  }
+  .stories-tools{
+    justify-content:space-between;
+  }
+  .story-head{
+    flex-direction:column;
+    align-items:stretch;
+  }
+  .story-dates{text-align:start;}
+  .story-image-viewer-dialog{inset:16%;}
+  .story-image-viewer-close{
+    top:.9rem;
+    inset-inline-start:.9rem;
+    width:1.7rem;
+    height:1.7rem;
+    font-size:1rem;
+  }
+}

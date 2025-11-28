@@ -12,6 +12,7 @@
   --connector-color:#fde68a;--arrow-color:#f0c000;
 
   --text-main:#1a202c;--title-color:#d97706;--placeholder-fg:#9ca3af;
+  --text-muted:#4b5563;
 --radius: .75rem;
   --panel-bg:color-mix(in srgb,var(--ancestor-bg) 55%,#ffffff);
   --chip-bg:var(--ancestor-bg);
@@ -90,7 +91,7 @@
   --wife-bg:#f0fff4;--son-bg:#d0f0c0;--daughter-bg:#e6ffe6;
 
   --connector-color:#4caf50;--arrow-color:#2e7d32;
-  --text-main:#1b5e20;--title-color:#2e7d32;
+  --text-main:#1b5e20;--title-color:#2e7d32; --text-muted:#2f6e3b;
 
   --panel-bg:#f3fbf5;--chip-bg:#ecf9ef;--badge-bg:#ecf9ef;
 --list-item-bg: color-mix(in srgb, var(--modal-bg) 94%, #000 6%);
@@ -149,7 +150,7 @@
   --wife-bg:#b3e5fc;--son-bg:#b2ebf2;--daughter-bg:#e1f5fe;
 
   --connector-color:#00acc1;--arrow-color:#0277bd;
-  --text-main:#01579b;--title-color:#0288d1;
+  --text-main:#01579b;--title-color:#0288d1; --text-muted:#0369a1;
 
   --panel-bg:#eef9ff;--chip-bg:#e6f4ff;--badge-bg:#e6f4ff;
   --list-item-bg: color-mix(in srgb, var(--modal-bg) 94%, #000 6%);
@@ -207,7 +208,7 @@
   --wife-bg:#ffe4f0;--son-bg:#ffb3c6;--daughter-bg:#ffc1e3;
 
   --connector-color:#ff6f91;--arrow-color:#d81b60;
-  --text-main:#5a2130;--title-color:#d81b60;
+  --text-main:#5a2130;--title-color:#d81b60; --text-muted:#7a2a3d;
 
   --panel-bg:#ffeaf2;--chip-bg:#ffe7ef;--badge-bg:#ffe7ef;
   --list-item-bg: color-mix(in srgb, var(--modal-bg) 94%, #000 6%);
@@ -274,6 +275,7 @@
   --text-main:#f9fafb;
   --title-color:#fbbf24;
   --placeholder-fg:#a78bfa;
+  --text-muted:#d1d5db;
 
   --panel-bg:#1a1026;
   --chip-bg:#24123a;
@@ -353,7 +355,7 @@
 
   --connector-color:#2d3748;--arrow-color:#fbbf24;
 
-  --text-main:#e5e7eb;--title-color:#fcd34d;--placeholder-fg:#94a3b8;
+  --text-main:#e5e7eb;--title-color:#fcd34d;--placeholder-fg:#94a3b8;--text-muted:#9ca3af;
 
   --panel-bg:#191c24;--chip-bg:#202533;--badge-bg:#202533;
   --list-item-bg: color-mix(in srgb, var(--modal-bg) 80%, #000 20%);

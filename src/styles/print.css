@@ -71,6 +71,15 @@
     break-inside:avoid;
     page-break-inside:avoid;
   }
+  .connector,
+  .connector::before,
+  .connector::after,
+  .wife-connector,
+  .wife-connector::after,
+  .vertical-line,
+  .child-line{
+    visibility:hidden !important;
+  }
 
   /* ================== خيارات الطباعة (تتحكم بها أصناف على الـ body) ================== */
 
@@ -136,15 +145,9 @@
     font-size:.85rem;
   }
   
-/* 8) جديد: إخفاء الوصلات (الخطوط) بين البطاقات مع الحفاظ على المسافات */
-body.print-hide-connectors .connector,
-body.print-hide-connectors .connector::before,
-body.print-hide-connectors .connector::after,
-body.print-hide-connectors .wife-connector,
-body.print-hide-connectors .wife-connector::after,
-body.print-hide-connectors .vertical-line,
-body.print-hide-connectors .child-line{
-  visibility:hidden !important;
+  /* 8) إخفاء مسمّيات القرابة (الدور) */
+body.print-hide-roles .member-card .role{
+  display:none !important;
 }
 
 

@@ -1,0 +1,354 @@
+/* ================== bio.css — المودال + السيرة + القصص والمذكّرات ================== */
+
+/* ================== النافذة العامة (المودال) ================== */
+.modal{
+  position:fixed;inset:0;background:var(--modal-overlay);backdrop-filter:blur(.5rem);
+  display:flex;justify-content:center;align-items:center;opacity:0;visibility:hidden;
+  transition:opacity .8s,visibility .8s;z-index:1000
+}
+.modal.active{opacity:1;visibility:visible}
+
+.modal-content{
+  background:var(--modal-bg);
+  color:var(--modal-fg);
+  border:1px solid var(--modal-border);
+  border-radius:1.5rem;
+  width:90%;
+  max-width:31.25rem;
+  max-height:85vh;
+  overflow-y:auto;
+  transform:translateY(1.875rem) scale(.95);
+  opacity:0;
+  transition:all .4s ease;
+  box-shadow:var(--modal-shadow);
+}
+
+.modal.active .modal-content{transform:translateY(0) scale(1);opacity:1}
+.modal-header{
+  padding:1.5rem;border-bottom:.0625rem solid var(--surface-border);
+  display:flex;justify-content:space-between;align-items:center;background:var(--header-bg);color:var(--title-color)
+}
+.modal-header h2,.modal-header .role{font-size:1.5rem;margin:0}
+
+/* إعادة تعريف close-button داخل سياق المودال للسيرة */
+.close-button{
+  background:var(--card-bg);border:0;width:2.5rem;height:2.5rem;border-radius:50%;
+  font-size:1.5rem;cursor:pointer;color:var(--text-main);
+  display:flex;justify-content:center;align-items:center;transition:background .2s,color .2s
+}
+.close-button:hover{background:var(--chip-bg);color:var(--title-color)}
+
+/* شريط اختيار وضع السيرة */
+.bio-mode-bar{
+  display:flex;align-items:center;justify-content:space-between;gap:.75rem;
+  margin:.35rem 0 1rem;padding:.55rem .9rem;
+  background:var(--panel-bg);border:1px solid var(--surface-border);
+  border-radius:.85rem;box-shadow:0 .15rem .45rem rgba(0,0,0,.05);
+  font-size:.92rem
+}
+.bio-mode-label-wrap{
+  display:flex;align-items:center;gap:.4rem;color:var(--title-color);
+  font-weight:600;white-space:nowrap
+}
+.bio-mode-label-wrap i{font-size:.9rem;opacity:.85}
+.bio-mode-bar label{cursor:pointer}
+.bio-mode-select-wrap{
+  position:relative;min-width:10rem;max-width:14rem;flex:0 0 auto
+}
+.bio-mode-select-wrap select{
+  width:100%;appearance:none;-webkit-appearance:none;-moz-appearance:none;
+  border-radius:.6rem;border:1px solid var(--surface-border);background:var(--card-bg);
+  padding:.35rem .7rem;padding-inline-end:.50rem;font-size:.9rem;color:var(--text-main);
+  outline:none;box-shadow:0 .1rem .25rem rgba(0,0,0,.03);cursor:pointer;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  transition:border-color .16s,box-shadow .16s,background-color .16s;
+}
+.bio-mode-select-wrap::after{
+  content:"\f0d7";font-family:"Font Awesome 7 Free";font-weight:900;
+  position:absolute;inset-inline-end:.55rem;top:50%;transform:translateY(-50%);
+  font-size:.7rem;pointer-events:none;
+  color:color-mix(in oklab,var(--title-color) 60%,transparent);
+}
+.bio-mode-select-wrap select:hover{
+  border-color:color-mix(in oklab,var(--title-color) 50%,var(--surface-border));
+  background:color-mix(in oklab,var(--card-bg) 90%,#fff)
+}
+.bio-mode-select-wrap select:focus-visible{
+  border-color:var(--modal-primary);
+  box-shadow:0 0 0 .09rem color-mix(in oklab,var(--modal-primary) 50%,transparent)
+}
+@media(max-width:640px){
+  .bio-mode-bar{flex-direction:column;align-items:stretch;gap:.5rem}
+  .bio-mode-label-wrap{justify-content:flex-start}
+  .bio-mode-select-wrap{width:100%;max-width:none}
+}
+
+/* ===== أقسام السيرة داخل المودال ===== */
+.bio-sections{
+  display:flex;flex-direction:column;gap:.9rem;margin-block:.5rem 1rem;
+}
+
+/* كرت القسم العام */
+.bio-section{
+  background:var(--card-bg);border:1px solid var(--surface-border);border-radius:.9rem;
+  padding:.65rem .9rem .8rem;color:var(--text-main);line-height:1.7;
+  box-shadow:0 .25rem .6rem rgba(0,0,0,.04);
+  
+}
+
+/* البيانات الأساسية */
+.bio-section[data-section-id="basic"]{
+  background:linear-gradient(135deg,color-mix(in oklab,var(--ancestor-bg) 78%,#fff) 0%,var(--card-bg) 65%);
+  border-color:var(--ancestor-border);
+}
+.bio-section[data-section-id="basic"] .bio-section-body{
+  display:flex;flex-direction:column;gap:.35rem;padding-top:.3rem;
+}
+.bio-section[data-section-id="basic"] .bio-field{
+  width: fit-content;display:flex;justify-content:flex-start;gap:.5rem;padding:.15rem .35rem;
+}
+.bio-section[data-section-id="basic"] .bio-field strong{
+  flex:0 0 6.5rem;min-width:6.5rem;text-align:start;color:var(--title-color);
+}
+.bio-section[data-section-id="basic"] .bio-field span{
+  flex:1 1 auto;
+}
+.bio-section[data-section-id="basic"] .bio-field .age-dead,
+.bio-section[data-section-id="basic"] .bio-field .age-alive{
+  display:inline-block;text-align:center;
+}
+
+/* رأس القسم */
+.bio-section-header{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:.4rem;
+  padding:.25rem .1rem .45rem;
+  font-size:.98rem;font-weight:700;
+  color:var(--title-color);
+  background:transparent;border:0;
+  cursor:pointer;text-align:start;
+}
+.bio-section[data-section-id="basic"] .bio-section-header{
+  cursor:default;
+  justify-content:flex-start;
+  border-bottom:2px solid color-mix(in oklab,var(--title-color) 70%,transparent);
+  margin-bottom:.35rem;
+  padding:.3rem .1rem .65rem;
+}
+.bio-section[data-section-id="basic"] .bio-section-header{
+  justify-content:flex-start;cursor:default;
+  font-size:1.05rem;
+  font-weight:800;
+}
+
+/* عنوان القسم + سهم الطي */
+.bio-section-title{letter-spacing:.01em;}
+.bio-section-toggle{font-size:.78rem;opacity:.8;}
+
+/* جسم الأقسام الأخرى */
+.bio-section-body{
+  display:flex;flex-direction:column;gap:.4rem;padding-top:.3rem;
+}
+.bio-section:not([data-section-id="basic"]) .bio-section-body{
+  border-top:1px dashed var(--section-divider-strong);margin-top:.45rem;padding-top:.55rem;
+}
+
+/* وصف عام */
+.bio-description{margin:.625rem 0;}
+.bio-info{
+  background:var(--panel-bg);padding:.6rem .7rem;border-radius:.85rem;
+  display:flex;flex-direction:column;gap:.35rem;
+}
+
+/* صف الحقل الافتراضي لبقية الأقسام */
+.bio-field{
+  display:flex;align-items:flex-start;gap:.3rem;font-size:.95rem;
+}
+.bio-field strong{
+  color:var(--title-color);font-weight:700;flex:0 0 7.25rem;min-width:7.25rem;text-align:start;
+}
+.bio-field span{flex:1 1 auto;}
+
+/* العمر (حي/متوفى) */
+.age-alive{
+  color:color-mix(in oklab,var(--modal-primary) 70%,var(--modal-fg));font-weight:500;
+}
+.age-dead{
+  color:var(--modal-danger);font-weight:600;
+  background:color-mix(in oklab,var(--modal-danger) 16%,transparent);
+  padding:.12rem .5rem;border-radius:.4rem;
+}
+
+/* عناوين فرعية */
+.bio-section h3{
+  color:var(--title-color);margin:.3rem 0 .45rem;font-size:.96rem;
+}
+
+/* القوائم داخل الأقسام */
+.bio-section ul{
+  list-style:none;padding:0;margin:0;
+  display:flex;flex-direction:column;gap:.45rem;
+}
+.bio-section li{
+  background:var(--list-item-bg);
+  border:.0625rem solid var(--surface-border);
+  padding:.5rem .9rem;border-radius:.55rem;font-size:.93rem;
+  color:var(--text-main);
+  transition:background .2s,color .2s,transform .16s;
+}
+.bio-section li:hover{
+  background:var(--list-item-hover);
+  color:var(--list-item-hover-fg);
+  transform:translateY(-1px);
+}
+
+/* تقليل الزحمة للإخوة/الأخوات */
+.bio-sublist ul{list-style:none;padding:0;margin:.25rem 0;}
+.bio-sublist li.bio-li{
+  padding:.55rem .8rem;margin:.35rem 0;
+  border:1px solid var(--ancestor-border);border-radius:12px;
+  line-height:1.55;display:flex;flex-direction:column;gap:.2rem;white-space:normal;
+}
+.bio-sublist li.bio-li .sib-name{font-weight:700;font-size:1rem;}
+.bio-sublist li.bio-li .sib-meta{font-size:.85rem;opacity:.8;}
+
+/* الهوايات */
+.hobbies{display:flex;flex-wrap:wrap;gap:.5rem;}
+.hobby{
+  background:var(--chip-bg);color:var(--title-color);
+  padding:.45rem 1rem;border-radius:1rem;font-weight:600;font-size:.88rem;
+}
+
+/* رؤوس الأقسام الثابتة */
+.bio-section-header-static{cursor:default;}
+
+/* ================== ترويسة السيرة بصورة ================== */
+.bio-photo{
+  display:flex;align-items:center;gap:1rem;margin-bottom:1rem
+}
+.avatar-lg{
+  width:72px;height:72px;border-radius:50%;overflow:hidden;
+  flex:0 0 auto;border:1px solid var(--ancestor-border)
+}
+.avatar-lg img{
+  width:100%;height:100%;object-fit:cover;display:block
+}
+.bio-head .bio-name{
+  font-weight:700;font-size:1.05rem;color:var(--title-color)
+}
+.bio-head .bio-role{opacity:.8;font-size:.9rem}
+
+.bio-header{
+  display:flex;justify-content:space-between;align-items:center;
+  border-bottom:1px solid var(--surface-border);padding:.75rem 1rem
+}
+
+/* النسخة الكاملة لترويسة السيرة + الصورة العلوية */
+.bio-header{
+  position:relative;
+  display:flex;flex-direction:column;align-items:center;
+  padding:1rem .75rem .9rem;gap:.75rem
+}
+.bio-header .close-button{
+  position:absolute;inset-inline-start:.75rem;top:.65rem;z-index:1
+}
+.bio-header-inner{
+  display:flex;flex-direction:column;align-items:center;
+  flex:1;gap:.4rem;text-align:center
+}
+.bio-photo-top{
+  width:96px;height:96px;border-radius:50%;overflow:hidden;
+  border:2px solid var(--ancestor-border)
+}
+.bio-photo-top .avatar{
+  width:96px;height:96px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:48px;line-height:1;
+  background:var(--avatar-bg);
+  border:2px solid var(--ancestor-border);overflow:hidden
+}
+.bio-photo-top img{
+  width:100%;height:100%;object-fit:cover;display:block
+}
+.bio-identity{
+  display:flex;flex-direction:column;align-items:center;text-align:center;
+  gap:.45rem;width:100%
+}
+#bioTools{
+  display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.35rem;justify-content:center
+}
+.bio-divider {
+  width: 100%;
+  border: 0;
+  height: 1px;
+  background:
+    var(--section-divider-strong,
+      var(--section-divider,
+        var(--surface-border, color-mix(in srgb, var(--text-main) 28%, transparent))));
+  margin: .25rem 0 0
+}
+.bio-actions{
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:center;
+  gap:.5rem;width:100%
+}
+
+
+/* أصغر الشاشات — هواتف صغيرة جدًا */
+@media (max-width:23.9rem){
+  .modal{
+    align-items:stretch;
+  }
+  .modal-content{
+    width:100%;
+    max-width:none;
+    min-height:100vh;
+    max-height:100vh;
+    border-radius:0;
+  }
+}
+
+/* هواتف صغيرة */
+@media (min-width:24rem) and (max-width:29.9rem){
+  .modal-content{
+    width:96%;
+    max-width:27rem;
+    max-height:92vh;
+    border-radius:1.25rem;
+  }
+}
+
+/* هواتف متوسطة / كبيرة */
+@media (min-width:30rem) and (max-width:39.9rem){
+  .modal-content{
+    width:94%;
+    max-width:34rem;
+    max-height:90vh;
+  }
+}
+
+/* تابلت صغيرة / شاشات أوسع قليلاً */
+@media (min-width:40rem) and (max-width:47.9rem){
+  .modal-content{
+    width:90%;
+    max-width:40rem;
+    max-height:88vh;
+  }
+}
+
+/* تابلت أفقية / لابتوب صغير */
+@media (min-width:48rem) and (max-width:63.9rem){
+  .modal-content{
+    width:82%;
+    max-width:46rem;
+    max-height:86vh;
+  }
+}
+
+/* شاشات عريضة (ديسكتوب) */
+@media (min-width:64rem){
+  .modal-content{
+    width:70%;
+    max-width:50rem;
+    max-height:85vh;
+  }
+}

@@ -8,7 +8,7 @@ const PRINT_OPTIONS = [
   { id: 'printHideCounters', label: 'إخفاء العدّادات',         className: 'print-hide-counters', storageKey: 'printHideCounters' },
   { id: 'printHidePhotos',   label: 'إخفاء الصور',             className: 'print-hide-photos',   storageKey: 'printHidePhotos' },
   { id: 'printNoColors',     label: 'إزالة الألوان (أبيض وأسود)', className: 'print-no-colors', storageKey: 'printNoColors' },
-  { id:'printHideConnectors', label:'إخفاء الوصلات', className:'print-hide-connectors', storageKey:'printHideConnectors' },
+  { id:'printHideRoles', label:'إخفاء مسمّيات القرابة', className:'print-hide-roles', storageKey:'printHideRoles' }
 ];
 
 /* تطبيق/إزالة كلاس خيار معيّن */

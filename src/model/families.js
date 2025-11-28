@@ -174,16 +174,25 @@ export const cloneBio = (src = {}) => Object.assign(_cloneDefaultBio(), src || {
 
 function _normalizeChild(c){
   if (typeof c === 'string') {
-    return { name: c, role: 'ابن', bio: _cloneDefaultBio() };
+    return {
+      name: c,
+      role: 'ابن',
+      bio: _cloneDefaultBio(),
+      // قصص فارغة افتراضيًا
+      stories: []
+    };
   }
   const bio = _withBio(c?.bio);
   return {
     name: c?.name || '',
     role: c?.role || 'ابن',
     bio,
-    _id: c?._id
+    _id: c?._id,
+    // الحفاظ على القصص إن وُجدت
+    stories: Array.isArray(c?.stories) ? c.stories : []
   };
 }
+
 
 function _normalizeWifeRole(role, idx){
   let r = String(role || '').trim() || 'زوجة';
@@ -201,11 +210,14 @@ function _normalizeWife(w, idx){
   const ww = {
     name: w?.name || '',
     role: _normalizeWifeRole(w?.role, idx),
-    bio: wifeBio
+    bio: wifeBio,
+    // قصص الزوجة
+    stories: Array.isArray(w?.stories) ? w.stories : []
   };
   ww.children = (w?.children || []).map(_normalizeChild);
   return ww;
 }
+
 
 // =======================================
 // 4) تهيئة الأشخاص (Bio + IDs + تطبيع محفوظ)
@@ -216,6 +228,7 @@ function ensureBio(person) {
   if (!person) return;
 
   person.bio = _withBio(person.bio);
+  ensureStoriesArray(person); // NEW
 
   if (Array.isArray(person.children)) {
     person.children = person.children.map(_normalizeChild);
@@ -224,6 +237,13 @@ function ensureBio(person) {
   if (Array.isArray(person.wives)) {
     person.wives = person.wives.map(_normalizeWife);
   }
+}
+
+
+// ضمان وجود مصفوفة قصص لكل شخص
+function ensureStoriesArray(person) {
+  if (!person || typeof person !== 'object') return;
+  if (!Array.isArray(person.stories)) person.stories = [];
 }
 
 
@@ -325,9 +345,12 @@ export function normalizeNewFamilyForLineage(f){
     if (!p.bio) p.bio = {};
     if (!Array.isArray(p.children)) p.children = [];
     if (!Array.isArray(p.wives)) p.wives = [];
+    // ضمان مصفوفة القصص
+    if (!Array.isArray(p.stories)) p.stories = [];
     p.children.forEach(visit);
     p.wives.forEach(visit);
   }
+
   visit(f.rootPerson);
   f.wives.forEach(visit);
   if (f.father) visit(f.father);
@@ -1044,21 +1067,33 @@ async function loadPersistedFamilies() {
 function _normalizeChildForLoad(c) {
   if (!c) return null;
   if (typeof c === 'string') {
-    return { name: c, role: 'ابن', bio: {}, fatherId:null, motherId:null };
+    return {
+      name: c,
+      role: 'ابن',
+      bio: {},
+      fatherId: null,
+      motherId: null,
+      // NEW: قصص فارغة
+      stories: [],
+      children: [],
+      wives: []
+    };
   }
-return {
-  name: c.name || '',
-  role: c.role || 'ابن',
-  bio: c.bio || {},
-  _id: c._id,
-  fatherId: (c.fatherId != null) ? c.fatherId : (c.bio && c.bio.fatherId) || null,
-  motherId: (c.motherId != null) ? c.motherId : (c.bio && c.bio.motherId) || null,
+  return {
+    name: c.name || '',
+    role: c.role || 'ابن',
+    bio: c.bio || {},
+    _id: c._id,
+    fatherId: (c.fatherId != null) ? c.fatherId : (c.bio && c.bio.fatherId) || null,
+    motherId: (c.motherId != null) ? c.motherId : (c.bio && c.bio.motherId) || null,
 
-  // NEW: تحميل عميق لما تحت الابن
-  children: Array.isArray(c.children) ? c.children.map(_normalizeChildForLoad).filter(Boolean) : [],
-  wives: Array.isArray(c.wives) ? c.wives.map(_normalizeWifeForLoad).filter(Boolean) : []
-};
+    // NEW: القصص
+    stories: Array.isArray(c.stories) ? c.stories : [],
 
+    // NEW: تحميل عميق لما تحت الابن
+    children: Array.isArray(c.children) ? c.children.map(_normalizeChildForLoad).filter(Boolean) : [],
+    wives: Array.isArray(c.wives) ? c.wives.map(_normalizeWifeForLoad).filter(Boolean) : []
+  };
 }
 
 function _normalizeWifeForLoad(w, i){
@@ -1072,10 +1107,13 @@ function _normalizeWifeForLoad(w, i){
     _id: w?._id,  // IMPORTANT: لا تفقد الـ id بعد التحميل
     fatherId: w?.fatherId ?? w?.bio?.fatherId ?? null,
     motherId: w?.motherId ?? w?.bio?.motherId ?? null,
+    // NEW: قصص الزوجة
+    stories: Array.isArray(w?.stories) ? w.stories : [],
     children: Array.isArray(w?.children) ? w.children.map(_normalizeChildForLoad).filter(Boolean)
       : []
   };
 }
+
 
 // إزالة كل روابط الصور (غير مستخدم هنا لكن مفيد للتصدير بدون صور)
 function stripPhotosDeep(obj) {
@@ -1185,33 +1223,38 @@ function linkRootPersonWives(targetFam) {
         var base = structuredClone ? structuredClone(DEFAULT_BIO)
           : JSON.parse(JSON.stringify(DEFAULT_BIO));
 
-       var child;
-if (typeof c === 'string') {
-  child = {
-    name: c,
-    role: 'ابن',
-    bio: Object.assign(base, {}),
-    children: [],
-    wives: []
-  };
-} else {
-  child = {
-    name: c.name || '',
-    role: c.role || 'ابن',
-    bio: Object.assign(base, c.bio || {}),
-    _id: c._id,
-    fatherId: (c.fatherId != null) ? c.fatherId : (c.bio && c.bio.fatherId) || null,
-    motherId: (c.motherId != null) ? c.motherId : (c.bio && c.bio.motherId) || null,
-    // NEW: لا تمسح ما تحت الابن
-    children: Array.isArray(c.children) ? c.children : [],
-    wives: Array.isArray(c.wives) ? c.wives : []
-  };
-}
+        var child;
+        if (typeof c === 'string') {
+          child = {
+            name: c,
+            role: 'ابن',
+            bio: Object.assign(base, {}),
+            // NEW: قصص فارغة
+            stories: [],
+            children: [],
+            wives: []
+          };
+        } else {
+          child = {
+            name: c.name || '',
+            role: c.role || 'ابن',
+            bio: Object.assign(base, c.bio || {}),
+            _id: c._id,
+            fatherId: (c.fatherId != null) ? c.fatherId : (c.bio && c.bio.fatherId) || null,
+            motherId: (c.motherId != null) ? c.motherId : (c.bio && c.bio.motherId) || null,
+            // NEW: عدم فقدان القصص
+            stories: Array.isArray(c.stories) ? c.stories : [],
+            // NEW: لا تمسح ما تحت الابن
+            children: Array.isArray(c.children) ? c.children : [],
+            wives: Array.isArray(c.wives) ? c.wives : []
+          };
+        }
 
         normalizeLifeDatesOnBio(child.bio);
         setChildDefaults(child, fam, ww);
         return child;
       });
+
 
       return ww;
     });

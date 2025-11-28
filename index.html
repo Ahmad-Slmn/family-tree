@@ -57,16 +57,19 @@
 
     <!-- CSS الأساسي للتطبيق -->
     <link rel="stylesheet" href="src/styles/theme.css">
-    <link rel="stylesheet" href="src/styles/layout.css">
+    <link rel="stylesheet" href="src/styles/main.css">
+    <link rel="stylesheet" href="src/styles/layout.shell.css">
+    <link rel="stylesheet" href="src/styles/tree.css">
+    <link rel="stylesheet" href="src/styles/bio.css">
+    <link rel="stylesheet" href="src/styles/bio-stories.css">
     <link rel="stylesheet" href="src/styles/modal.css">
     <link rel="stylesheet" href="src/styles/photoGallery.css">
+   <link rel="stylesheet" href="src/styles/print.css" media="print">
 
     <!-- مكتبات CSS خارجية -->
     <link rel="stylesheet" href="./src/vendor/cropper/cropper.min.css">
     <link rel="stylesheet" href="src/assets/icons/fontawesome/css/all.min.css">
-
-    <!-- طباعة -->
-    <link rel="stylesheet" href="src/styles/print.css" media="print">
+    
 </head>
 
 <body>
@@ -326,7 +329,24 @@
 
             </div>
 
-            <div id="modalContent" class="modal-body"></div>
+            <div id="modalContent" class="modal-body">
+                <!-- شريط اختيار وضع السيرة -->
+                <div class="bio-mode-bar" role="group" aria-label="تغيير طريقة عرض السيرة">
+                    <div class="bio-mode-label-wrap">
+                        <i class="fa-solid fa-layer-group" aria-hidden="true"></i>
+                        <label for="bioModeSelect">عرض السيرة</label>
+                    </div>
+
+                    <div class="bio-mode-select-wrap">
+                        <select id="bioModeSelect"></select>
+                    </div>
+                </div>
+
+                <!-- الحاوية التي يتم فيها رسم أقسام السيرة -->
+                <div id="bioSectionsContainer"></div>
+            </div>
+
+
         </div>
     </div>
 
