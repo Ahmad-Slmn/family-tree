@@ -162,10 +162,22 @@ async function showAllCore({ Model, redrawUI, showSuccess, bus }){
 setOnResetHiddenCore(async () => {
   const fams = Model.getFamilies();
   let touched = 0;
+  const labels = [];
 
   Object.keys(fams).forEach(k => {
     const f = fams[k];
-    if (f && f.__core && f.hidden) { f.hidden = false; touched++; }
+    if (f && f.__core && f.hidden) {
+      f.hidden = false;
+      touched++;
+
+      const label =
+        f.familyName ||
+        f.title ||
+        (f.rootPerson && f.rootPerson.name) ||
+        k;
+
+      labels.push(label);
+    }
   });
 
   if (touched) {
@@ -173,6 +185,9 @@ setOnResetHiddenCore(async () => {
     updateCoreHiddenFlag();
     // يُترك إعادة الرسم للطبقة العليا عبر bus/النداء الأصلي
   }
+
+  // NEW: إرجاع عدد العائلات + أسمائها
+  return { count: touched, labels };
 });
 
 /* =========================

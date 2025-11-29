@@ -6,6 +6,7 @@
 const DB_NAME = 'familyTreeDB';
 const STORE = 'families';
 const PHOTO_STORE = 'photos';
+const STORY_PHOTO_STORE = 'storyPhotos';
 
 if (!('indexedDB' in window)) {
   console.warn('IndexedDB not supported');
@@ -25,22 +26,35 @@ function _rw(db, store){ return db.transaction(store, 'readwrite').objectStore(s
 function open() {
   if (dbp) return dbp;
   dbp = new Promise((res, rej) => {
-    const req = indexedDB.open(DB_NAME, 2);
+    const req = indexedDB.open(DB_NAME, 3);
 
-    req.onupgradeneeded = (e) => {
-      const db = req.result;
-      const v  = e.oldVersion | 0;
 
-      // v=0 → إنشاء جديد
-      if (v < 1) {
-        if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
-      }
-      // v=1 → إضافة مخزن الصور
-      if (v < 2) {
-        if (!db.objectStoreNames.contains(PHOTO_STORE)) db.createObjectStore(PHOTO_STORE);
-      }
-      // لاحقًا: if (v < 3) { ... مهاجرات جديدة ... }
-    };
+req.onupgradeneeded = (e) => {
+  const db = req.result;
+  const v  = e.oldVersion | 0;
+
+  // v=0 → إنشاء جديد
+  if (v < 1) {
+    if (!db.objectStoreNames.contains(STORE)) {
+      db.createObjectStore(STORE);
+    }
+  }
+
+  // v=1 → إضافة مخزن صور الأشخاص
+  if (v < 2) {
+    if (!db.objectStoreNames.contains(PHOTO_STORE)) {
+      db.createObjectStore(PHOTO_STORE);
+    }
+  }
+
+  // v=2 → إضافة مخزن صور القصص
+  if (v < 3) {
+    if (!db.objectStoreNames.contains(STORY_PHOTO_STORE)) {
+      db.createObjectStore(STORY_PHOTO_STORE);
+    }
+  }
+};
+
 
     req.onsuccess = () => {
       const db = req.result;
@@ -78,6 +92,77 @@ function _friendlyIdbError(err){
 }
 
 /* =========================
+   أدوات مساعدة داخلية
+========================= */
+
+// توليد معرّف فريد بسيط
+function _genId(prefix = 'id_') {
+  if (window.crypto?.randomUUID) {
+    return prefix + window.crypto.randomUUID();
+  }
+  return prefix + Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+// ضغط ملف صورة إلى Blob أصغر (للاستخدام في صور القصص)
+function _compressImageFileToBlob(file, {
+  maxWidth = 1600,
+  maxHeight = 1600,
+  quality = 0.8,
+  mimeType = 'image/jpeg'
+} = {}) {
+  return new Promise((resolve, reject) => {
+    try {
+      const reader = new FileReader();
+      reader.onerror = err => reject(err);
+      reader.onload = ev => {
+        const url = String(ev.target?.result || '');
+        if (!url) return reject(new Error('empty data url'));
+
+        const img = new Image();
+        img.onload = () => {
+          try {
+            let { width, height } = img;
+            if (!width || !height) {
+              return reject(new Error('invalid image dimensions'));
+            }
+
+            // حساب عامل التصغير
+            let scale = 1;
+            if (width > maxWidth || height > maxHeight) {
+              scale = Math.min(maxWidth / width, maxHeight / height);
+            }
+            const w = Math.max(1, Math.round(width * scale));
+            const h = Math.max(1, Math.round(height * scale));
+
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+
+            canvas.toBlob(
+              blob => {
+                if (!blob) return reject(new Error('toBlob failed'));
+                resolve(blob);
+              },
+              mimeType,
+              quality
+            );
+          } catch (e) {
+            reject(e);
+          }
+        };
+        img.onerror = err => reject(err);
+        img.src = url;
+      };
+      reader.readAsDataURL(file);
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+/* =========================
    إغلاق/تفريغ داخلي
 ========================= */
 async function _closeConn() {
@@ -89,14 +174,16 @@ async function _closeConn() {
 async function _clearStores() {
   const db = await open();
   await new Promise((res, rej) => {
-    const tx = db.transaction([STORE, PHOTO_STORE], 'readwrite');
+    const tx = db.transaction([STORE, PHOTO_STORE, STORY_PHOTO_STORE], 'readwrite');
     tx.objectStore(STORE).clear();
     tx.objectStore(PHOTO_STORE).clear();
+    tx.objectStore(STORY_PHOTO_STORE).clear(); // مهم لمسح صور القصص أيضاً
     tx.oncomplete = res;
     tx.onerror = () => rej(tx.error);
     tx.onabort  = () => rej(tx.error);
   });
 }
+
 
 /* =========================
    صور الأشخاص (photos)
@@ -155,6 +242,77 @@ async function delPhotosBulk(ids = []){
     tx.onerror    = () => rej(tx.error);
     tx.onabort    = () => rej(tx.error);
   });
+}
+/* =========================
+   صور القصص (storyPhotos)
+========================= */
+
+// حفظ صورة قصة مضغوطة في مخزن خاص وإرجاع مرجع idb:story_...
+async function putStoryImage({ file, personId = null, storyId = null }) {
+  if (!(file instanceof Blob)) {
+    throw new TypeError('putStoryImage: expected File/Blob');
+  }
+
+  // ضغط الصورة
+  const compressed = await _compressImageFileToBlob(file, {
+    maxWidth: 1600,
+    maxHeight: 1600,
+    quality: 0.8,
+    mimeType: 'image/jpeg'
+  });
+
+  if (compressed.size > 8 * 1024 * 1024) {
+    throw new Error('putStoryImage: blob too large after compression');
+  }
+
+  const db = await open();
+  const key = _genId('story_'); // مثل: story_r4x...etc
+  const value = {
+    blob: compressed,
+    meta: {
+      personId: personId || null,
+      storyId: storyId || null,
+      createdAt: new Date().toISOString()
+    }
+  };
+
+  await new Promise((res, rej) => {
+    const tx = db.transaction(STORY_PHOTO_STORE, 'readwrite');
+    tx.objectStore(STORY_PHOTO_STORE).put(value, key);
+    tx.oncomplete = res;
+    tx.onerror    = () => rej(tx.error);
+    tx.onabort    = () => rej(tx.error);
+  });
+
+  // هذا هو الذي يُخزَّن في story.images
+  return `idb:${key}`;
+}
+
+// تحويل مرجع idb: إلى blob: URL للعرض
+async function getStoryImageURL(ref) {
+  if (!ref) return null;
+  const key = String(ref).replace(/^idb:/, '');
+
+  const db = await open();
+  const record = await new Promise((res, rej) => {
+    const tx = db.transaction(STORY_PHOTO_STORE, 'readonly');
+    const r = tx.objectStore(STORY_PHOTO_STORE).get(key);
+    let out = null;
+    r.onsuccess = () => { out = r.result || null; };
+    tx.oncomplete = () => res(out);
+    tx.onerror    = () => rej(tx.error);
+    tx.onabort    = () => rej(tx.error);
+  });
+
+  if (!record) return null;
+
+  const blob =
+    record.blob instanceof Blob ? record.blob
+      : (record instanceof Blob ? record : null);
+
+  if (!blob) return null;
+
+  return URL.createObjectURL(blob);
 }
 
 /* =========================
@@ -295,10 +453,16 @@ async function nuke() {
 export const DB = {
   // KV
   put, get, del, has, getAllFamilies,
-  // Photos
+
+  // Photos الأشخاص
   putPhoto, getPhoto, clearPhoto, listPhotoIds, delPhotosBulk,
+
+  // Photos القصص
+  putStoryImage, getStoryImageURL,
+
   // إدارة
   nuke,
+
   // تشخيص
   _countFamilies: () => count(STORE),
   _countPhotos:   () => count(PHOTO_STORE),

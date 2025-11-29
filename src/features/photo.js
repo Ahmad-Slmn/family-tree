@@ -252,6 +252,18 @@ async function compressImageToDataURL(file, maxDim = 512, quality = 0.72){
   }
 }
 
+// ضغط Blob عام لإعادة استخدامه عند الاستعادة/المعرض
+async function compressBlobForPid(blob, maxDim = 512, quality = JPEG_Q){
+  // نغلف الـ Blob في File لنستفيد من compressImageToDataURL
+  const file = new File([blob], 'photo.jpg', { type: blob.type || 'image/jpeg' });
+  const dataUrl = await compressImageToDataURL(file, maxDim, quality);
+
+  // تحويل DataURL المضغوطة إلى Blob جديد
+  const res = await fetch(dataUrl);
+  const compressedBlob = await res.blob();
+  return compressedBlob;
+}
+
 /* ==== قراءة URL إلى DataURL (يشمل idb:) ==== */
 async function urlToDataURL(u){
   if (u && u.startsWith('idb:')){
@@ -579,10 +591,14 @@ async function saveCropBaseline(ctx, pid, imgEl){
   }
 }
 
-
 async function restoreCropBaselineIfAny(ctx, photoBox, pid){
   const base = await ctx.DB.getPhoto(pid + '_cropBase');
-  if (base instanceof Blob) await ctx.DB.putPhoto(pid, base);
+
+  if (base instanceof Blob){
+    const small = await compressBlobForPid(base);
+    await ctx.DB.putPhoto(pid, small);
+  }
+
   await renderPersonPhoto(photoBox, ctx.dom.currentPerson, undefined, ctx.DB);
 
   // تثبيت المرجع وإزالة علم القص في الموديل
@@ -645,8 +661,12 @@ async function restoreOriginalIfAny(ctx, photoBox, pid){
     if (b2 instanceof Blob) origBlob = b2;
   }
 
-  // 1) اكتب الأصل في idb:pid وأعد عرض المعاينة
-  if (origBlob instanceof Blob) await ctx.DB.putPhoto(pid, origBlob);
+  // 1) اكتب نسخة مضغوطة من الأصل في idb:pid وأعد عرض المعاينة
+  if (origBlob instanceof Blob){
+    const small = await compressBlobForPid(origBlob);
+    await ctx.DB.putPhoto(pid, small);
+  }
+
   await renderPersonPhoto(photoBox, ctx.dom.currentPerson, undefined, ctx.DB);
 
   // 2) ثبّت المرجع + زد photoVer على كل النسخ
@@ -1341,19 +1361,36 @@ menuGalleryBtn?.addEventListener('click', async () => {
   const photoBox = byId('bioPhoto');
   if (!photoBox) return;
 
-  // لا نحاول حساب hash أو مطابقة الصورة الحالية ⇒ currentSrc = ''
   openPhotoGallery({
     currentSrc: '',
     async onSelect(src){
       try{
+        // 1) جلب الصورة من المعرض كـ DataURL
         const dataUrl = await urlToDataURL(src);
-        await handleNewCandidate(ctx, dataUrl, photoBox);
+
+        // 2) تحويل الـ DataURL إلى Blob
+        const tmpRes  = await fetch(dataUrl);
+        const tmpBlob = await tmpRes.blob();
+
+        // 3) ضغط الـ Blob بالمعيار نفسه (حجم 512 وجودة JPEG_Q)
+        const smallBlob = await compressBlobForPid(tmpBlob);
+
+        // 4) تحويل الـ Blob المضغوط إلى DataURL وإرساله لمسار الترشيح/المعاينة
+        const finalDataUrl = await new Promise((resolve, reject) => {
+          const fr = new FileReader();
+          fr.onload  = () => resolve(fr.result);
+          fr.onerror = () => reject(new Error('فشل التحويل بعد الضغط.'));
+          fr.readAsDataURL(smallBlob);
+        });
+
+        await handleNewCandidate(ctx, finalDataUrl, photoBox);
       }catch{
         showError('تعذّر تحميل الصورة الجاهزة.');
       }
     }
   });
 });
+
 
 
 

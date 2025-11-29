@@ -107,7 +107,7 @@
 
 /* أزرار العائلة والفلاتر */
 .family-button{
-  height:var(--h);display:flex;align-items:center;justify-content: center;
+  height:var(--h);display:flex;align-items:center;
   gap:.3rem;padding:0 .3rem;background:var(--card-bg);color:var(--text-main);
   border:1px solid var(--surface-border);border-radius:.65rem;
   font-size:.95rem;font-weight:600;line-height:1;
@@ -437,6 +437,49 @@
 
 /* تلميح صغير للنص الموجود تحت أزرار تفاعل ومساعدة */
 .side-hint{margin:8px 2px 0;font-size:.9em;opacity:.8;line-height:1.4;}
+
+/* منطقة إسقاط ملف الاستيراد */
+.import-drop-zone{
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px dashed rgba(255,255,255,0.25);
+  background: rgba(0,0,0,0.08);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+  cursor: copy;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.import-drop-zone i{
+  font-size: 1.2rem;
+  opacity: 0.9;
+}
+
+.import-drop-zone-text{
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.import-drop-zone-sub{
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+/* عند السحب فوق المنطقة */
+.import-drop-zone.is-drag-over{
+  background: rgba(46, 125, 50, 0.15); /* أخضر خفيف (يتماشى مع الثيمات) */
+  border-color: rgba(129, 199, 132, 0.9);
+  box-shadow: 0 0 0 1px rgba(129, 199, 132, 0.6);
+  transform: translateY(-1px);
+}
 
 /* ========== الفلاتر (البطاقة نفسها) ========== */
 #advFilters.filters{direction:rtl;margin:.6rem 0 1rem}

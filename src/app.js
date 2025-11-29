@@ -290,6 +290,21 @@ const LOGO_BY_THEME = {
   img.src = `src/assets/images/${file}`;
 }
 
+// استقبال تغيّر الثيم من أي مكان (مثل نافذة إعادة التفضيلات)
+window.addEventListener('FT_THEME_CHANGED', (e) => {
+  const theme = (e.detail && e.detail.theme) || 'default';
+
+  // تحديث حالة التطبيق
+  setState({ theme });
+
+  // مزامنة meta theme-color مع الثيم الحالي
+  syncThemeColor();
+
+  // تحديث شعار غطاء التحميل ليتوافق مع الثيم
+  updateSplashLogo(theme);
+});
+
+
 /* =========================
    مزامنة لون شريط المتصفح مع الثيم الحالي
    ========================= */
@@ -474,21 +489,52 @@ function onEditFamily(key) {
 }
 
 /* حذف العائلة مع إعادة اختيار مناسبة */
+/* حذف العائلة مع إعادة اختيار مناسبة + رسالة توضيحية */
 async function onDeleteFamily(key) {
+  // 1) حفظ بيانات العائلة قبل الحذف لاستخدامها في الرسالة
+  const famBefore = Model.getFamily?.(key) || (Model.getFamilies()[key] || null);
+  const familyLabel =
+    (famBefore?.title ||
+     famBefore?.familyName ||
+     famBefore?.fullRootPersonName ||
+     key);
+
+  // 2) تنفيذ الحذف الفعلي
   const wasSelected = (Model.getSelectedKey() === key);
   await Model.deleteFamily(key);
   await Model.savePersistedFamilies?.();
   bus.emit('families:coreFlag:refresh');
 
+  // 3) اختيار عائلة أخرى إن كانت المحذوفة هي المختارة
   const remaining = Model.getFamilies();
-  if (wasSelected) {
-    const next = Object.keys(remaining)[0] || null;
-    setState({ selectedFamily: next });
-  }
-  redrawUI();
-  bus.emit('side:requestClose');
-  syncActiveFamilyUI();
+  let next = Model.getSelectedKey() || null;
 
+  if (wasSelected) {
+    // حاول اختيار أول عائلة مرئية غير مخفية
+    next =
+      Object.keys(remaining).find(k => remaining[k] && remaining[k].hidden !== true) ||
+      Object.keys(remaining)[0] ||
+      null;
+
+    if (next) {
+      Model.setSelectedKey(next);
+      setState({ selectedFamily: next });
+    } else {
+      setState({ selectedFamily: null });
+    }
+  }
+
+  // 4) تحديث الواجهة والقائمة الجانبية
+  redrawUI(next);
+  syncActiveFamilyUI();
+  bus.emit('side:requestClose');
+
+  // 5) رسالة مناسبة باسم العائلة المحذوفة
+  if (familyLabel) {
+    showSuccess(`تم حذف العائلة ${highlight(familyLabel)} بنجاح.`);
+  } else {
+    showSuccess('تم حذف العائلة بنجاح.');
+  }
 }
 
 /* حفظ من المودال */

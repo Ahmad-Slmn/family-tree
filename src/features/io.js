@@ -11,12 +11,21 @@ import { ensureIdsForAllFamilies } from './ids.js';
 
 let bus;
 
-// =======================================
-// 0) أدوات مساعدة عامّة
-// =======================================
+// ==============================
+// ثوابت عامة
+// ==============================
+const MAX_JSON_MB     = 64;
+const MAX_JSON_BYTES  = MAX_JSON_MB * 1024 * 1024;
+
+// توقيت النسخ الاحتياطي الآلي
+let _backupTimer = null;
+
+// ==============================
+// 0) أدوات مساعدة عامة
+// ==============================
 
 // ميتاداتا واضحة داخل ملف التصدير
-function buildExportMeta(){
+function buildExportMeta() {
   return {
     app: 'FamilyTree',
     schema: Model.SCHEMA_VERSION || 4,
@@ -26,7 +35,7 @@ function buildExportMeta(){
 }
 
 // فحص سريع لبنية ملف العائلات
-function isValidFamiliesPayload(obj){
+function isValidFamiliesPayload(obj) {
   if (!obj || typeof obj !== 'object') return false;
   const keys = Object.keys(obj).filter(k => k !== '__meta');
   if (!keys.length) return false;
@@ -34,21 +43,23 @@ function isValidFamiliesPayload(obj){
 }
 
 // تنظيف اسم يصلح كاسم ملف
-function safeFileName(name){
-  return String(name || '')
-    .replace(/[\\/:*?"<>|]/g, '-')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 80) || 'families';
+function safeFileName(name) {
+  return (
+    String(name || '')
+      .replace(/[\\/:*?"<>|]/g, '-')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 80) || 'families'
+  );
 }
 
 // إعادة تسمية مفاتيح العائلات المستوردة إذا كان هناك تصادم
-function rekeyImportedFamilies(obj){
+function rekeyImportedFamilies(obj) {
   const out = {};
-  const map = {}; // oldKey -> newKey
+  const map = {};
   const existing = Model.getFamilies?.() || {};
 
-  Object.keys(obj || {}).forEach(k=>{
+  Object.keys(obj || {}).forEach(k => {
     if (k === '__meta') return;
     let nk = k;
     if (existing[k]) {
@@ -62,16 +73,10 @@ function rekeyImportedFamilies(obj){
   return { out, map };
 }
 
-// حدّ الحجم: 10MB
-const MAX_JSON_BYTES = 10 * 1024 * 1024;
-
-// مؤقّت النسخ الاحتياطي للجلسة
-let _backupTimer = null;
-
 // إبطال blob آمن (مرة لكل عنوان)
-function revokeAllBlobImagesOnce(){
+function revokeAllBlobImagesOnce() {
   const seen = new Set();
-  document.querySelectorAll('img').forEach(img=>{
+  document.querySelectorAll('img').forEach(img => {
     const s = img.currentSrc || img.src || '';
     if (s && s.startsWith('blob:') && !seen.has(s)) {
       seen.add(s);
@@ -81,8 +86,11 @@ function revokeAllBlobImagesOnce(){
 }
 
 // نصّ التأكيد مقبول؟
-function confirmTextOk(v){
-  let t = String(v||'').normalize('NFKC').trim().replace(/\s+/g,' ');
+function confirmTextOk(v) {
+  let t = String(v || '')
+    .normalize('NFKC')
+    .trim()
+    .replace(/\s+/g, ' ');
   t = t.replace(/أ|إ|آ/g, 'ا');
   return (t === 'اوافق' || t === 'نعم' || t === 'اوافق على الحذف');
 }
@@ -95,8 +103,9 @@ function closeConfirmModalSafely(modal) {
         byId('hardResetBtn') ||
         document.querySelector('[data-main-focus]') ||
         document.body;
+
       if (fallback === document.body) {
-        document.body.setAttribute('tabindex','-1');
+        document.body.setAttribute('tabindex', '-1');
         document.body.focus();
         document.body.removeAttribute('tabindex');
       } else {
@@ -105,34 +114,37 @@ function closeConfirmModalSafely(modal) {
     }
   } catch {}
   modal.classList.remove('show');
-  modal.setAttribute('aria-hidden','true');
+  modal.setAttribute('aria-hidden', 'true');
   document.documentElement.style.overflow = '';
 }
 
 // تنزيل نسخة احتياطية فورية
-function autoDownloadBackup(){
-  const blob = new Blob([JSON.stringify(Model.exportFamilies(), null, 2)], {type:'application/json'});
+function autoDownloadBackup() {
+  const blob = new Blob(
+    [JSON.stringify(Model.exportFamilies(), null, 2)],
+    { type: 'application/json' }
+  );
   const a = document.createElement('a');
-  a.download = `families-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.download = `families-backup-${new Date().toISOString().slice(0, 10)}.json`;
   a.href = URL.createObjectURL(blob);
   a.click();
   URL.revokeObjectURL(a.href);
 }
 
 // التحقق من وجود بيانات محفوظة فعليًا
-async function hasAnyPersistedData(ctx){
+async function hasAnyPersistedData(ctx) {
   // 0) في الذاكرة: أي عائلة مخصّصة؟
-  try{
+  try {
     const fams = Model.getFamilies?.() || {};
     if (Object.values(fams).some(f => f && f.__custom)) return true;
-  }catch{}
+  } catch {}
 
   // 1) IndexedDB: عائلات أو صور؟
-  try{
+  try {
     const nf = (await ctx.DB?._countFamilies?.()) | 0;
     const np = (await ctx.DB?._countPhotos?.())   | 0;
     if (nf > 0 || np > 0) return true;
-  }catch{}
+  } catch {}
 
   // 2) تفضيلات غير افتراضية (لا نحتسب autoBackup)
   const theme =
@@ -140,8 +152,8 @@ async function hasAnyPersistedData(ctx){
     localStorage.getItem('appTheme') ||
     localStorage.getItem('familyTreeTheme');
 
-  const fam   = localStorage.getItem('selectedFamily');
-  const font  = localStorage.getItem('siteFontSize');
+  const fam  = localStorage.getItem('selectedFamily');
+  const font = localStorage.getItem('siteFontSize');
 
   const hasNonDefaultPrefs =
     (theme != null && theme !== 'default') ||
@@ -151,29 +163,98 @@ async function hasAnyPersistedData(ctx){
   return !!hasNonDefaultPrefs;
 }
 
-// =======================================
+// ==============================
+// 1) استيراد JSON
+// ==============================
+
+// استيراد ملف JSON واحد (سواء من input أو سحب/إفلات)
+async function importJsonFileObject(ctx, file) {
+  if (!file) throw new Error('no-file');
+
+  // فحص النوع
+  if (file.type && file.type !== 'application/json') {
+    throw new Error('bad-type');
+  }
+
+  // فحص الحجم
+  if (file.size > MAX_JSON_BYTES) {
+    throw new Error('too-large');
+  }
+
+  // قراءة النص
+  let text;
+  try {
+    text = await file.text();
+  } catch {
+    throw new Error('read-failed');
+  }
+
+  // تحويل إلى كائن
+  let obj;
+  try {
+    obj = JSON.parse(text);
+  } catch {
+    throw new Error('bad-json');
+  }
+
+  // فحص هيكل البيانات مبكرًا
+  if (!isValidFamiliesPayload(obj)) {
+    throw new Error('bad-payload');
+  }
+
+  // معلومات عن الملف
+  const keys = Object.keys(obj || {}).filter(k => k !== '__meta');
+  if (keys.length) {
+    const meta = obj.__meta || {};
+    const when = meta.exportedAt ? ` — تاريخ التصدير: ${meta.exportedAt.slice(0, 19).replace('T', ' ')}`
+      : '';
+    showInfo(`تم تحميل ملف: ${file.name} — عدد العائلات: ${keys.length}${when}`);
+  }
+
+  await doImport(ctx, obj);
+}
+
+// دالة موحّدة لرسائل الخطأ في الاستيراد
+function handleImportError(err) {
+  const msg = err?.message || '';
+
+  if (msg === 'no-file') {
+    showInfo('لم يتم اختيار أي ملف.');
+  } else if (msg === 'too-large') {
+    showError(`الملف كبير جدًا. الحد ${MAX_JSON_MB}MB.
+إذا كان الملف يحتوي بيانات ضخمة جدًا أو صورًا مضمنة، جرّب تقسيمه أو تقليل محتواه.`);
+  } else if (msg === 'bad-type') {
+    showError('نوع الملف غير مدعوم. استخدم ملف JSON فقط.');
+  } else if (msg === 'bad-json') {
+    showError('تعذّر قراءة محتوى JSON. تأكد من أن الملف غير تالف.');
+  } else if (msg === 'bad-payload') {
+    showError('هيكل الملف غير مطابق لتصدير التطبيق. تأكد أنك تستخدم ملفًا تم تصديره من هذه المنصّة.');
+  } else if (msg === 'read-failed') {
+    showError('حدث خطأ أثناء قراءة الملف من جهازك.');
+  } else {
+    console.error('Import error:', err);
+    showError('فشل الاستيراد. تأكد من صحة الملف أو أعد المحاولة.');
+  }
+}
+
 // استيراد موحّد (ذكي ومحصّن)
-// =======================================
-async function doImport(ctx, obj){
+async function doImport(ctx, obj) {
   if (!isValidFamiliesPayload(obj)) throw new Error('bad-payload');
 
-  // نسخة الـ schema القادمة من الملف (إن وجدت)
   const metaVer =
     +obj.__meta?.schema ||
     +obj.__meta?.version ||
     null;
 
-  // (1) إعادة تسمية المفاتيح المتصادمة
+  // 1) إعادة تسمية المفاتيح المتصادمة
   const { out: rekeyed, map } = rekeyImportedFamilies(obj);
   obj = rekeyed;
 
-  // (2) تطبيع/ترحيل كل عائلة مستوردة
+  // 2) تطبيع/ترحيل كل عائلة مستوردة
   const importedKeys = Object.keys(obj).filter(k => k !== '__meta');
-
-  importedKeys.forEach(k=>{
+  importedKeys.forEach(k => {
     const fam = obj[k];
     try {
-      // لو نسخة قديمة، رحّلها إلى آخر Schema
       if (metaVer != null && metaVer < (Model.SCHEMA_VERSION || 4)) {
         Model.migrate?.(fam, metaVer, Model.SCHEMA_VERSION || 4);
       }
@@ -181,26 +262,24 @@ async function doImport(ctx, obj){
     } catch {}
   });
 
-  // (3) استيرادها للذاكرة
+  // 3) استيرادها للذاكرة
   Model.importFamilies(obj);
 
-  // (4) ربط الزوجات + IDs + حفظ
+  // 4) ربط الزوجات + IDs + حفظ
   Model.linkRootPersonWives();
   await ensureIdsForAllFamilies();
   await Model.savePersistedFamilies?.();
 
-  // (5) اختيار العائلة المستوردة تلقائيًا (إن وُجدت)
+  // 5) اختيار العائلة المستوردة تلقائيًا (إن وُجدت)
   const selOld = obj.__meta?.selectedFamily;
   const selNew = selOld ? (map[selOld] || selOld) : null;
 
-  // المفتاح النهائي الذي نريد اختياره بعد الاستيراد
   const finalSel =
     (selNew && (Model.getFamilies?.()[selNew])) ? selNew
-    : (importedKeys[0] || Model.getSelectedKey?.() || null);
+      : (importedKeys[0] || Model.getSelectedKey?.() || null);
 
   if (finalSel && Model.setSelectedKey) Model.setSelectedKey(finalSel);
 
-  // مهم: اجعل state يغيّر selectedFamily ليُعاد رسم أزرار الشريط + الشجرة
   if (finalSel && ctx?.state?.setState) {
     ctx.state.setState({ selectedFamily: finalSel });
   } else {
@@ -209,39 +288,36 @@ async function doImport(ctx, obj){
 
   ctx?.bus?.emit('io:import:done');
   ctx?.bus?.emit('families:coreFlag:refresh');
-
 }
 
-// =======================================
-// 1) نقطة الدخول
-// =======================================
-export function init(ctx){
-  bus = ctx.bus;
+// ==============================
+// 2) واجهة المستخدم (تصدير/استيراد/تفريغ/سحب)
+// ==============================
 
-  const exportBtn   = byId('exportBtn');
-  const importInput = byId('importInput');
+// تهيئة زر التصدير
+function bindExportButton() {
+  const exportBtn = byId('exportBtn');
+  if (!exportBtn) return;
 
-  // ——— تصدير JSON (عائلة واحدة مع ميتاداتا) ———
-  exportBtn?.addEventListener('click', ()=>{
+  exportBtn.addEventListener('click', () => {
     const all = Model.exportFamilies();
-
     const key = Model.getSelectedKey?.() || 'family1';
     const fam = all[key];
 
-    if (!fam){
+    // إن لم توجد عائلة حالية واضحة، صدّر الكل
+    if (!fam) {
       downloadJson(all, 'all-families.json');
       return;
     }
 
-    const rawFamilyName =
-      String(
-        fam.familyName ||
-        fam.fullRootPersonName ||
-        fam.rootPerson?.name ||
-        key
-      ).trim();
+    const rawFamilyName = String(
+      fam.familyName ||
+      fam.fullRootPersonName ||
+      fam.rootPerson?.name ||
+      key
+    ).trim();
 
-    const rawName = `عائلة - ${rawFamilyName}`;
+    const rawName  = `عائلة - ${rawFamilyName}`;
     const safeName = safeFileName(rawName);
 
     const payload = {
@@ -251,40 +327,103 @@ export function init(ctx){
 
     downloadJson(payload, `${safeName}.json`);
   });
+}
 
-  // ——— استيراد من input (مع رسائل ذكية) ———
-  importInput?.addEventListener('change', async (e)=>{
+// تهيئة استيراد من input
+function bindImportInput(ctx) {
+  const importInput = byId('importInput');
+  if (!importInput) return;
+
+  importInput.addEventListener('change', async (e) => {
     const file = e.target.files && e.target.files[0];
-    if (!file) return;
 
-    try{
-      if (file.type && file.type !== 'application/json') throw new Error('bad-type');
-      if (file.size > MAX_JSON_BYTES) throw new Error('too-large');
-
-      const data = await readJsonFile(file);
-
-      // عرض معلومات الملف قبل تثبيته
-      const keys = Object.keys(data || {}).filter(k => k !== '__meta');
-      if (keys.length){
-        const meta = data.__meta || {};
-        const when = meta.exportedAt ? ` — تاريخ التصدير: ${meta.exportedAt.slice(0,19).replace('T',' ')}` : '';
-        showInfo(`تم تحميل ملف: ${file.name} — عدد العائلات: ${keys.length}${when}`);
-      }
-
-      await doImport(ctx, data);
+    try {
+      await importJsonFileObject(ctx, file);
       showSuccess('تم الاستيراد بنجاح.');
-    }catch(err){
-      if (err?.message === 'too-large') showError('الملف كبير جدًا. الحد 10MB.');
-      else if (err?.message === 'bad-type') showError('نوع الملف غير مدعوم. استخدم JSON.');
-      else if (err?.message === 'bad-payload') showError('هيكل الملف غير مطابق لتصدير التطبيق.');
-      else showError('فشل الاستيراد. تأكد من صحة الملف.');
-    }finally{
+    } catch (err) {
+      handleImportError(err);
+    } finally {
       importInput.value = '';
     }
   });
+}
 
-  // ——— تفريغ شامل (Wipe) ———
-  byId('hardResetBtn')?.addEventListener('click', async () => {
+// ربط السحب/الإفلات
+function bindDragDropImport(ctx) {
+  const importDropZone = document.getElementById('importDropZone');
+
+  // منع فتح الملف مباشرة في المتصفح
+  window.addEventListener('dragover', e => {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+  });
+
+  window.addEventListener('dragleave', () => {
+    if (!importDropZone) return;
+    importDropZone.classList.remove('is-drag-over');
+  });
+
+  if (importDropZone) {
+    ['dragenter', 'dragover'].forEach(evName => {
+      importDropZone.addEventListener(evName, e => {
+        e.preventDefault();
+        e.stopPropagation();
+        importDropZone.classList.add('is-drag-over');
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      });
+    });
+
+    ['dragleave', 'dragend', 'drop'].forEach(evName => {
+      importDropZone.addEventListener(evName, e => {
+        e.preventDefault();
+        e.stopPropagation();
+        importDropZone.classList.remove('is-drag-over');
+      });
+    });
+
+    importDropZone.addEventListener('drop', async e => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const files = Array.from(e.dataTransfer?.files || [])
+        .filter(f => !f.type || f.type === 'application/json');
+
+      if (!files.length) {
+        showInfo('أفلت ملف JSON فقط داخل هذه المنطقة.');
+        return;
+      }
+
+      const file = files[0];
+      if (files.length > 1) {
+        showInfo('تم اكتشاف أكثر من ملف. سيتم استخدام أول ملف فقط.');
+      }
+
+      try {
+        await importJsonFileObject(ctx, file);
+        ctx?.redrawUI?.();
+        showSuccess('تم الاستيراد من الملف المسحوب.');
+      } catch (err) {
+        handleImportError(err);
+      }
+    });
+  }
+
+  // منع إسقاط الملفات خارج منطقة الاستيراد من أن يفتح الملف في المتصفح
+  window.addEventListener('drop', e => {
+    e.preventDefault();
+    const hasFiles = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length;
+    if (hasFiles && !e.target.closest?.('#importDropZone')) {
+      showInfo('لاستيراد العائلات، اسحب ملف JSON وأسقطه داخل مربع الاستيراد في لوحة الإعدادات.');
+    }
+  });
+}
+
+// تهيئة زر التفريغ الشامل
+function bindHardReset(ctx) {
+  const btn = byId('hardResetBtn');
+  if (!btn) return;
+
+  btn.addEventListener('click', async () => {
     if (!(await hasAnyPersistedData(ctx))) {
       showInfo('لا توجد بيانات محفوظة للتفريغ.');
       return;
@@ -332,7 +471,12 @@ export function init(ctx){
   </div>
 `;
 
-    const replace = (btn)=>{ const c = btn.cloneNode(true); btn.parentNode.replaceChild(c, btn); return c; };
+    const replace = (btnNode) => {
+      const c = btnNode.cloneNode(true);
+      btnNode.parentNode.replaceChild(c, btnNode);
+      return c;
+    };
+
     const yes = replace(byId('confirmYes'));
     const no  = replace(byId('confirmNo'));
 
@@ -348,22 +492,30 @@ export function init(ctx){
       if (!v || confirmTextOk(v)) return;
       _wipeHintTimer = setTimeout(() => {
         const cur = (byId('wipeConfirmInput')?.value || '').trim();
-        if (cur && !confirmTextOk(cur)) showInfo('اكتب "أوافق" أو "نعم" أو "أوافق على الحذف" للمتابعة.');
+        if (cur && !confirmTextOk(cur)) {
+          showInfo('اكتب "أوافق" أو "نعم" أو "أوافق على الحذف" للمتابعة.');
+        }
       }, 600);
     });
 
     yes.addEventListener('click', async () => {
-      yes.setAttribute('disabled',''); yes.classList.add('loading'); no.setAttribute('disabled','');
-      const val = (byId('wipeConfirmInput')?.value || '').trim();
+      yes.setAttribute('disabled', '');
+      yes.classList.add('loading');
+      no.setAttribute('disabled', '');
 
+      const val = (byId('wipeConfirmInput')?.value || '').trim();
       if (!val) {
         showInfo('الرجاء كتابة "أوافق" أو "نعم" قبل المتابعة.');
-        yes.removeAttribute('disabled'); yes.classList.remove('loading'); no.removeAttribute('disabled');
+        yes.removeAttribute('disabled');
+        yes.classList.remove('loading');
+        no.removeAttribute('disabled');
         return;
       }
       if (!confirmTextOk(val)) {
         showError('النص المدخل غير صحيح.');
-        yes.removeAttribute('disabled'); yes.classList.remove('loading'); no.removeAttribute('disabled');
+        yes.removeAttribute('disabled');
+        yes.classList.remove('loading');
+        no.removeAttribute('disabled');
         return;
       }
 
@@ -373,14 +525,12 @@ export function init(ctx){
 
         await ctx.DB.nuke();
 
-        // تصفير حالة التطبيق
         try {
           Model.resetInMemory?.();
           ctx.state?.setState?.({});
           ctx.bus?.emit('wipe:after');
         } catch {}
 
-        // تنظيف Cache Storage
         try {
           if ('caches' in window) {
             const names = await caches.keys();
@@ -405,7 +555,9 @@ export function init(ctx){
 
         try {
           document.documentElement.classList.remove(
-            'theme-corporate','theme-elegant','theme-minimal','theme-royal','theme-dark'
+            'theme-corporate', 'theme-elegant',
+            'theme-minimal', 'theme-royal',
+            'theme-dark'
           );
         } catch {}
 
@@ -420,58 +572,40 @@ export function init(ctx){
       showInfo('تم إلغاء عملية التفريغ.');
     });
   });
+}
 
-  // ——— سحب/إفلات JSON مع مؤشّر إسقاط ———
-  window.addEventListener('dragover', e => {
-    e.preventDefault();
-    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-  });
+// ==============================
+// 3) نسخ احتياطي آلي + تنظيف قبل الإغلاق
+// ==============================
 
-  window.addEventListener('drop', async e => {
-    e.preventDefault();
-    const files = Array.from(e.dataTransfer?.files || [])
-      .filter(f => !f.type || f.type === 'application/json');
-
-    if (!files.length) { showInfo('أفلت ملف JSON فقط.'); return; }
-
-    const f = files[0];
-    try{
-      if (f.size > MAX_JSON_BYTES) throw new Error('too-large');
-
-      const text = await f.text();
-      const obj = JSON.parse(text);
-
-      // عرض معلومات الملف قبل التثبيت
-      const keys = Object.keys(obj || {}).filter(k => k !== '__meta');
-      if (keys.length){
-        const meta = obj.__meta || {};
-        const when = meta.exportedAt ? ` — تاريخ التصدير: ${meta.exportedAt.slice(0,19).replace('T',' ')}` : '';
-        showInfo(`تم تحميل ملف: ${f.name} — عدد العائلات: ${keys.length}${when}`);
-      }
-
-      await doImport(ctx, obj);
-      ctx?.redrawUI?.();
-      showSuccess('تم الاستيراد من الملف المسحوب.');
-    }catch(err){
-      if (err?.message === 'too-large') showError('الملف كبير جدًا. الحد 10MB.');
-      else if (err?.message === 'bad-payload') showError('هيكل الملف غير مطابق لتصدير التطبيق.');
-      else showError('فشل الاستيراد. تأكد من صحة الملف.');
-    }
-  });
-
-  // ——— نسخ احتياطي آلي محمي من التكرار ———
+function initAutoBackup() {
   if (localStorage.getItem('autoBackup') === '1' && !_backupTimer) {
-    const jitter = Math.floor(Math.random()*30000); // ≤ 30s
-    _backupTimer = setTimeout(()=>{
-      _backupTimer = setInterval(autoDownloadBackup, 15*60*1000);
+    const jitter = Math.floor(Math.random() * 30000); // ≤ 30s
+    _backupTimer = setTimeout(() => {
+      _backupTimer = setInterval(autoDownloadBackup, 15 * 60 * 1000);
       autoDownloadBackup();
     }, jitter);
   }
+}
 
-  // ——— تنظيف blob قبل الإغلاق ———
-  window.addEventListener('beforeunload', ()=>{
+function bindBeforeUnloadCleanup() {
+  window.addEventListener('beforeunload', () => {
     revokeAllBlobImagesOnce();
   });
+}
+
+// ==============================
+// 4) نقطة الدخول
+// ==============================
+export function init(ctx) {
+  bus = ctx.bus;
+
+  bindExportButton();
+  bindImportInput(ctx);
+  bindHardReset(ctx);
+  bindDragDropImport(ctx);
+  initAutoBackup();
+  bindBeforeUnloadCleanup();
 
   return {};
 }

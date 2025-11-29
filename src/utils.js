@@ -307,11 +307,34 @@ function resetPreferences({ theme = true, family = true, font = true } = {}) {
   const items = [];
 
   if (theme) {
+    // امسح جميع مفاتيح الثيم من التخزين
     localStorage.removeItem('familyTreeTheme');
+    localStorage.removeItem('theme');
+    localStorage.removeItem('appTheme');
+
+    // ثيم افتراضي داخليًا
     currentTheme = 'default';
+
+    // إزالة أي كلاس ثيم من <html> (يتطابق مع سكربت الـ head)
+    document.documentElement.classList.remove(
+      'theme-corporate',
+      'theme-elegant',
+      'theme-minimal',
+      'theme-royal',
+      'theme-dark'
+    );
+
+    // تحديث الـ <body> وأزرار الثيم
     applySavedTheme(currentTheme);
+
+    // إعلام بقية التطبيق بأن الثيم عاد للافتراضي
+    window.dispatchEvent(new CustomEvent('FT_THEME_CHANGED', {
+      detail: { theme: 'default' }
+    }));
+
     items.push('النمط');
   }
+
 
   if (family) {
     localStorage.removeItem('selectedFamily');
@@ -415,13 +438,35 @@ function showResetOptionsModal({ title = 'تأكيد إعادة القيم', onC
     modal.classList.remove('show');
 
     if ((theme || family || font) && onConfirm) onConfirm({ theme, family, font });
+
+    // رسائل مناسبة عند إظهار العائلات الأساسية المخفية
     if (core) {
-  try {
-    await triggerResetHiddenCore();
-    // أطْلِق حدثًا عامًا ليعيد app.js الرسم وتحديث القوائم
-    window.dispatchEvent(new CustomEvent('FT_VISIBILITY_REFRESH'));
-  } catch {}
-}
+      try {
+        const restored = await triggerResetHiddenCore();
+        // إعادة رسم الواجهة بعد تحديث الرؤية
+        window.dispatchEvent(new CustomEvent('FT_VISIBILITY_REFRESH'));
+
+        // يدعم الشكلين: رقم مباشر أو كائن { count, labels }
+        const info = (restored && typeof restored === 'object') ? restored
+          : { count: Number(restored) || 0, labels: [] };
+
+        const n = Number(info.count) || 0;
+
+        if (n === 1) {
+          const label = (info.labels && info.labels[0]) || 'العائلة الأساسية';
+          // 2) تم إظهار العائلة المخفية + اسم العائلة مميز بـ highlight
+          showSuccess(`تم إظهار عائلة ${highlight(label)} المخفية.`);
+
+        } else if (n > 1) {
+          // 3) تمييز العدد بـ highlight
+          showSuccess(`تم إظهار ${highlight(String(n))} من العائلات الأساسية المخفية.`);
+        }
+        // لا حاجة لفرع n === 0 لأن الخيار لا يكون متاحاً أصلاً بدون عائلات مخفية
+      } catch {
+        showError('تعذّر إظهار العائلات الأساسية المخفية، حاول مرة أخرى.');
+      }
+    }
+
 
   });
 

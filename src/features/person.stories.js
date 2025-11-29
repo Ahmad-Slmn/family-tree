@@ -5,9 +5,60 @@ import {
   el, textEl,
   showConfirmModal, showWarning, showSuccess, showInfo, showError
 } from '../utils.js';
+import { DB } from '../storage/db.js';
+
+// ====================== صور القصص عبر IndexedDB ======================
+
+// ref هو ما سيُخزَّن داخل story.images (مثل: 'idb:story_123')
+// هذه الدالة تعطي URL صالح للعرض (blob: أو http أو data:)
+async function resolveStoryImageUrl(ref) {
+  if (!ref) return null;
+  const s = String(ref);
+
+  // بيانات جاهزة أصلاً (قديمة أو مستوردة)
+  if (/^(data:|blob:|https?:)/.test(s)) return s;
+
+  // صيغة idb:... نمررها لـ DB
+  if (typeof DB?.getStoryImageURL === 'function') {
+    try {
+      const url = await DB.getStoryImageURL(s);
+      return url || null;
+    } catch (e) {
+      console.error('resolveStoryImageUrl failed', e);
+      return null;
+    }
+  }
+
+  // في حال لم تُنفَّذ في DB بعد
+  return s;
+}
+
+// تخزين ملف صورة في IndexedDB وإرجاع المرجع الذي سيُحفَظ في story.images
+async function storeStoryImageFile(file, personId, storyId) {
+  if (!file) return null;
+
+  // مطلوب منك في db.js: دالة DB.putStoryImage تتولى الضغط + الحفظ
+  if (typeof DB?.putStoryImage === 'function') {
+    try {
+      const ref = await DB.putStoryImage({ file, personId, storyId });
+      // يُفضَّل أن ترجع الدالة مرجعًا من نوع 'idb:story_...'
+      return ref || null;
+    } catch (e) {
+      console.error('storeStoryImageFile failed', e);
+      return null;
+    }
+  }
+
+  //Fallback اختياري (مؤقت): لو DB.putStoryImage غير جاهزة، نستعمل DataURL كما كان
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = err => reject(err);
+    reader.onload = ev => resolve(String(ev.target?.result || ''));
+    reader.readAsDataURL(file);
+  });
+}
 
 // ====================== منطق البيانات ======================
-
 function normalizeStory(raw) {
   const now = new Date().toISOString();
   if (!raw || typeof raw !== 'object') raw = {};
@@ -247,9 +298,17 @@ function ensureImageSlider() {
   return api;
 }
 
-function openImageSlider(urls, startIndex = 0) {
+async function openImageSlider(refs, startIndex = 0) {
+  const list = Array.isArray(refs) ? refs : [];
+  const urls = [];
+  for (const r of list) {
+    const u = await resolveStoryImageUrl(r);
+    if (u) urls.push(u);
+  }
+  if (!urls.length) return;
   ensureImageSlider().open(urls, startIndex);
 }
+
 
 // ====================== بناء القسم ======================
 
@@ -501,37 +560,43 @@ export function createStoriesSection(person, handlers = {}) {
         openImageSlider(original.images, 0);
       });
 
-      function renderPreviewImages() {
-        previewImagesWrap.innerHTML = '';
-        sliderBtn.style.display =
-          !original.images.length || original.images.length < 2 ? 'none' : '';
-        original.images.forEach((url, imgIndex) => {
-          const thumb = el(
-            'div',
-            'story-image-thumb story-image-thumb--preview'
-          );
-          const imgEl = el('img');
-          imgEl.src = url;
-          imgEl.alt = 'صورة مرفقة بالقصة';
+ function renderPreviewImages() {
+  previewImagesWrap.innerHTML = '';
+  sliderBtn.style.display =
+    !original.images.length || original.images.length < 2 ? 'none' : '';
 
-          const viewBtn = el('button', 'story-image-thumb-view');
-          viewBtn.type = 'button';
-          viewBtn.title = 'معاينة الصورة بحجم أكبر';
-          viewBtn.textContent = 'معاينة';
+  original.images.forEach((ref, imgIndex) => {
+    const thumb = el(
+      'div',
+      'story-image-thumb story-image-thumb--preview'
+    );
+    const imgEl = el('img');
+    imgEl.alt = 'صورة مرفقة بالقصة';
 
-          viewBtn.addEventListener('click', e => {
-            e.stopPropagation();
-            openImageSlider(original.images, imgIndex);
-          });
+    // نحل المرجع إلى URL حقيقي
+    resolveStoryImageUrl(ref).then(url => {
+      if (url) imgEl.src = url;
+    });
 
-          imgEl.addEventListener('click', () =>
-            openImageSlider(original.images, imgIndex)
-          );
+    const viewBtn = el('button', 'story-image-thumb-view');
+    viewBtn.type = 'button';
+    viewBtn.title = 'معاينة الصورة بحجم أكبر';
+    viewBtn.textContent = 'معاينة';
 
-          thumb.append(imgEl, viewBtn);
-          previewImagesWrap.appendChild(thumb);
-        });
-      }
+    viewBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      openImageSlider(original.images, imgIndex);
+    });
+
+    imgEl.addEventListener('click', () =>
+      openImageSlider(original.images, imgIndex)
+    );
+
+    thumb.append(imgEl, viewBtn);
+    previewImagesWrap.appendChild(thumb);
+  });
+}
+
 
       renderPreviewImages();
 
@@ -570,13 +635,9 @@ export function createStoriesSection(person, handlers = {}) {
       const typeSelect = el('select', 'story-type-select');
       typeSelect.name = `story_type_${story.id}`;
 
-      const defaultOpt = el('option');
-      defaultOpt.value = '';
-      defaultOpt.textContent = 'عام';
-      typeSelect.appendChild(defaultOpt);
-
-        STORY_TYPE_OPTIONS
-        .filter(([val]) => val && val !== 'all') // استبعاد القيمة الفارغة و"كل الأنواع"
+      // نضيف كل الأنواع ما عدا "كل الأنواع"
+      STORY_TYPE_OPTIONS
+        .filter(([val]) => val && val !== 'all')
         .forEach(([val, label]) => {
           const opt = el('option');
           opt.value = val;
@@ -584,7 +645,9 @@ export function createStoriesSection(person, handlers = {}) {
           typeSelect.appendChild(opt);
         });
 
-      typeSelect.value = original.type || '';
+      // إذا لا يوجد نوع مخزَّن نعتبره "عام"
+      typeSelect.value = original.type || 'general';
+
 
           const typeField = el('div', 'story-meta-field');
       const typeLabelBox = el('div', 'story-meta-label');
@@ -679,6 +742,42 @@ export function createStoriesSection(person, handlers = {}) {
         }
       }
 
+      // ← هنا بالضبط نضيف الدالة الجديدة
+      function setupImagesSortable() {
+        // نتأكد أن المكتبة متوفّرة عالميًا
+        if (!window.Sortable) return;
+
+        // لا نعيد التهيئة لنفس الحاوية أكثر من مرة
+        if (imagesThumbs._sortableInstance) return;
+
+        imagesThumbs._sortableInstance = new window.Sortable(imagesThumbs, {
+          animation: 150,
+          direction: 'horizontal',
+          ghostClass: 'story-image-thumb--ghost',
+          dragClass: 'story-image-thumb--drag',
+          fallbackOnBody: true,
+          swapThreshold: 0.5,
+
+          onEnd() {
+            // نقرأ الترتيب الجديد من الـ DOM
+            const orderedRefs = Array.from(
+              imagesThumbs.querySelectorAll('.story-image-thumb')
+            )
+              .map(node => node.dataset.ref)
+              .filter(Boolean);
+
+            if (!orderedRefs.length) return;
+
+            // نحدّث مصفوفة الصور حسب الترتيب الجديد
+            currentImages = orderedRefs.slice();
+
+            // نعيد بناء المصغّرات ليتطابق index الأحداث مع الترتيب الجديد
+            renderThumbs();
+            recomputeDirty();
+          }
+        });
+      }
+
       function renderThumbs() {
         imagesThumbs.innerHTML = '';
         if (!currentImages.length) {
@@ -689,11 +788,17 @@ export function createStoriesSection(person, handlers = {}) {
         }
         emptyImagesHint.style.display = 'none';
 
-        currentImages.forEach((url, idxImg) => {
+        currentImages.forEach((ref, idxImg) => {
           const thumb = el('div', 'story-image-thumb');
+          // مهم: نربط الـ ref بالعنصر حتى نسترجع الترتيب بعد السحب
+          thumb.dataset.ref = ref;
+
           const imgEl = el('img');
-          imgEl.src = url;
           imgEl.alt = 'صورة مرفقة بالقصة';
+
+          resolveStoryImageUrl(ref).then(url => {
+            if (url) imgEl.src = url;
+          });
 
           const removeBtn = el('button', 'story-image-thumb-remove');
           removeBtn.type = 'button';
@@ -726,26 +831,32 @@ export function createStoriesSection(person, handlers = {}) {
         });
 
         updateAddImageLabel();
+        setupImagesSortable(); // تفعيل Sortable بعد بناء المصغّرات
       }
+
 
       renderThumbs();
 
-      fileInput.addEventListener('change', () => {
-        const files = Array.from(fileInput.files || []);
-        if (!files.length) return;
-        files.forEach(file => {
-          const reader = new FileReader();
-          reader.onload = ev => {
-            const dataUrl = String(ev.target?.result || '');
-            if (!dataUrl) return;
-            currentImages.push(dataUrl);
-            renderThumbs();
-            recomputeDirty();
-          };
-          reader.readAsDataURL(file);
-        });
-        fileInput.value = '';
-      });
+ fileInput.addEventListener('change', async () => {
+  const files = Array.from(fileInput.files || []);
+  if (!files.length) return;
+
+  for (const file of files) {
+    try {
+      const ref = await storeStoryImageFile(file, personId, story.id);
+      if (ref) {
+        currentImages.push(ref);
+      }
+    } catch (e) {
+      console.error('failed to add story image', e);
+      showError?.('تعذّر حفظ إحدى الصور المرفقة. حاول مرة أخرى.');
+    }
+  }
+
+  renderThumbs();
+  recomputeDirty();
+  fileInput.value = '';
+});
 
       body.append(
         metaRow,
