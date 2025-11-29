@@ -699,9 +699,19 @@ export function createStoriesSection(person, handlers = {}) {
 
       tagsInput.value = original.tags.join(', ');
 
+        // كتلة الصور العامة
       const imagesBlock = el('div', 'story-images-block');
+
+      // نص التلميح (يظهر عند عدم وجود صور)
+      const emptyImagesHint = el('div', 'story-images-empty-hint');
+
+      // صف خارجي يدفع المصغّرات لليمين
+      const imagesRow = el('div', 'story-images-row');
+
+      // الحاوية الداخلية التي يشتغل عليها Sortable
       const imagesThumbs = el('div', 'story-images-thumbs');
 
+      // زر إضافة الصور + حقل الملف
       const addImageLabel = el('label', 'story-image-add-btn');
       const addImageIcon = el('span', 'story-image-add-icon');
       addImageIcon.textContent = '📷';
@@ -714,10 +724,17 @@ export function createStoriesSection(person, handlers = {}) {
       fileInput.style.display = 'none';
 
       addImageLabel.append(addImageIcon, addImageText, fileInput);
-      imagesBlock.append(imagesThumbs, addImageLabel);
 
-      const emptyImagesHint = el('div', 'story-images-empty-hint');
-      imagesBlock.insertBefore(emptyImagesHint, imagesThumbs);
+      // تركيب الهيكل:
+      // emptyImagesHint
+      // ثم صف يمين يحتوي على thumbs
+      // ثم زر الإضافة
+      imagesRow.appendChild(imagesThumbs);
+      imagesBlock.append(
+        emptyImagesHint,
+        imagesRow,
+        addImageLabel
+      );
 
       const pinWrap = el('label', 'story-pin-toggle');
       const pinCheckbox = el('input');

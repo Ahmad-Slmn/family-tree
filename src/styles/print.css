@@ -30,7 +30,8 @@
   .side-panel,
   .scroll-buttons,
   .site-tagline,
-  .site-title{
+  .site-title,
+  #advFilters{
     display:none !important;
   }
 

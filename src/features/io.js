@@ -348,9 +348,65 @@ function bindImportInput(ctx) {
   });
 }
 
+// هل الجهاز يعمل بلمس فقط (coarse / بدون hover)؟
+function isTouchOnlyMQ() {
+  return !!(
+    window.matchMedia &&
+    window.matchMedia('(hover: none) and (pointer: coarse)').matches
+  );
+}
+
+// هل السحب/الإفلات مفيد في هذا الجهاز؟
+function isDragAndDropUseful() {
+  // دعم أساسي لميزة DnD في المتصفح
+  const hasDnD =
+    'draggable' in document.createElement('div') &&
+    'DataTransfer' in window;
+
+  if (!hasDnD) return false;
+
+  // أجهزة لمس فقط (مثل أغلب الهواتف)
+  if (window.matchMedia) {
+    const touchOnly = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+    if (touchOnly) return false;
+  }
+
+  return true;
+}
+
 // ربط السحب/الإفلات
 function bindDragDropImport(ctx) {
   const importDropZone = document.getElementById('importDropZone');
+
+  // إن لم توجد المنطقة أصلاً، لا شيء نفعله
+  if (!importDropZone) return;
+
+  // media query لمتابعة تغيّر وضع الجهاز (سطح مكتب / هاتف)
+  const mq = window.matchMedia ? window.matchMedia('(hover: none) and (pointer: coarse)')
+    : null;
+
+  const updateVisibility = () => {
+    if (!mq) return;
+    // إذا كان الجهاز لمس فقط ⇒ أخفِ منطقة السحب/الإفلات
+    importDropZone.style.display = mq.matches ? 'none' : '';
+  };
+
+  // أول استدعاء حسب الوضع الحالي
+  if (mq) {
+    updateVisibility();
+
+    // متابعة تغيّر الـ media query (مثلاً عند التبديل في أدوات المطوّر)
+    if (mq.addEventListener) {
+      mq.addEventListener('change', updateVisibility);
+    } else if (mq.addListener) {
+      mq.addListener(updateVisibility);
+    }
+  }
+
+  // إذا كان السحب/الإفلات غير مفيد حاليًا (أجهزة لمس فقط مثلاً)، نخرج بعد تحديث الظهور
+  if (!isDragAndDropUseful()) {
+    return;
+  }
 
   // منع فتح الملف مباشرة في المتصفح
   window.addEventListener('dragover', e => {
@@ -359,54 +415,51 @@ function bindDragDropImport(ctx) {
   });
 
   window.addEventListener('dragleave', () => {
-    if (!importDropZone) return;
     importDropZone.classList.remove('is-drag-over');
   });
 
-  if (importDropZone) {
-    ['dragenter', 'dragover'].forEach(evName => {
-      importDropZone.addEventListener(evName, e => {
-        e.preventDefault();
-        e.stopPropagation();
-        importDropZone.classList.add('is-drag-over');
-        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-      });
-    });
-
-    ['dragleave', 'dragend', 'drop'].forEach(evName => {
-      importDropZone.addEventListener(evName, e => {
-        e.preventDefault();
-        e.stopPropagation();
-        importDropZone.classList.remove('is-drag-over');
-      });
-    });
-
-    importDropZone.addEventListener('drop', async e => {
+  ['dragenter', 'dragover'].forEach(evName => {
+    importDropZone.addEventListener(evName, e => {
       e.preventDefault();
       e.stopPropagation();
-
-      const files = Array.from(e.dataTransfer?.files || [])
-        .filter(f => !f.type || f.type === 'application/json');
-
-      if (!files.length) {
-        showInfo('أفلت ملف JSON فقط داخل هذه المنطقة.');
-        return;
-      }
-
-      const file = files[0];
-      if (files.length > 1) {
-        showInfo('تم اكتشاف أكثر من ملف. سيتم استخدام أول ملف فقط.');
-      }
-
-      try {
-        await importJsonFileObject(ctx, file);
-        ctx?.redrawUI?.();
-        showSuccess('تم الاستيراد من الملف المسحوب.');
-      } catch (err) {
-        handleImportError(err);
-      }
+      importDropZone.classList.add('is-drag-over');
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
     });
-  }
+  });
+
+  ['dragleave', 'dragend', 'drop'].forEach(evName => {
+    importDropZone.addEventListener(evName, e => {
+      e.preventDefault();
+      e.stopPropagation();
+      importDropZone.classList.remove('is-drag-over');
+    });
+  });
+
+  importDropZone.addEventListener('drop', async e => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const files = Array.from(e.dataTransfer?.files || [])
+      .filter(f => !f.type || f.type === 'application/json');
+
+    if (!files.length) {
+      showInfo('أفلت ملف JSON فقط داخل هذه المنطقة.');
+      return;
+    }
+
+    const file = files[0];
+    if (files.length > 1) {
+      showInfo('تم اكتشاف أكثر من ملف. سيتم استخدام أول ملف فقط.');
+    }
+
+    try {
+      await importJsonFileObject(ctx, file);
+      ctx?.redrawUI?.();
+      showSuccess('تم الاستيراد من الملف المسحوب.');
+    } catch (err) {
+      handleImportError(err);
+    }
+  });
 
   // منع إسقاط الملفات خارج منطقة الاستيراد من أن يفتح الملف في المتصفح
   window.addEventListener('drop', e => {
@@ -417,6 +470,7 @@ function bindDragDropImport(ctx) {
     }
   });
 }
+
 
 // تهيئة زر التفريغ الشامل
 function bindHardReset(ctx) {

@@ -277,34 +277,106 @@ function mountAdvancedFilters(){
   const box=document.createElement('div');
   box.id='advFilters';
   box.className='filters collapsible';
-  box.innerHTML=`
+  box.innerHTML = `
     <div class="filters-card" role="group" aria-label="فلاتر البحث">
       <h3 class="filters-title">فلاتر البحث المتقدمة</h3>
       <div class="filters-grid">
         <div class="form-field">
-          <label for="fltRole">الدور</label>
-          <select id="fltRole"><option value="">الكل</option></select>
-        </div>
-        <div class="form-field clan-field">
-          <label for="fltClan">العشيرة</label>
-          <div class="input-wrap">
-            <input id="fltClan" type="search" placeholder="اكتب اسم العشيرة" />
-            <button id="clearClan" type="button" class="clear-btn" aria-label="مسح" title="مسح">
-              <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-            </button>
+          <label for="fltRole">
+            <i class="fa-solid fa-user-tag" aria-hidden="true"></i>
+            <span>الدور</span>
+          </label>
+          <div class="select-wrap">
+            <select id="fltRole">
+              <option value="">الكل</option>
+            </select>
           </div>
         </div>
+
+        <div class="form-field clan-field">
+          <label for="fltClan">
+            <i class="fa-solid fa-people-group" aria-hidden="true"></i>
+            <span>العشيرة</span>
+          </label>
+          <div class="select-wrap">
+            <select id="fltClan">
+              <option value="">كل العشائر</option>
+            </select>
+          </div>
+        </div>
+
         <div class="form-field">
-          <label for="fltFrom">من تاريخ الميلاد</label>
+          <label for="fltFrom">
+            <i class="fa-solid fa-calendar-day" aria-hidden="true"></i>
+            <span>من تاريخ الميلاد</span>
+          </label>
           <input id="fltFrom" type="date" />
         </div>
+
         <div class="form-field">
-          <label for="fltTo">إلى تاريخ الميلاد</label>
+          <label for="fltTo">
+            <i class="fa-solid fa-calendar-check" aria-hidden="true"></i>
+            <span>إلى تاريخ الميلاد</span>
+          </label>
           <input id="fltTo" type="date" />
         </div>
       </div>
     </div>`;
+
   topBar.after(box);
+  const fams = Model.getFamilies();
+  const selectedKey = getState().selectedFamily;
+  const fam = fams[selectedKey];
+
+  function fillClanOptions() {
+    const sel = byId('fltClan');
+    if (!sel || !fam) return;
+
+    const ctx = Lineage.buildLineageContext ? Lineage.buildLineageContext(fam) : null;
+    const clansMap = new Map();
+
+    const addPersonClan = (p) => {
+      if (!p) return;
+      const b = p.bio || {};
+      const resolved = ctx && Lineage.resolveClan ? (Lineage.resolveClan(p, fam, ctx) || '')
+        : (b.clan || '');
+      const clan = String(resolved || '').trim();
+      if (!clan) return;
+      clansMap.set(clan, (clansMap.get(clan) || 0) + 1);
+    };
+
+    // نفس مسار الأشخاص المستخدم في الإحصاءات تقريبًا
+    const tops = [
+      ...(Array.isArray(fam.ancestors) ? fam.ancestors : []),
+      fam.father,
+      fam.rootPerson,
+      ...(fam.wives || [])
+    ].filter(Boolean);
+
+    tops.forEach(p => {
+      addPersonClan(p);
+      (p.children || []).forEach(addPersonClan);
+      (p.wives || []).forEach(w => {
+        addPersonClan(w);
+        (w.children || []).forEach(addPersonClan);
+      });
+    });
+
+    // بناء الخيارات بالترتيب حسب عدد الأشخاص
+    const items = Array.from(clansMap.entries())
+      .map(([clan, count]) => ({ clan, count }))
+      .sort((a, b) => b.count - a.count || a.clan.localeCompare(b.clan, 'ar'));
+
+    sel.innerHTML = '<option value="">كل العشائر</option>';
+    for (const item of items) {
+      const opt = document.createElement('option');
+      opt.value = item.clan;
+      opt.textContent = `${item.clan} (${item.count})`;
+      sel.appendChild(opt);
+    }
+  }
+
+  fillClanOptions();
 
   const roleSelect=byId('fltRole');
   if(roleSelect){
@@ -334,22 +406,6 @@ function mountAdvancedFilters(){
     localStorage.setItem('flt_from',patch.filters.birthFrom);
     localStorage.setItem('flt_to',patch.filters.birthTo);
   };
-
-  const clanInput=byId('fltClan'),clanClear=byId('clearClan');
-const syncClanClear=()=>{
-  if(!clanInput||!clanClear) return;
-  const has=!!(clanInput.value&&clanInput.value.trim());
-  if(has) clanClear.removeAttribute('hidden');
-  else clanClear.setAttribute('hidden','');
-};
-
-
-  clanClear?.addEventListener('click',()=>{
-    if(!clanInput) return;
-    clanInput.value=''; push(); syncClanClear(); clanInput.focus();
-  });
-  ['input','change'].forEach(ev=>clanInput?.addEventListener(ev,syncClanClear));
-  syncClanClear();
 
   ['change','input'].forEach(ev=>{
     byId('fltRole').addEventListener(ev,push);
