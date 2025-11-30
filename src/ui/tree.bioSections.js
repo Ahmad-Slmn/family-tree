@@ -4,7 +4,7 @@ import { el, textEl, highlight, getArabicOrdinalF } from '../utils.js';
 import { LABELS } from '../model/families.js';
 import * as Lineage from '../features/lineage.js';
 import { createStoriesSection } from '../features/person.stories.js';
-
+import { createEventsSection } from '../features/person.events.js';
 /* =========================
    توابع العمر والتواريخ
    ========================= */
@@ -173,6 +173,7 @@ const BIO_SECTION_KEYS = [
   'grands',     // الأسلاف والأجداد + الأحفاد
   'children',   // الأبناء والبنات
   'wives',      // الزوجات
+  'timeline',   // الخط الزمني للأحداث (NEW)
   'stories',    // القصص والمذكّرات
   'achievements',
   'hobbies'
@@ -185,7 +186,8 @@ const BIO_SECTION_GROUPS = {
   grands:   ['grands'],
   children: ['children'],
   wives:    ['wives'],
-  stories:  ['stories']
+  stories:  ['stories'],
+  timeline: ['timeline'] 
 };
 
 const SUMMARY_ALLOWED_SECTIONS = new Set(['basic', 'achievements', 'hobbies']);
@@ -275,7 +277,8 @@ function detectSectionPresence(bio, person, family){
     hasGrands:   false,
     hasChildren: false,
     hasWives:    false,
-    hasStories:  false
+    hasStories:  false,
+    hasTimeline: false
   };
 
   bio = bio || {};
@@ -364,8 +367,13 @@ function detectSectionPresence(bio, person, family){
     : (Array.isArray(person.bio?.stories) ? person.bio.stories : []);
   out.hasStories = stories.length > 0;
 
+  // الأحداث (الخط الزمني)
+  const events = Array.isArray(person.events) ? person.events : [];
+  out.hasTimeline = events.length > 0;
+
   return out;
 }
+
 
 /* =========================
    بناء أقسام السيرة
@@ -779,6 +787,21 @@ function buildStoriesSection(person, handlers){
   return root;
 }
 
+/* ===== X) الخط الزمني للأحداث ===== */
+function buildTimelineSection(person, handlers){
+  if (!person) return null;
+
+  // كل المحتوى سيتم بناؤه داخل createEventsSection
+  const root = createEventsSection(person, handlers);
+  if (!root) return null;
+
+  // نضمن وجود كلاس bio-section + معرّف القسم ليستفيد منه السكول/الوضع
+  root.classList.add('bio-section', 'bio-section-timeline');
+  root.dataset.sectionId = 'timeline';
+
+  return root;
+}
+
 
 /* ===== 7) الإنجازات ===== */
 function buildAchievementsSection(bio){
@@ -830,6 +853,7 @@ export function renderBioSections(container, bio, person = null, family = null, 
     family:       () => buildFamilySection(bio, person, family, handlers),
     wives:        () => buildWivesSection(person, family, handlers),
     children:     () => buildChildrenSection(person, family, handlers),
+    timeline:     () => buildTimelineSection(person, handlers),
     stories:      () => buildStoriesSection(person, handlers),
     achievements: () => buildAchievementsSection(bio),
     hobbies:      () => buildHobbiesSection(bio)
@@ -856,6 +880,7 @@ export function getAvailableBioModes(bio, person, family){
   if (p.hasGrands)   modes.push({ value:'grands',   label:'الأسلاف والأجداد' });
   if (p.hasChildren) modes.push({ value:'children', label:'الأبناء والبنات' });
   if (p.hasWives)    modes.push({ value:'wives',    label:'الزوجات' });
-  modes.push({ value:'stories', label:'القصص والمذكّرات' }); // نُظهر خيار "القصص والمذكّرات" دائمًا لتمكين إضافة القصص حتى لو كان القسم فارغًا.
+  modes.push({ value:'stories',  label:'القصص والمذكّرات' }); // نُظهره دائمًا
+  modes.push({ value:'timeline', label:'الخطّ الزمني للأحداث' }); // NEW: دائمًا لإتاحة إضافة أحداث
   return modes;
 }

@@ -353,15 +353,19 @@ function initScrollButtons(){
   });
 }
 
-
 /* =========================
    Handlers مشتركة تُمرَّر للـ UI
    ========================= */
 const handlers = {
-  showSuccess, showInfo, showWarning, showError, highlight,
+  showSuccess,
+  showInfo,
+  showWarning,
+  showError,
+  highlight,
   getSearch: () => (getState().search || ''),
   getFilters: () => (getState().filters || {}),
-  onUpdateStories  // NEW: تمرير هاندلر القصص إلى واجهة الشجرة
+  onUpdateStories,           // القصص
+  onEventsChange: onUpdateEvents // الخط الزمني للأحداث
 };
 
 
@@ -613,6 +617,28 @@ function onUpdateStories(personId, stories) {
   Model.commitFamily(famKey);
 }
 
+/* حفظ الخط الزمني للأحداث لشخص معيّن */
+function onUpdateEvents(personWithEvents) {
+  if (!personWithEvents || !personWithEvents._id) return;
+
+  const famKey = Model.getSelectedKey();
+  const fam = Model.getFamilies()[famKey];
+  if (!fam) return;
+
+  // ابحث عن الشخص داخل العائلة الحالية
+  const person = findPersonByIdInFamily(fam, personWithEvents._id);
+  if (!person) return;
+
+  // ضمان أن الأحداث مصفوفة
+  const events = Array.isArray(personWithEvents.events) ? personWithEvents.events
+    : [];
+
+  // احفظ الأحداث على الشخص نفسه (نسخة مرتّبة كما هي)
+  person.events = events.map(ev => ({ ...ev }));
+
+  // التزام العائلة وحفظها في IndexedDB
+  Model.commitFamily(famKey);
+}
 
 /* إعادة تسمية سريعة داخل البطاقة */
 async function onInlineRename(personId, patch) {
@@ -757,8 +783,10 @@ async function onShowDetails(person, opts = {}) {
     grands:   'grands',
     children: 'children',
     wives:    'wives',
-    stories:  'stories'
+    stories:  'stories',
+    timeline: 'timeline'   // NEW: قسم الخط الزمني للأحداث
   };
+
 
   // دالة تساعد على تمرير modal-content إلى بداية القسم المطلوب
   // دالة تساعد على تمرير المودال إلى بداية القسم المطلوب

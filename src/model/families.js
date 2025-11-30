@@ -179,7 +179,9 @@ function _normalizeChild(c){
       role: 'ابن',
       bio: _cloneDefaultBio(),
       // قصص فارغة افتراضيًا
-      stories: []
+      stories: [],
+      // أحداث شخصية فارغة افتراضيًا
+      events: []
     };
   }
   const bio = _withBio(c?.bio);
@@ -189,7 +191,9 @@ function _normalizeChild(c){
     bio,
     _id: c?._id,
     // الحفاظ على القصص إن وُجدت
-    stories: Array.isArray(c?.stories) ? c.stories : []
+    stories: Array.isArray(c?.stories) ? c.stories : [],
+    // الحفاظ على الأحداث إن وُجدت
+    events: Array.isArray(c?.events) ? c.events : []
   };
 }
 
@@ -228,8 +232,8 @@ function ensureBio(person) {
   if (!person) return;
 
   person.bio = _withBio(person.bio);
-  ensureStoriesArray(person); // NEW
-
+  ensureStoriesArray(person);
+ensureEventsArray(person);
   if (Array.isArray(person.children)) {
     person.children = person.children.map(_normalizeChild);
   }
@@ -239,12 +243,18 @@ function ensureBio(person) {
   }
 }
 
-
 // ضمان وجود مصفوفة قصص لكل شخص
 function ensureStoriesArray(person) {
   if (!person || typeof person !== 'object') return;
   if (!Array.isArray(person.stories)) person.stories = [];
 }
+
+// ضمان وجود مصفوفة أحداث شخصية لكل شخص
+function ensureEventsArray(person) {
+  if (!person || typeof person !== 'object') return;
+  if (!Array.isArray(person.events)) person.events = [];
+}
+
 
 
 // تهيئة Bio للعائلة كاملة
@@ -339,17 +349,20 @@ export function normalizeNewFamilyForLineage(f){
   f.rootPerson.wives = f.wives;
 
   // ---- 2) كل شخص له _id ----
-  function visit(p){
-    if (!p) return;
-    if (!p._id) p._id = newId();
-    if (!p.bio) p.bio = {};
-    if (!Array.isArray(p.children)) p.children = [];
-    if (!Array.isArray(p.wives)) p.wives = [];
-    // ضمان مصفوفة القصص
-    if (!Array.isArray(p.stories)) p.stories = [];
-    p.children.forEach(visit);
-    p.wives.forEach(visit);
-  }
+function visit(p){
+  if (!p) return;
+  if (!p._id) p._id = newId();
+  if (!p.bio) p.bio = {};
+  if (!Array.isArray(p.children)) p.children = [];
+  if (!Array.isArray(p.wives)) p.wives = [];
+  // ضمان مصفوفة القصص
+  if (!Array.isArray(p.stories)) p.stories = [];
+  // ضمان مصفوفة الأحداث الشخصية
+  if (!Array.isArray(p.events)) p.events = [];
+  p.children.forEach(visit);
+  p.wives.forEach(visit);
+}
+
 
   visit(f.rootPerson);
   f.wives.forEach(visit);
@@ -1075,6 +1088,8 @@ function _normalizeChildForLoad(c) {
       motherId: null,
       // NEW: قصص فارغة
       stories: [],
+      // NEW: أحداث فارغة
+      events: [],
       children: [],
       wives: []
     };
@@ -1089,6 +1104,8 @@ function _normalizeChildForLoad(c) {
 
     // NEW: القصص
     stories: Array.isArray(c.stories) ? c.stories : [],
+    // NEW: الأحداث
+    events: Array.isArray(c.events) ? c.events : [],
 
     // NEW: تحميل عميق لما تحت الابن
     children: Array.isArray(c.children) ? c.children.map(_normalizeChildForLoad).filter(Boolean) : [],
@@ -1109,10 +1126,13 @@ function _normalizeWifeForLoad(w, i){
     motherId: w?.motherId ?? w?.bio?.motherId ?? null,
     // NEW: قصص الزوجة
     stories: Array.isArray(w?.stories) ? w.stories : [],
+    // NEW: أحداث الزوجة
+    events: Array.isArray(w?.events) ? w.events : [],
     children: Array.isArray(w?.children) ? w.children.map(_normalizeChildForLoad).filter(Boolean)
       : []
   };
 }
+
 
 
 // إزالة كل روابط الصور (غير مستخدم هنا لكن مفيد للتصدير بدون صور)
@@ -1224,31 +1244,36 @@ function linkRootPersonWives(targetFam) {
           : JSON.parse(JSON.stringify(DEFAULT_BIO));
 
         var child;
-        if (typeof c === 'string') {
-          child = {
-            name: c,
-            role: 'ابن',
-            bio: Object.assign(base, {}),
-            // NEW: قصص فارغة
-            stories: [],
-            children: [],
-            wives: []
-          };
-        } else {
-          child = {
-            name: c.name || '',
-            role: c.role || 'ابن',
-            bio: Object.assign(base, c.bio || {}),
-            _id: c._id,
-            fatherId: (c.fatherId != null) ? c.fatherId : (c.bio && c.bio.fatherId) || null,
-            motherId: (c.motherId != null) ? c.motherId : (c.bio && c.bio.motherId) || null,
-            // NEW: عدم فقدان القصص
-            stories: Array.isArray(c.stories) ? c.stories : [],
-            // NEW: لا تمسح ما تحت الابن
-            children: Array.isArray(c.children) ? c.children : [],
-            wives: Array.isArray(c.wives) ? c.wives : []
-          };
-        }
+if (typeof c === 'string') {
+  child = {
+    name: c,
+    role: 'ابن',
+    bio: Object.assign(base, {}),
+    // NEW: قصص فارغة
+    stories: [],
+    // NEW: أحداث فارغة
+    events: [],
+    children: [],
+    wives: []
+  };
+} else {
+  child = {
+    name: c.name || '',
+    role: c.role || 'ابن',
+    bio: Object.assign(base, c.bio || {}),
+    _id: c._id,
+    fatherId: (c.fatherId != null) ? c.fatherId : (c.bio && c.bio.fatherId) || null,
+    motherId: (c.motherId != null) ? c.motherId : (c.bio && c.bio.motherId) || null,
+    // NEW: عدم فقدان القصص
+    stories: Array.isArray(c.stories) ? c.stories : [],
+    // NEW: عدم فقدان الأحداث
+    events: Array.isArray(c.events) ? c.events : [],
+    // NEW: لا تمسح ما تحت الابن
+    children: Array.isArray(c.children) ? c.children : [],
+    wives: Array.isArray(c.wives) ? c.wives : []
+  };
+}
+
 
         normalizeLifeDatesOnBio(child.bio);
         setChildDefaults(child, fam, ww);
@@ -1285,8 +1310,13 @@ function _ancNames(sorted){
 export function commitFamily(key) {
   const fam = families[key];
   if (!fam) return;
-// NEW: تأمين النسب قبل أي اشتقاق/حفظ
+
+  // NEW: اعتبر أي عائلة عُدِّلت عائلة مخصّصة قابلة للحفظ
+  if (!fam.__custom) fam.__custom = true;
+
+  // NEW: تأمين النسب قبل أي اشتقاق/حفظ
   normalizeNewFamilyForLineage(fam);
+
   // 1) ترحيل النسخة إلى آخر Schema
   migrate(fam, Number.isFinite(+fam.__v) ? +fam.__v : 0, SCHEMA_VERSION);
 
@@ -1320,7 +1350,6 @@ export function commitFamily(key) {
 
   // 11) حفظ في IndexedDB
   savePersistedFamilies();
-
 }
 
 

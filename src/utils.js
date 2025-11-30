@@ -640,3 +640,200 @@ export function readJsonFile(file) {
     fr.readAsText(file, 'utf-8');
   });
 }
+
+export function arraysShallowEqual(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b)) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+export function formatShortDateBadge(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return '';
+  const fmt = new Intl.DateTimeFormat('ar-EG-u-ca-gregory', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  });
+  return fmt.format(d);
+}
+
+const AR_FULL_DATETIME_FMT = new Intl.DateTimeFormat('ar-EG-u-ca-gregory', {
+  weekday: 'long',
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: true
+});
+
+export function formatFullDateTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return AR_FULL_DATETIME_FMT.format(d);
+}
+
+export function attachHorizontalSortable({
+  container,
+  itemSelector,
+  ghostClass,
+  dragClass,
+  onSorted
+}) {
+  if (!window.Sortable || !container) return;
+  if (container._sortableInstance) return;
+
+  container._sortableInstance = new window.Sortable(container, {
+    animation: 150,
+    direction: 'horizontal',
+    ghostClass,
+    dragClass,
+    fallbackOnBody: true,
+    swapThreshold: 0.5,
+    onEnd() {
+      const orderedRefs = Array.from(
+        container.querySelectorAll(itemSelector)
+      )
+        .map(node => node.dataset.ref)
+        .filter(Boolean);
+
+      if (!orderedRefs.length) return;
+      if (typeof onSorted === 'function') {
+        onSorted(orderedRefs);
+      }
+    }
+  });
+}
+
+// utils.js
+export function createImageViewerOverlay({
+  overlayClass = 'image-viewer-overlay',
+  backdropClass = 'image-viewer-backdrop',
+  dialogClass   = 'image-viewer-dialog',
+  imgClass      = 'image-viewer-img',
+  closeBtnClass = 'image-viewer-close',
+  navClass      = 'image-viewer-nav',
+  arrowPrevClass= 'image-viewer-arrow image-viewer-arrow-prev',
+  arrowNextClass= 'image-viewer-arrow image-viewer-arrow-next',
+  counterClass  = 'image-viewer-counter'
+} = {}) {
+
+  // لو العارض موجود مسبقًا ومعه API، نعيده مباشرة
+  let overlay = document.querySelector(`.${overlayClass}`);
+  if (overlay && overlay._sliderApi) return overlay._sliderApi;
+
+  // إنشاء العناصر لأول مرة
+  overlay = document.createElement('div');
+  overlay.className = overlayClass;
+
+  const backdrop = document.createElement('div');
+  backdrop.className = backdropClass;
+
+  const dialog = document.createElement('div');
+  dialog.className = dialogClass;
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = closeBtnClass;
+  closeBtn.textContent = '×';
+
+  const img = document.createElement('img');
+  img.className = imgClass;
+  img.alt = 'معاينة الصورة';
+
+  const nav = document.createElement('div');
+  nav.className = navClass;
+
+  const prevBtn = document.createElement('button');
+  prevBtn.type = 'button';
+  prevBtn.className = arrowPrevClass;
+  prevBtn.textContent = '›';
+
+  const counter = document.createElement('div');
+  counter.className = counterClass;
+
+  const nextBtn = document.createElement('button');
+  nextBtn.type = 'button';
+  nextBtn.className = arrowNextClass;
+  nextBtn.textContent = '‹';
+
+  nav.append(nextBtn, counter, prevBtn);
+  dialog.append(closeBtn, img, nav);
+  overlay.append(backdrop, dialog);
+  document.body.appendChild(overlay);
+
+  // الحالة الداخلية
+  let urls = [];
+  let index = 0;
+
+  function updateUI() {
+    if (!urls.length) return;
+    img.src = urls[index];
+    counter.textContent = `${index + 1} / ${urls.length}`;
+
+    const single = urls.length <= 1;
+    const atFirst = index <= 0;
+    const atLast = index >= urls.length - 1;
+
+    prevBtn.disabled = single || atFirst;
+    nextBtn.disabled = single || atLast;
+    prevBtn.style.visibility = prevBtn.disabled ? 'hidden' : 'visible';
+    nextBtn.style.visibility = nextBtn.disabled ? 'hidden' : 'visible';
+  }
+
+  function closeViewer() {
+    overlay.classList.remove('is-open');
+  }
+
+  function open(list, startIndex = 0) {
+    urls = Array.isArray(list) ? list.filter(Boolean) : [];
+    if (!urls.length) return;
+    index = Math.min(Math.max(startIndex, 0), urls.length - 1);
+    updateUI();
+    overlay.classList.add('is-open');
+  }
+
+  // الأحداث
+  prevBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    if (!urls.length || index <= 0) return;
+    index -= 1;
+    updateUI();
+  });
+
+  nextBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    if (!urls.length || index >= urls.length - 1) return;
+    index += 1;
+    updateUI();
+  });
+
+  backdrop.addEventListener('click', closeViewer);
+  closeBtn.addEventListener('click', closeViewer);
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) closeViewer();
+  });
+
+  document.addEventListener('keydown', e => {
+    if (!overlay.classList.contains('is-open')) return;
+    if (e.key === 'Escape') {
+      closeViewer();
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      prevBtn.click();
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      nextBtn.click();
+    }
+  });
+
+  const api = { open };
+  overlay._sliderApi = api;
+  return api;
+}

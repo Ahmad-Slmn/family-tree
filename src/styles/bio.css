@@ -195,12 +195,14 @@
   padding:.5rem .9rem;border-radius:.55rem;font-size:.93rem;
   color:var(--text-main);
   transition:background .2s,color .2s,transform .16s;
+  margin: 1rem 0
 }
 .bio-section li:hover{
-  background:var(--list-item-hover);
-  color:var(--list-item-hover-fg);
+  background:var(--ctl-hover-bg);
+  color:var(--ctl-fg);
   transform:translateY(-1px);
 }
+
 
 /* تقليل الزحمة للإخوة/الأخوات */
 .bio-sublist ul{list-style:none;padding:0;margin:.25rem 0;}

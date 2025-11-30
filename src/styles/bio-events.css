@@ -1,0 +1,1120 @@
+/* ==========================================================================
+   Shared styles for Stories & Timeline
+   يشمل التنسيقات العامة المشتركة (حاويات الأقسام، البطاقات،
+   حقول الإدخال، صفوف الميتا، البادجات، مؤشرات الطول، عارض الصور).
+   أي تنسيق خاص يبقى في ملفه المستقل.
+   ========================================================================== */
+/* غلاف القسم والعنوان <h3> */
+.bio-section-stories,
+.bio-section-timeline{
+  margin-top:1rem;
+  padding:1rem 1.1rem 1.2rem;
+  background:linear-gradient(135deg,
+    color-mix(in oklab,var(--panel-bg) 80%,#fff) 0%,
+    var(--card-bg) 55%);
+  border:1px solid color-mix(in oklab,var(--surface-border) 80%,transparent);
+  border-radius:1rem;
+  box-shadow:0 .3rem 1rem rgba(0,0,0,.06);
+}
+
+.bio-section-stories > h3,
+.bio-section-timeline > h3{
+  margin:0 0 .55rem;
+  font-size:1.02rem;
+  font-weight:800;
+  color:var(--title-color);
+}
+
+/* شريط الأدوات العام (header tools) */
+.stories-tools,
+.timeline-tools{
+  width: 100%;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:.6rem;
+  flex-wrap:wrap;
+}
+
+.stories-tools-left,
+.stories-tools-right,
+.timeline-tools-left,
+.timeline-tools-right{
+  display:flex;
+  align-items:center;
+  gap: 1rem
+}
+
+.stories-tools-left,
+.timeline-tools-left{
+  flex-wrap:wrap;
+  gap:.5rem;
+}
+
+/* قوائم الترتيب / الفلترة (selects) */
+.stories-sort,
+.timeline-sort{
+  min-width:9.5rem;
+  padding:.3rem .75rem;
+  border-radius:.6rem;
+  border:1px solid var(--surface-border);
+  background:var(--card-bg);
+  font-size:.9rem;
+  color:var(--text-main);
+  box-shadow:0 .12rem .3rem rgba(0,0,0,.04);
+  cursor:pointer;
+  outline:none!important;
+  transition:border-color .16s,box-shadow .16s,background-color .16s,transform .12s;
+}
+.stories-sort:hover,
+.timeline-sort:hover{
+  border-color:color-mix(in oklab,var(--modal-primary) 55%,var(--surface-border));
+  background:color-mix(in oklab,var(--card-bg) 90%,#fff);
+  transform:translateY(-1px);
+}
+.stories-sort:focus-visible,
+.timeline-sort:focus-visible{
+  border-color:var(--modal-primary);
+  box-shadow:0 0 0 .09rem color-mix(in oklab,var(--modal-primary) 45%,transparent);
+}
+
+.stories-type-filter,
+.timeline-type-filter{
+  min-width:8.5rem;
+  padding:.3rem .65rem;
+  border-radius:.6rem;
+  border:1px solid var(--surface-border);
+  background:var(--card-bg);
+  font-size:.84rem;
+  color:var(--text-main);
+  box-shadow:0 .12rem .3rem rgba(0,0,0,.04);
+  cursor:pointer;
+  outline:none!important;
+  transition:border-color .16s,box-shadow .16s,background-color .16s,transform .12s;
+}
+.stories-type-filter:hover,
+.timeline-type-filter:hover{
+  border-color:color-mix(in oklab,var(--modal-primary) 45%,var(--surface-border));
+  background:color-mix(in oklab,var(--card-bg) 92%,#fff);
+  transform:translateY(-1px);
+}
+.stories-type-filter:focus-visible,
+.timeline-type-filter:focus-visible{
+  border-color:var(--modal-primary);
+  box-shadow:0 0 0 .09rem color-mix(in oklab,var(--modal-primary) 45%,transparent);
+}
+
+/* زر الإضافة (قصة/حدث) */
+.stories-add-btn,
+.timeline-add-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:.3rem;
+  padding:.35rem .9rem;
+  border-radius:.7rem;
+  border:none;
+  background:var(--modal-primary);
+  color:var(--modal-primary-fg,var(--modal-fg));
+  font-size:.9rem;
+  font-weight:600;
+  cursor:pointer;
+  box-shadow:0 .18rem .45rem rgba(0,0,0,.16);
+  transition:transform .12s,box-shadow .12s,background-color .18s,opacity .12s;
+}
+.stories-add-btn:hover,
+.timeline-add-btn:hover{
+  transform:translateY(-1px);
+  box-shadow:0 .28rem .7rem rgba(0,0,0,.18);
+  background:color-mix(in oklab,var(--modal-primary) 88%,#fff);
+}
+.stories-add-btn:active,
+.timeline-add-btn:active{
+  transform:translateY(0);
+  box-shadow:0 .14rem .35rem rgba(0,0,0,.16);
+  opacity:.9;
+}
+
+/* قائمة العناصر والكروت (story-card / event-card) */
+.stories-list,
+.events-list{
+  display:flex;
+  flex-direction:column;
+  gap:.85rem;
+}
+
+.story-card,
+.event-card{
+  background:var(--card-bg);
+  border-radius:.9rem;
+  border:1px solid var(--surface-border);
+  box-shadow:0 .22rem .7rem rgba(0,0,0,.05);
+  padding:.8rem .9rem .85rem;
+  display:flex;
+  flex-direction:column;
+  gap:.6rem;
+  transition:box-shadow .16s,transform .16s,border-color .16s;
+  max-height:20rem;
+  overflow-y:auto;
+}
+.story-card:hover,
+.event-card:hover{
+  border-color:color-mix(in oklab,var(--modal-primary) 40%,var(--surface-border));
+  box-shadow:0 .32rem 1rem rgba(0,0,0,.08);
+  transform:translateY(-1px);
+}
+
+/* شارة التثبيت (Pinned badge) */
+.story-pinned-badge,
+.event-pinned-badge,
+.timeline-pinned-badge{
+  align-self:flex-start;
+  font-size:.75rem;
+  font-weight:700;
+  color:var(--arrow-color);
+  background:color-mix(in oklab,var(--arrow-color) 14%,transparent);
+  border-radius:999px;
+  padding:.1rem .6rem;
+  border:1px solid color-mix(in oklab,var(--arrow-color) 45%,transparent);
+  display:inline-flex;
+  align-items:center;
+  gap:.25rem;
+}
+
+.story-pinned-badge::before,
+.event-pinned-badge::before,
+.timeline-pinned-badge::before{
+  content:"★";
+  font-size:.85rem;
+}
+
+/* وضع المعاينة (preview layout) */
+.story-preview,
+.event-preview{
+  display:flex;
+  flex-direction:column;
+  gap:.25rem;
+}
+
+.story-preview-title,
+.event-preview-title,
+.timeline-preview-title{
+  font-weight:700;
+  font-size:.96rem;
+  color:var(--title-color);
+}
+
+.story-preview-meta,
+.event-preview-meta,
+.timeline-preview-meta{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.4rem;
+  font-size:.78rem;
+  color:var(--text-muted);
+  margin:.1rem 0 .2rem;
+}
+
+.story-preview-meta span+span,
+.event-preview-meta span+span,
+.timeline-preview-meta span+span{
+  position:relative;
+  padding-inline-start:.75rem;
+}
+.story-preview-meta span+span::before,
+.event-preview-meta span+span::before,
+.timeline-preview-meta span+span::before{
+  content:"•";
+  position:absolute;
+  inset-inline-start:.25rem;
+  top:0;
+}
+
+.story-preview-text,
+.timeline-preview-text,
+.event-preview-description{
+  margin:0;
+  font-size:.9rem;
+  line-height:1.7;
+  color:var(--text-main);
+}
+
+/* بادجات المكان/السنة/النوع (القاعدة المشتركة) */
+.story-preview-badges,
+.event-preview-badges,
+.timeline-preview-badges{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.3rem;
+  margin:.1rem 0 .15rem;
+}
+
+.story-badge,
+.timeline-badge{
+  display:inline-flex;
+  align-items:center;
+  padding:.06rem .5rem;
+  border-radius:999px;
+  font-size:.74rem;
+  border:1px solid color-mix(in oklab,var(--surface-border) 80%,transparent);
+  background:color-mix(in oklab,var(--panel-bg) 94%,#fff);
+  color:color-mix(in oklab,var(--text-muted) 85%,var(--text-main));
+}
+
+/* شريط طول النص (length chip + meter) */
+.story-length-chip,
+.timeline-length-chip,
+.event-preview-length{
+  display:inline-flex;
+  align-items:center;
+  gap:.3rem;
+  padding:.04rem .45rem;
+  border-radius:999px;
+  background:color-mix(in oklab,var(--panel-bg) 95%,#fff);
+  border:1px solid color-mix(in oklab,var(--surface-border) 80%,transparent);
+}
+
+.story-length-meter,
+.event-length-meter,
+.timeline-length-meter{
+  width:44px;
+  height:4px;
+  border-radius:999px;
+  background:color-mix(in oklab,var(--panel-bg) 88%,#fff);
+  overflow:hidden;
+}
+.story-length-meter-bar,
+.event-length-meter-bar,
+.timeline-length-meter-bar{
+  display:block;
+  height:100%;
+  width:0;
+  border-radius:999px;
+  transform-origin:left center;
+}
+
+.story-length-meter[data-level="1"] .story-length-meter-bar,
+.event-length-meter[data-level="1"] .event-length-meter-bar,
+.timeline-length-meter[data-level="1"] .timeline-length-meter-bar{
+  width:30%;
+  background:color-mix(in oklab,var(--accent-success) 70%,#fff);
+}
+.story-length-meter[data-level="2"] .story-length-meter-bar,
+.event-length-meter[data-level="2"] .event-length-meter-bar,
+.timeline-length-meter[data-level="2"] .timeline-length-meter-bar{
+  width:65%;
+  background:color-mix(in oklab,var(--arrow-color) 75%,#fff);
+}
+.story-length-meter[data-level="3"] .story-length-meter-bar,
+.event-length-meter[data-level="3"] .event-length-meter-bar,
+.timeline-length-meter[data-level="3"] .timeline-length-meter-bar{
+  width:100%;
+  background:color-mix(in oklab,var(--modal-danger) 80%,#fff);
+}
+
+/* رأس الكرت (head) + عنوان + التاريخ */
+.story-head,
+.event-head,
+.timeline-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:.7rem;
+}
+
+.story-title-input,
+.event-title-input,
+.timeline-title-input{
+  flex:1 1 auto;
+  min-width:0;
+  padding:.35rem .7rem;
+  border-radius:.6rem;
+  border:1px solid var(--surface-border);
+  background:var(--panel-bg);
+  font-size:.92rem;
+  color:var(--text-main);
+  outline:none!important;
+  transition:border-color .16s,box-shadow .16s,background-color .16s;
+}
+.story-title-input::placeholder,
+.event-title-input::placeholder,
+.timeline-title-input::placeholder{
+  color:var(--text-muted);
+}
+.story-title-input:focus-visible,
+.event-title-input:focus-visible,
+.timeline-title-input:focus-visible{
+  border-color:var(--modal-primary);
+  box-shadow:0 0 0 .09rem color-mix(in oklab,var(--modal-primary) 40%,transparent);
+  background:var(--card-bg);
+}
+
+.story-dates,
+.event-dates,
+.timeline-dates{
+  flex:0 0 auto;
+  font-size:.8rem;
+  color:var(--text-muted);
+  white-space:nowrap;
+}
+
+/* جسم الكرت + textarea / الوصف */
+.story-body,
+.event-body{
+  display:flex;
+  flex-direction:column;
+  gap:.45rem;
+}
+
+.story-textarea,
+.event-description-input{
+  width:100%;
+  border-radius:.7rem;
+  border:1px solid var(--surface-border);
+  background:var(--panel-bg);
+  padding:.45rem .7rem;
+  font-size:.9rem;
+  color:var(--text-main);
+  outline:none!important;
+  resize:vertical;
+  transition:border-color .16s,box-shadow .16s,background-color .16s;
+}
+.story-textarea::placeholder,
+.event-description-input::placeholder{
+  color:var(--text-muted);
+}
+.story-textarea:focus-visible,
+.event-description-input:focus-visible{
+  border-color:var(--modal-primary);
+  box-shadow:0 0 0 .09rem color-mix(in oklab,var(--modal-primary) 40%,transparent);
+  background:var(--card-bg);
+}
+
+/* صف الميتا (type/date/place) + الحقول */
+.story-meta-row,
+.event-meta-row,
+.timeline-meta-row{
+  display:grid;
+  grid-template-columns:minmax(0,9.5rem) minmax(0,8.5rem) minmax(0,1.4fr);
+  gap:.4rem;
+  align-items:stretch;
+  margin-top:.15rem;
+}
+
+.story-meta-row select,
+.story-meta-row input[type="date"],
+.story-meta-row input[type="text"],
+.event-meta-row select,
+.event-meta-row input[type="date"],
+.event-meta-row input[type="text"],
+.timeline-meta-row select,
+.timeline-meta-row input[type="date"],
+.timeline-meta-row input[type="text"]{
+  width:100%;
+  padding:.32rem .65rem;
+  border-radius:.6rem;
+  border:1px solid var(--surface-border);
+  background:var(--panel-bg);
+  font-size:.84rem;
+  color:var(--text-main);
+  outline:none!important;
+  box-shadow:0 .06rem .18rem rgba(0,0,0,.03);
+  transition:border-color .16s,box-shadow .16s,background-color .16s,transform .12s;
+}
+.story-meta-row select::placeholder,
+.story-meta-row input[type="date"]::placeholder,
+.story-meta-row input[type="text"]::placeholder,
+.event-meta-row select::placeholder,
+.event-meta-row input[type="date"]::placeholder,
+.event-meta-row input[type="text"]::placeholder,
+.timeline-meta-row select::placeholder,
+.timeline-meta-row input[type="date"]::placeholder,
+.timeline-meta-row input[type="text"]::placeholder{
+  color:var(--text-muted);
+}
+.story-meta-row select:hover,
+.story-meta-row input[type="date"]:hover,
+.story-meta-row input[type="text"]:hover,
+.event-meta-row select:hover,
+.event-meta-row input[type="date"]:hover,
+.event-meta-row input[type="text"]:hover,
+.timeline-meta-row select:hover,
+.timeline-meta-row input[type="date"]:hover,
+.timeline-meta-row input[type="text"]:hover{
+  border-color:color-mix(in oklab,var(--modal-primary) 40%,var(--surface-border));
+  background:color-mix(in oklab,var(--panel-bg) 94%,#fff);
+  transform:translateY(-1px);
+  box-shadow:0 .12rem .32rem rgba(0,0,0,.06);
+}
+.story-meta-row select:focus-visible,
+.story-meta-row input[type="date"]:focus-visible,
+.story-meta-row input[type="text"]:focus-visible,
+.event-meta-row select:focus-visible,
+.event-meta-row input[type="date"]:focus-visible,
+.event-meta-row input[type="text"]:focus-visible,
+.timeline-meta-row select:focus-visible,
+.timeline-meta-row input[type="date"]:focus-visible,
+.timeline-meta-row input[type="text"]:focus-visible{
+  border-color:var(--modal-primary);
+  box-shadow:0 0 0 .09rem color-mix(in oklab,var(--modal-primary) 40%,transparent);
+  background:var(--card-bg);
+}
+
+.story-meta-field,
+.event-meta-field,
+.timeline-meta-field{
+  display:flex;
+  flex-direction:column;
+  gap:.15rem;
+}
+.story-meta-label,
+.event-meta-label,
+.timeline-meta-label{
+  font-size:.78rem;
+  color:color-mix(in oklab,var(--text-muted) 90%,var(--text-main));
+  display:flex;
+  align-items:center;
+  gap:.25rem;
+}
+.story-meta-icon,
+.event-meta-icon,
+.timeline-meta-icon{
+  font-size:.8rem;
+  opacity:.85;
+}
+
+/* قسم الصور (block/row/hints + thumbs + الأزرار) */
+.story-images-block,
+.event-media-wrap{
+  display:flex;
+  flex-direction:column;
+  gap:.35rem;
+}
+
+.story-images-row,
+.event-media-row{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  gap:.35rem .4rem;
+  margin-top:.35rem;
+}
+
+/* قسم الصور (block/row/hints + thumbs + الأزرار) */
+.story-images-block,
+.event-media-wrap{
+  display:flex;
+  flex-direction:column;
+  gap:.35rem;
+}
+
+.story-images-row,
+.event-media-row{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  gap:.35rem .4rem;
+  margin-top:.35rem;
+}
+
+/* حاوية الثَمبنايل الفعلية (يعمل عليها السحب) */
+.story-images-thumbs,
+.event-media-thumbs{
+  direction:ltr;          /* مهم جداً لسلاسة السحب */
+  display:flex;
+  flex-wrap:wrap;
+  gap:.4rem;
+  max-width:100%;
+  align-items:flex-start;
+}
+
+
+.story-images-empty-hint,
+.event-media-empty-hint{
+  font-size:.8rem;
+  color:color-mix(in oklab,var(--text-muted) 90%,var(--text-main));
+}
+
+/* المصغرات */
+.story-image-thumb,
+.event-media-thumb,
+.timeline-image-thumb{
+  position:relative;
+  width:72px;
+  height:72px;
+  border-radius:.6rem;
+  overflow:hidden;
+  border:1px solid var(--surface-border);
+  background:var(--panel-bg);
+  box-shadow:0 .06rem .25rem rgba(0,0,0,.08);
+  cursor:grab;
+  transition:
+    transform .14s ease-out,
+    box-shadow .14s ease-out,
+    border-color .14s ease-out,
+    background-color .14s ease-out;
+}
+.story-image-thumb:active,
+.event-media-thumb:active,
+.timeline-image-thumb:active{
+  cursor:grabbing;
+}
+.story-image-thumb img,
+.event-media-thumb img,
+.timeline-image-thumb img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
+
+/* حالة الحاوية أثناء السحب */
+.story-images-thumbs.sortable-chosen,
+.story-images-thumbs.sortable-ghost,
+.event-media-thumbs.sortable-chosen,
+.event-media-thumbs.sortable-ghost{
+  background:color-mix(in oklab,var(--panel-bg) 90%,#fff);
+  border-radius:.7rem;
+  padding:.25rem;
+  margin:-.25rem;
+  box-shadow:0 .12rem .35rem rgba(0,0,0,.08) inset;
+}
+
+/* زر المعاينة */
+.story-image-thumb-view,
+.event-media-thumb-view,
+.timeline-image-thumb-view{
+  position:absolute;
+  inset-inline-start:.18rem;
+  bottom:.18rem;
+  padding:.05rem .35rem;
+  border-radius:999px;
+  border:none;
+  background:rgba(0,0,0,.7);
+  color:#fff;
+  font-size:.65rem;
+  line-height:1.2;
+  cursor:pointer;
+  box-shadow:0 .04rem .2rem rgba(0,0,0,.4);
+}
+.story-image-thumb-view:hover,
+.event-media-thumb-view:hover,
+.timeline-image-thumb-view:hover{
+  background:rgba(0,0,0,.82);
+}
+
+/* زر الحذف */
+.story-image-thumb-remove,
+.event-media-thumb-remove,
+.timeline-image-thumb-remove{
+  position:absolute;
+  top:.18rem;
+  inset-inline-end:.18rem;
+  width:1.4rem;
+  height:1.4rem;
+  border-radius:999px;
+  border:none;
+  background:rgba(0,0,0,.58);
+  color:#fff;
+  font-size:.9rem;
+  line-height:1;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:0;
+  box-shadow:0 .08rem .25rem rgba(0,0,0,.35);
+}
+.story-image-thumb-remove:hover,
+.event-media-thumb-remove:hover,
+.timeline-image-thumb-remove:hover{
+  background:rgba(0,0,0,.8);
+}
+
+/* زر إضافة الصور */
+.story-image-add-btn,
+.event-media-add-btn,
+.timeline-image-add-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:.3rem;
+  padding:.28rem .9rem;
+  border-radius:.7rem;
+  border:1px dashed color-mix(in oklab,var(--surface-border) 85%,transparent);
+  background:color-mix(in oklab,var(--panel-bg) 96%,#fff);
+  font-size:.82rem;
+  font-weight:500;
+  cursor:pointer;
+  color:color-mix(in oklab,var(--text-muted) 90%,var(--text-main));
+  box-shadow:0 .06rem .2rem rgba(0,0,0,.04);
+  transition:background-color .16s,border-color .16s,color .16s,transform .12s,box-shadow .12s;
+}
+.story-image-add-btn:hover,
+.event-media-add-btn:hover,
+.timeline-image-add-btn:hover{
+  background:color-mix(in oklab,var(--panel-bg) 92%,#fff);
+  border-color:color-mix(in oklab,var(--surface-border) 70%,transparent);
+  transform:translateY(-1px);
+  box-shadow:0 .12rem .35rem rgba(0,0,0,.08);
+}
+.story-image-add-btn:active,
+.event-media-add-btn:active,
+.timeline-image-add-btn:active{
+  transform:translateY(0);
+  box-shadow:0 .04rem .18rem rgba(0,0,0,.12);
+}
+.story-image-add-icon,
+.event-media-add-icon,
+.timeline-image-add-icon{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:1.4rem;
+  height:1.4rem;
+  border-radius:999px;
+  font-size:.9rem;
+  background:color-mix(in oklab,var(--panel-bg) 90%,#fff);
+  box-shadow:0 .06rem .2rem rgba(0,0,0,.05);
+}
+.story-image-add-text,
+.event-media-add-text,
+.timeline-image-add-text{
+  white-space:nowrap;
+  text-overflow:ellipsis;
+  overflow:hidden;
+}
+
+/* المعاينة داخل النص */
+.story-preview-images,
+.event-preview-images,
+.timeline-preview-images{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.4rem;
+  margin-top:.3rem;
+}
+
+
+/* مفتاح التثبيت (Pin toggle) – نفس المنطق بالضبط */
+.story-pin-toggle,
+.event-pin-toggle,
+.timeline-pin-toggle{
+  display:inline-flex;
+  align-items:center;
+  gap:.45rem;
+  margin-top:.2rem;
+  padding:.35rem .65rem;
+  border-radius:.8rem;
+  background:color-mix(in oklab,var(--panel-bg) 96%,#fff);
+  border:1px dashed color-mix(in oklab,var(--surface-border) 85%,transparent);
+  cursor:pointer;
+  font-size:.86rem;
+  color:color-mix(in oklab,var(--text-muted) 88%,var(--text-main));
+  box-shadow:0 .06rem .2rem rgba(0,0,0,.03);
+  transition:
+    background-color .16s,
+    border-color .16s,
+    box-shadow .16s,
+    transform .12s,
+    color .14s;
+}
+.story-pin-toggle>input[type="checkbox"],
+.event-pin-toggle>input[type="checkbox"],
+.timeline-pin-toggle>input[type="checkbox"]{
+  position:absolute;
+  opacity:0;
+  pointer-events:none;
+}
+.story-pin-toggle::before,
+.event-pin-toggle::before,
+.timeline-pin-toggle::before{
+  content:"★";
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:1.4rem;
+  height:1.4rem;
+  border-radius:999px;
+  font-size:.9rem;
+  background:color-mix(in oklab,var(--panel-bg) 90%,#fff);
+  color:color-mix(in oklab,var(--text-muted) 88%,var(--text-main));
+  box-shadow:0 .06rem .2rem rgba(0,0,0,.06);
+  transition:
+    background-color .16s,
+    color .16s,
+    transform .12s,
+    box-shadow .12s;
+}
+.story-pin-toggle>span,
+.event-pin-toggle>span,
+.timeline-pin-toggle>span{
+  flex:1;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.story-pin-toggle:hover,
+.event-pin-toggle:hover,
+.timeline-pin-toggle:hover{
+  background:color-mix(in oklab,var(--panel-bg) 92%,#fff);
+  border-color:color-mix(in oklab,var(--modal-primary) 40%,var(--surface-border));
+  transform:translateY(-1px);
+  box-shadow:0 .12rem .35rem rgba(0,0,0,.08);
+}
+.story-pin-toggle:has(> input[type="checkbox"]:checked),
+.event-pin-toggle:has(> input[type="checkbox"]:checked),
+.timeline-pin-toggle:has(> input[type="checkbox"]:checked){
+  background:color-mix(in oklab,var(--modal-primary) 14%,var(--panel-bg));
+  border-style:solid;
+  border-color:color-mix(in oklab,var(--modal-primary) 55%,transparent);
+  color:color-mix(in oklab,var(--modal-primary) 40%,var(--text-main));
+}
+.story-pin-toggle:has(> input[type="checkbox"]:checked)::before,
+.event-pin-toggle:has(> input[type="checkbox"]:checked)::before,
+.timeline-pin-toggle:has(> input[type="checkbox"]:checked)::before{
+  background:color-mix(in oklab,var(--arrow-color) 90%,#fff);
+  color:color-mix(in oklab,var(--arrow-color) 40%,#000);
+  box-shadow:0 .12rem .38rem rgba(0,0,0,.18);
+  transform:scale(1.06);
+}
+
+
+/* تذييل الكرت (أزرار الحفظ/الحذف/الإلغاء) */
+.story-footer,
+.event-footer{
+  display:flex;
+  justify-content:flex-end;
+  gap:.45rem;
+  margin-top:.25rem;
+}
+
+.story-save-btn,
+.story-delete-btn,
+.story-cancel-btn,
+.event-save-btn,
+.event-delete-btn,
+.event-cancel-btn{
+  min-width:4.2rem;
+  padding:.28rem .8rem;
+  border-radius:.7rem;
+  border:1px solid transparent;
+  font-size:.86rem;
+  font-weight:600;
+  cursor:pointer;
+  transition:background-color .16s,border-color .16s,color .16s,transform .12s,box-shadow .12s;
+}
+
+/* حفظ */
+.story-save-btn,
+.event-save-btn{
+  background:var(--modal-primary);
+  color:var(--modal-primary-fg,var(--modal-fg));
+  box-shadow:0 .18rem .45rem rgba(0,0,0,.16);
+}
+.story-save-btn:hover,
+.event-save-btn:hover{
+  background:color-mix(in oklab,var(--modal-primary) 90%,#fff);
+  transform:translateY(-1px);
+  box-shadow:0 .26rem .75rem rgba(0,0,0,.18);
+}
+.story-save-btn:active,
+.event-save-btn:active{
+  transform:translateY(0);
+  box-shadow:0 .14rem .35rem rgba(0,0,0,.16);
+}
+
+/* حذف */
+.story-delete-btn,
+.event-delete-btn{
+  background:transparent;
+  color:var(--modal-danger);
+  border-color:color-mix(in oklab,var(--modal-danger) 55%,transparent);
+  box-shadow:0 .08rem .25rem rgba(0,0,0,.08);
+}
+.story-delete-btn:hover,
+.event-delete-btn:hover{
+  background:color-mix(in oklab,var(--modal-danger) 10%,transparent);
+}
+.story-delete-btn:active,
+.event-delete-btn:active{
+  transform:translateY(0);
+  box-shadow:0 .04rem .16rem rgba(0,0,0,.12);
+}
+
+/* إلغاء */
+.story-cancel-btn,
+.event-cancel-btn{
+  border-color:color-mix(in oklab,var(--surface-border) 90%,transparent);
+  background:color-mix(in oklab,var(--panel-bg) 96%,#fff);
+  color:color-mix(in oklab,var(--text-muted) 90%,var(--text-main));
+  box-shadow:0 .06rem .2rem rgba(0,0,0,.04);
+}
+.story-cancel-btn:hover,
+.event-cancel-btn:hover{
+  background:color-mix(in oklab,var(--panel-bg) 92%,#fff);
+  border-color:color-mix(in oklab,var(--surface-border) 70%,transparent);
+  transform:translateY(-1px);
+  box-shadow:0 .12rem .35rem rgba(0,0,0,.08);
+}
+.story-cancel-btn:active,
+.event-cancel-btn:active{
+  transform:translateY(0);
+  box-shadow:0 .04rem .18rem rgba(0,0,0,.12);
+}
+
+/* زر فتح سلايدر الصور */
+.story-images-slider-btn, .event-images-slider-btn{
+  margin-top:.25rem;
+  align-self:flex-start;
+  padding:.18rem .7rem;
+  border-radius:.7rem;
+  border:1px solid color-mix(in oklab,var(--surface-border) 85%,transparent);
+  background:color-mix(in oklab,var(--panel-bg) 96%,#fff);
+  font-size:.8rem;
+  cursor:pointer;
+  color:color-mix(in oklab,var(--text-muted) 92%,var(--text-main));
+  box-shadow:0 .04rem .16rem rgba(0,0,0,.06);
+  transition:background-color .16s,border-color .16s,color .16s,transform .12s,box-shadow .12s;
+}
+.story-images-slider-btn:hover, .event-images-slider-btn:hover{
+  background:color-mix(in oklab,var(--panel-bg) 92%,#fff);
+  border-color:color-mix(in oklab,var(--surface-border) 70%,transparent);
+  transform:translateY(-1px);
+  box-shadow:0 .12rem .35rem rgba(0,0,0,.08);
+}
+
+/* === رأس الكروت + الترتيب === */
+.bio-card-top{display:flex;align-items:center;justify-content:space-between;gap:.5rem}
+.bio-card-index{
+  font-size:.8rem;font-weight:700;
+  color:color-mix(in oklab,var(--text-muted)80%,var(--text-main));
+  background:color-mix(in oklab,var(--panel-bg)96%,#fff);
+  padding:.12rem .6rem;border-radius:999px;
+  border:1px solid color-mix(in oklab,var(--surface-border)80%,transparent);
+  margin-bottom:.15rem
+}
+.bio-card--edit{max-height:20rem;overflow-y:auto}
+
+/* === صور قابلة للسحب === */
+.bio-images-thumbs{direction:ltr;display:flex;flex-wrap:wrap;gap:.4rem;max-width:100%}
+.bio-image-thumb--drag{
+  transform:scale(1.06) rotate(-1deg);
+  box-shadow:0 .32rem 1rem rgba(0,0,0,.32);
+  border-color:color-mix(in oklab,var(--modal-primary)55%,var(--surface-border));
+  background:color-mix(in oklab,var(--panel-bg)88%,#fff);z-index:3
+}
+.bio-image-thumb--ghost{
+  opacity:.45;transform:scale(.96);
+  box-shadow:0 .06rem .2rem rgba(0,0,0,.12)
+}
+
+/* === عارض الصور المشترك (قصص + أحداث + بيو) === */
+.bio-image-viewer-overlay,
+.story-image-viewer-overlay,
+.timeline-image-viewer-overlay{
+  position:fixed;
+  inset:0;
+  z-index:9999;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .25s ease-out;
+}
+
+.bio-image-viewer-overlay.is-open,
+.story-image-viewer-overlay.is-open,
+.timeline-image-viewer-overlay.is-open{
+  opacity:1;
+  pointer-events:auto;
+}
+
+.bio-image-viewer-backdrop,
+.story-image-viewer-backdrop,
+.timeline-image-viewer-backdrop{
+  position:absolute;
+  inset:0;
+  background:var(--modal-overlay,rgba(0,0,0,.72));
+}
+
+.bio-image-viewer-dialog,
+.story-image-viewer-dialog,
+.timeline-image-viewer-dialog{
+  position:absolute;
+  inset:12%;
+  margin:auto;
+  background:transparent;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  max-width:min(39.25rem,92vw);
+  max-height:min(39.25rem,82vh);
+  opacity:0;
+  transform:scale(.96) translateY(10px);
+  transition:opacity .25s ease-out,transform .25s ease-out;
+}
+
+.bio-image-viewer-overlay.is-open .bio-image-viewer-dialog,
+.story-image-viewer-overlay.is-open .story-image-viewer-dialog,
+.timeline-image-viewer-overlay.is-open .timeline-image-viewer-dialog{
+  opacity:1;
+  transform:scale(1) translateY(0);
+}
+
+.bio-image-viewer-close,
+.story-image-viewer-close,
+.timeline-image-viewer-close{
+  position:absolute;
+  top:.5rem;
+  inset-inline-start:.7rem;
+  width:2rem;
+  height:2rem;
+  border:none;
+  border-radius:999px;
+  background:rgba(0,0,0,.65);
+  color:#fff;
+  font-size:1.1rem;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  box-shadow:0 .18rem .6rem rgba(0,0,0,.55);
+  z-index:2;
+}
+
+.bio-image-viewer-close:hover,
+.story-image-viewer-close:hover,
+.timeline-image-viewer-close:hover{
+  background:rgba(0,0,0,.85);
+}
+
+.bio-image-viewer-img,
+.story-image-viewer-img,
+.timeline-image-viewer-img{
+  display:block;
+  max-width:39.25rem;
+  max-height:39.25rem;
+   min-width:39.25rem;
+  min-height:39.25rem;
+  object-fit:contain;
+  border-radius:1.2rem;
+  box-shadow:0 .6rem 2rem rgba(0,0,0,.45);
+  transition:opacity .2s ease-out;
+}
+
+.bio-image-viewer-nav,
+.story-image-viewer-nav,
+.timeline-image-viewer-nav{
+  position:absolute;
+  bottom:7%;
+  width:100%;
+  padding:0 .5rem;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  pointer-events:none;
+}
+
+.bio-image-viewer-arrow,
+.story-image-viewer-arrow,
+.timeline-image-viewer-arrow{
+  pointer-events:auto;
+  width:2.4rem;
+  height:2.4rem;
+  border:none;
+  border-radius:999px;
+  background:rgba(0,0,0,.65);
+  color:#fff;
+  font-size:1.2rem;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  box-shadow:0 .18rem .6rem rgba(0,0,0,.55);
+  cursor:pointer;
+}
+
+.bio-image-viewer-arrow:disabled,
+.story-image-viewer-arrow:disabled,
+.timeline-image-viewer-arrow:disabled{
+  opacity:.35;
+  cursor:default;
+}
+
+.bio-image-viewer-counter,
+.story-image-viewer-counter,
+.timeline-image-viewer-counter{
+  pointer-events:none;
+  padding:.2rem .7rem;
+  border-radius:999px;
+  background:rgba(0,0,0,.55);
+  color:#fff;
+  font-size:.8rem;
+}
+
+
+/* === بادجات أساسية: مكان / سنة / نوع === */
+.badge--place::before{content:"📍";margin-inline-end:.25rem}
+.badge--year::before{content:"📅";margin-inline-end:.25rem}
+.badge--type::before{content:"🏷️";margin-inline-end:.25rem}
+
+.story-card-top, .event-card-top{display: flex; justify-content: space-between}
+.story-card-index,
+.event-card-index{
+    align-self:flex-start;
+    font-size:.75rem;
+    font-weight:700;
+    color:var(--arrow-color);
+    background:color-mix(in oklab,var(--arrow-color) 14%,transparent);
+    border-radius:999px;
+    padding:.1rem .6rem;
+    border:1px solid color-mix(in oklab,var(--arrow-color) 45%,transparent);
+    display:inline-flex;
+    align-items:center;
+    gap:.25rem;
+}
+
+/* ================== الاستجابة ================== */
+
+/* ≤23.9rem */
+@media(max-width:23.9rem){
+  .event-card,.story-card{padding:.65rem .7rem .75rem;max-height:70vh}
+  .event-head,.story-head{flex-direction:column;align-items:stretch;gap:.45rem}
+  .event-footer,.story-footer{flex-wrap:wrap;justify-content:stretch}
+  .event-save-btn,.event-delete-btn,.event-cancel-btn,
+  .story-save-btn,.story-delete-btn,.story-cancel-btn{flex:1 1 auto;text-align:center}
+  .timeline-image-viewer-dialog,.story-image-viewer-dialog{inset:6%}
+  .timeline-image-viewer-close,.story-image-viewer-close{
+    top:.8rem;inset-inline-start:.8rem;width:1.6rem;height:1.6rem;font-size:1rem
+  }
+}
+
+/* 24–29.9rem */
+@media(min-width:24rem) and (max-width:29.9rem){
+  .timeline-image-viewer-dialog,.story-image-viewer-dialog{inset:8%}
+  .timeline-image-viewer-close,.story-image-viewer-close{
+    top:.85rem;inset-inline-start:.85rem;width:1.7rem;height:1.7rem;font-size:1rem
+  }
+}
+
+/* 30–39.9rem */
+@media(min-width:30rem) and (max-width:39.9rem){
+  .timeline-image-viewer-dialog,.story-image-viewer-dialog{inset:10%}
+  .timeline-image-viewer-close,.story-image-viewer-close{
+    top:.9rem;inset-inline-start:.9rem;width:1.7rem;height:1.7rem;font-size:1rem
+  }
+}
+
+/* 40–47.9rem */
+@media(min-width:40rem) and (max-width:47.9rem){
+  .timeline-image-viewer-dialog,.story-image-viewer-dialog{inset:12%}
+}
+
+/* 48–63.9rem */
+@media(min-width:48rem) and (max-width:63.9rem){
+  .timeline-image-viewer-dialog,.story-image-viewer-dialog{inset:14%}
+}
+
+/* ≥64rem */
+@media(min-width:64rem){
+  .timeline-image-viewer-dialog,.story-image-viewer-dialog{inset:12%}
+}

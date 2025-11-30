@@ -10,7 +10,7 @@
   --wife-bg:#fff1f2;--son-bg:#f0f9ff;--daughter-bg:#faf5ff;
 
   --connector-color:#fde68a;--arrow-color:#f0c000;
-
+--accent-soft:color-mix(in srgb,var(--arrow-color) 38%,#fff);
   --text-main:#1a202c;--title-color:#d97706;--placeholder-fg:#9ca3af;
   --text-muted:#4b5563;
 --radius: .75rem;
@@ -71,7 +71,9 @@
   --toast-warning-fg:#1f2937;
 
   --shadow:0 .375rem 1.25rem rgba(0,0,0,.12);
-  
+    --shadow-soft:0 .06rem .18rem rgba(0,0,0,.04);
+  --shadow-soft-lg:0 .12rem .32rem rgba(0,0,0,.08);
+
     --chart-grid:#e5e7eb;
   --chart-text:#111827;
   --chart-bg:var(--card-bg);
@@ -138,6 +140,11 @@
   --chart-son-2:#4caf50;
 --chart-daughter-1:#A7F3D0; /* emerald-200 */
 --chart-daughter-2:#10B981; /* emerald-500 */
+  
+  --accent-soft:color-mix(in srgb,var(--arrow-color) 38%,#fff);
+
+  --shadow-soft:0 .06rem .18rem rgba(0,0,0,.06);
+  --shadow-soft-lg:0 .12rem .32rem rgba(0,0,0,.1);
 
 }
 
@@ -150,6 +157,7 @@
   --wife-bg:#b3e5fc;--son-bg:#b2ebf2;--daughter-bg:#e1f5fe;
 
   --connector-color:#00acc1;--arrow-color:#0277bd;
+  --accent-soft:color-mix(in srgb,var(--arrow-color) 38%,#fff);
   --text-main:#01579b;--title-color:#0288d1; --text-muted:#0369a1;
 
   --panel-bg:#eef9ff;--chip-bg:#e6f4ff;--badge-bg:#e6f4ff;
@@ -197,6 +205,9 @@
   --chart-son-2:#0284c7;
   --chart-daughter-1:#a5f3fc;  /* teal/emerald متناغم */
   --chart-daughter-2:#14b8a6;
+    --shadow-soft:0 .06rem .18rem rgba(0,0,0,.05);
+  --shadow-soft-lg:0 .12rem .32rem rgba(0,0,0,.09);
+
 }
 
 /* ---------- 4) نمط الغروب (Minimal – الوردي الغامق) ---------- */
@@ -208,6 +219,7 @@
   --wife-bg:#ffe4f0;--son-bg:#ffb3c6;--daughter-bg:#ffc1e3;
 
   --connector-color:#ff6f91;--arrow-color:#d81b60;
+  --accent-soft:color-mix(in srgb,var(--arrow-color) 38%,#fff);
   --text-main:#5a2130;--title-color:#d81b60; --text-muted:#7a2a3d;
 
   --panel-bg:#ffeaf2;--chip-bg:#ffe7ef;--badge-bg:#ffe7ef;
@@ -255,6 +267,9 @@
   --chart-son-2:#f5597e;
   --chart-daughter-1:#ffc1e3;
   --chart-daughter-2:#d81b60;
+    --shadow-soft:0 .06rem .18rem rgba(0,0,0,.06);
+  --shadow-soft-lg:0 .12rem .32rem rgba(0,0,0,.1);
+
 }
 
 /* ---------- 5) النمط الملكي (Royal – البنفسجي الذهبي) ---------- */
@@ -271,7 +286,7 @@
 
   --connector-color:#3b1c64;
   --arrow-color:#facc15;
-
+--accent-soft:color-mix(in srgb,var(--arrow-color) 38%,#fff);
   --text-main:#f9fafb;
   --title-color:#fbbf24;
   --placeholder-fg:#a78bfa;
@@ -343,6 +358,9 @@
   --chart-son-2:#7c3aed;
   --chart-daughter-1:#fbbf24;
   --chart-daughter-2:#f59e0b;
+    --shadow-soft:0 .06rem .2rem rgba(0,0,0,.55);
+  --shadow-soft-lg:0 .12rem .36rem rgba(0,0,0,.7);
+
 }
 
 /* ---------- 6) النمط الداكن (Dark – الفحمي) ---------- */
@@ -354,7 +372,7 @@
   --wife-bg:#392053;--son-bg:#162544;--daughter-bg:#3a1e33;
 
   --connector-color:#2d3748;--arrow-color:#fbbf24;
-
+--accent-soft:color-mix(in srgb,var(--arrow-color) 38%,#fff);
   --text-main:#e5e7eb;--title-color:#fcd34d;--placeholder-fg:#94a3b8;--text-muted:#9ca3af;
 
   --panel-bg:#191c24;--chip-bg:#202533;--badge-bg:#202533;
@@ -403,5 +421,8 @@
   --chart-son-2:#2563eb;
   --chart-daughter-1:#c084fc;
   --chart-daughter-2:#a855f7;
+    --shadow-soft:0 .06rem .2rem rgba(0,0,0,.5);
+  --shadow-soft-lg:0 .12rem .34rem rgba(0,0,0,.72);
+
 }
 

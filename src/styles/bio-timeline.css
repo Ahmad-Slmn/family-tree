@@ -1,0 +1,343 @@
+/* ===== bio-timeline.css — قسم الخط الزمني للأحداث ===== */
+
+/* === هيدر القسم + مبدّل العرض === */
+.timeline-header{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:.75rem;
+  margin-bottom:.75rem;
+  flex-wrap:wrap;
+}
+
+/* أدوات رأس الخط الزمني */
+.timeline-tools{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:.55rem;
+}
+
+.timeline-tools-left,
+.timeline-tools-right{
+  display:flex;
+  align-items:center;
+  gap:.4rem;
+}
+
+.timeline-type-filter,
+.timeline-sort{
+  min-width:0;
+}
+
+.timeline-view-toggle{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:.7rem; /* نفس حواف زر الإضافة */
+  border:1px solid color-mix(in oklab,var(--accent-soft)70%,transparent);
+  overflow:hidden;
+  background:color-mix(in oklab,var(--panel-bg)90%,#fff);
+}
+
+.timeline-view-btn{
+  position:relative;
+  border:0;background:transparent;
+  padding:.35rem .9rem;
+  font-size:.8rem;
+  cursor:pointer;
+  white-space:nowrap;
+  color:var(--text-main);
+  transition:
+    background-color .18s ease,
+    color .18s ease,
+    box-shadow .18s ease,
+    transform .12s ease;
+  
+}
+.timeline-view-btn:is(:hover,:focus-visible){
+  background:color-mix(in oklab,var(--accent-soft)25%,#fff);
+  transform:translateY(-1px);
+  box-shadow:0 .08rem .24rem rgba(0,0,0,.08);
+  outline:none;
+}
+.timeline-view-btn.is-active{
+  background:color-mix(in oklab,var(--accent-soft)70%,#fff);
+  color:var(--arrow-color);
+  font-weight:600;
+  box-shadow:0 .1rem .3rem rgba(0,0,0,.12);
+}
+.timeline-view-btn.is-active::before{
+  content:"";
+  position:absolute;
+  inset:.06rem;
+  border-radius:999px;
+  border:1px solid color-mix(in oklab,var(--accent-soft)65%,transparent);
+  pointer-events:none;
+}
+
+
+/* === تبديل وضع القائمة / الخط الزمني === */
+.bio-section-timeline[data-view="list"] .events-list{display:block}
+.bio-section-timeline[data-view="list"] .events-timeline{display:none}
+.bio-section-timeline[data-view="timeline"] .events-list{display:none}
+.bio-section-timeline[data-view="timeline"] .events-timeline{display:block}
+
+/* === القوائم + الحالة الفارغة === */
+.events-list,.events-timeline{max-width:100%}
+.events-empty,.timeline-empty{
+  padding:1rem .5rem;font-size:.86rem;opacity:.85;color:var(--text-muted)
+}
+
+/* ميتا المعاينة: تاريخ الإضافة + طول التفاصيل */
+.event-preview-meta{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.35rem;
+  font-size:.78rem;
+  color:var(--text-muted);
+}
+
+/* سطر تاريخ الحدث في المعاينة */
+.event-preview-eventdate{
+  margin-top:.15rem;
+  font-size:.8rem;
+  color:var(--text-muted);
+}
+
+/* العمر التقريبي في المعاينة والخط الزمني */
+.timeline-age,
+.event-preview-age{
+  margin-top:.05rem;
+  font-size:.78rem;
+  color:var(--text-muted);
+  font-style:italic;
+}
+
+/* === كروت الأحداث (وضع القائمة) === */
+.event-card{margin-bottom:.65rem}
+.event-card--preview .event-edit{display:none}
+.event-card--edit .event-preview{display:none}
+
+/* === بادجات أنواع أحداث الخط الزمني === */
+.timeline-badge--type[data-type="birth"]::before{content:"🎉"}
+.timeline-badge--type[data-type="marriage"]::before{content:"💍"}
+.timeline-badge--type[data-type="child"]::before{content:"👶"}
+.timeline-badge--type[data-type="move"]::before{content:"📦"}
+.timeline-badge--type[data-type="job"]::before{content:"💼"}
+.timeline-badge--type[data-type="hajj"]::before{content:"🕋"}
+.timeline-badge--type[data-type="death"]::before{content:"🕊️"}
+.timeline-badge--type[data-type="custom"]::before{content:"⭐"}
+
+/* === كبسولة نوع الحدث + التاريخ + المكان === */
+.event-type-pill{
+  display:inline-flex;align-items:center;gap:.25rem;
+  padding:.15rem .6rem;border-radius:999px;
+  background:color-mix(in oklab,var(--panel-bg)96%,#fff);
+  border:1px solid color-mix(in oklab,var(--surface-border)80%,transparent);
+  color:var(--text-main);box-shadow:0 .06rem .2rem rgba(0,0,0,.04)
+}
+.event-type-icon{font-size:.9rem;opacity:.9}
+.event-type-select{
+  border:0;background:transparent;font-size:.8rem;
+  padding:0;cursor:pointer;color:var(--text-main);outline:none!important
+}
+.event-date-input{
+  font-size:.8rem;padding:.32rem .65rem;border-radius:.6rem;
+  border:1px solid var(--surface-border);background:var(--panel-bg);
+  color:var(--text-main);outline:none!important;
+  box-shadow:0 .06rem .18rem rgba(0,0,0,.03);
+  transition:border-color .16s,box-shadow .16s,background-color .16s,transform .12s
+}
+.event-date-input:hover{
+  border-color:color-mix(in oklab,var(--modal-primary)40%,var(--surface-border));
+  background:color-mix(in oklab,var(--panel-bg)94%,#fff);
+  transform:translateY(-1px);
+  box-shadow:0 .12rem .32rem rgba(0,0,0,.06)
+}
+.event-date-input:focus-visible{
+  border-color:var(--modal-primary);
+  box-shadow:0 0 0 .09rem color-mix(in oklab,var(--modal-primary)40%,transparent);
+  background:var(--card-bg)
+}
+.event-place-input{
+  width:100%;padding:.35rem .7rem;border-radius:.6rem;
+  border:1px solid var(--surface-border);background:var(--panel-bg);
+  font-size:.92rem;color:var(--text-main);outline:none!important;
+  transition:border-color .16s,box-shadow .16s,background-color .16s
+}
+.event-place-input::placeholder{color:var(--text-muted)}
+.event-place-input:focus-visible{
+  border-color:var(--modal-primary);
+  box-shadow:0 0 0 .09rem color-mix(in oklab,var(--modal-primary)40%,transparent);
+  background:var(--card-bg)
+}
+.event-description-input{min-height:3.5rem}
+
+/* === الخط الزمني العمودي === */
+.events-timeline{margin-top:.6rem;position:relative}
+.timeline-list{list-style:none;margin:0;padding:0}
+.timeline-vertical{
+  border-inline-start:2px solid color-mix(in oklab,var(--accent-soft)70%,#000);
+  padding-inline-start:1.5rem
+}
+.timeline-item{position:relative;padding:.5rem 0 .6rem}
+.timeline-marker{
+  position:absolute;inset-inline-start:-1.1rem;top:.7rem;
+  width:1.3rem;height:1.3rem;border-radius:999px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:.8rem;background:var(--card-bg);
+  box-shadow:0 .15rem .4rem rgba(0,0,0,.12)
+}
+
+/* فاصل السنوات في الخط الزمني */
+.timeline-year-separator{
+  font-weight:700;
+  margin:.4rem 0 .2rem;
+  color:var(--title-color);
+}
+
+/* تمييز الأحداث المميزة (pinned) داخل الخط الزمني */
+.timeline-item.is-pinned .timeline-marker{
+  border:2px solid color-mix(in oklab,var(--arrow-color) 80%,#fff);
+}
+
+.timeline-item.is-pinned .timeline-content{
+  background:color-mix(in oklab,var(--panel-bg)96%,#fff);
+  border-radius:.9rem;
+  padding:.4rem .6rem;
+}
+
+.timeline-content{font-size:.85rem;color:var(--text-main)}
+.timeline-date{font-weight:600;margin-bottom:.1rem;color:var(--title-color)}
+.timeline-title-row{
+  display:flex;align-items:center;gap:.25rem;margin-bottom:.15rem
+}
+.timeline-title-icon{font-size:.9rem}
+.timeline-title{font-weight:500}
+.timeline-place{font-size:.8rem;opacity:.85;color:var(--text-muted)}
+.timeline-description{margin:.15rem 0 0;font-size:.84rem}
+.timeline-media{
+  margin-top:.2rem;display:flex;flex-wrap:wrap;gap:.3rem
+}
+.timeline-media-link{
+  font-size:.75rem;padding:.15rem .5rem;border-radius:999px;
+  border:1px dashed color-mix(in oklab,var(--accent-soft)80%,transparent);
+  text-decoration:none;color:var(--arrow-color);
+  background:color-mix(in oklab,var(--card-bg)96%,#fff)
+}
+
+/* === ثَمبنايل صور الأحداث === */
+.timeline-image-thumb{
+  position:relative;display:inline-flex;align-items:center;justify-content:center;
+  width:64px;height:64px;border-radius:.75rem;overflow:hidden;
+  border:1px solid color-mix(in oklab,var(--surface-border)80%,transparent);
+  background:color-mix(in oklab,var(--panel-bg)96%,#fff);
+  cursor:grab;box-shadow:0 .06rem .18rem rgba(0,0,0,.08);
+  transition:transform .14s ease-out,box-shadow .14s ease-out,
+    border-color .14s ease-out,background-color .14s ease-out
+}
+
+/* تصغير الثمبنيل داخل الخط الزمني فقط */
+.events-timeline .timeline-image-thumb{
+  width:40px;
+  height:40px;
+  border-radius:.55rem;
+  cursor:pointer;
+}
+
+.timeline-image-thumb img{
+  max-width:100%;max-height:100%;object-fit:cover;pointer-events:none
+}
+.timeline-image-thumb-remove,
+.timeline-image-thumb-view{
+  position:absolute;inset-inline-end:.18rem;border:none;border-radius:.5rem;
+  padding:.05rem .3rem;font-size:.7rem;cursor:pointer
+}
+.timeline-image-thumb-remove{
+  top:.18rem;background:rgba(0,0,0,.7);color:#fff
+}
+
+/* === الاستجابة (Responsive) === */
+/* 1) ≤23.9rem */
+@media(max-width:23.9rem){
+  .bio-section-timeline{padding:.75rem .75rem 1rem;border-radius:.9rem}
+  .bio-section-timeline h3{font-size:.95rem}
+  .bio-section-timeline .timeline-header{flex-direction:column;align-items:stretch;gap:.5rem}
+  .timeline-tools{width:100%;flex-direction:column;align-items:stretch;gap:.4rem}
+  .timeline-tools-left,.timeline-tools-right{width:100%;justify-content:space-between}
+  .timeline-type-filter,.timeline-sort{flex:1 1 auto}
+  .timeline-view-toggle,.timeline-add-btn{width:100%;justify-content:center;text-align:center}
+  .event-date-input{width:100%}
+  .timeline-vertical{padding-inline-start:1.1rem}
+  .timeline-marker{inset-inline-start:-.9rem}
+}
+
+/* 2) 24–29.9rem */
+@media(min-width:24rem) and (max-width:29.9rem){
+  .bio-section-timeline{padding:.9rem .9rem 1.2rem}
+  .bio-section-timeline .timeline-header{flex-direction:column;align-items:stretch}
+  .timeline-tools{width:100%;flex-direction:column;align-items:stretch;gap:.45rem}
+  .timeline-tools-left,.timeline-tools-right{width:100%;justify-content:space-between}
+  .timeline-type-filter,.timeline-sort{flex:1 1 auto}
+  .timeline-view-toggle{flex:1 1 auto}
+  .timeline-add-btn{flex:0 0 auto;width:100%}
+  .event-head{gap:.45rem}
+  .timeline-vertical{padding-inline-start:1.25rem}
+  .timeline-marker{inset-inline-start:-1rem}
+}
+
+/* 3) 30–39.9rem */
+@media(min-width:30rem) and (max-width:39.9rem){
+  .bio-section-timeline{padding:1rem 1.1rem 1.4rem}
+  .bio-section-timeline .timeline-header{flex-direction:row;align-items:center}
+  .timeline-tools{width:100%;flex-direction:column;align-items:stretch;gap:.5rem}
+  .timeline-tools-left,.timeline-tools-right{width:100%}
+  .timeline-tools-right{justify-content:flex-start}
+  .timeline-view-toggle,.timeline-add-btn{flex:0 0 auto}
+  .event-card{padding:.8rem .9rem .7rem}
+  .event-body{gap:.4rem}
+}
+
+/* 4) 40–47.9rem */
+@media(min-width:40rem) and (max-width:47.9rem){
+  .bio-section-timeline{padding:1.1rem 1.3rem 1.5rem}
+  .bio-section-timeline .timeline-header{align-items:center}
+  .timeline-tools{flex-direction:row;align-items:center;flex-wrap:wrap;gap:.5rem}
+  .timeline-tools-left{flex:1 1 100%;justify-content:flex-start;gap:.5rem}
+  .timeline-tools-right{flex:0 0 auto}
+  .event-card{margin-bottom:.75rem}
+  .timeline-vertical{padding-inline-start:1.7rem}
+  .timeline-marker{inset-inline-start:-1.2rem}
+}
+
+/* 5) 48–63.9rem */
+@media(min-width:48rem) and (max-width:63.9rem){
+  .bio-section-timeline{padding:1.1rem 1.4rem 1.6rem}
+  .bio-section-timeline .timeline-header{align-items:center}
+  .timeline-tools{flex-direction:row;align-items:center;gap:.6rem}
+  .timeline-tools-left{flex:1 1 auto}
+  .timeline-tools-right{flex:0 0 auto}
+  .events-list .event-card{margin-bottom:.8rem}
+  .event-card{padding:.85rem 1rem .8rem}
+  .event-head{gap:.7rem}
+  .timeline-vertical{padding-inline-start:1.9rem}
+  .timeline-marker{inset-inline-start:-1.3rem}
+}
+
+/* 6) ≥64rem */
+@media(min-width:64rem){
+  .bio-section-timeline{padding:1.2rem 1.6rem 1.7rem;border-radius:1.1rem}
+  .bio-section-timeline .timeline-header{align-items:center}
+  .timeline-tools{flex-direction:row;align-items:center;gap:.8rem}
+  .timeline-tools-left{flex:1 1 auto}
+  .timeline-tools-right{flex:0 0 auto}
+  .timeline-view-btn{font-size:.82rem;padding:.3rem .85rem}
+  .timeline-add-btn{font-size:.84rem;padding:.35rem 1rem}
+  .events-list .event-card{margin-bottom:.9rem}
+  .event-card{padding:.95rem 1.1rem .9rem}
+  .event-body{gap:.45rem}
+  .timeline-vertical{padding-inline-start:2rem}
+  .timeline-marker{inset-inline-start:-1.4rem;width:1.4rem;height:1.4rem;font-size:.85rem}
+  .timeline-content{font-size:.87rem}
+}

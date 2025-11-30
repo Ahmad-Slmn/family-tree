@@ -2,8 +2,18 @@
 // إدارة "القصص والمذكّرات" لكل شخص (منطق + واجهة القسم داخل نافذة السيرة)
 
 import {
-  el, textEl,
-  showConfirmModal, showWarning, showSuccess, showInfo, showError
+    el,
+    textEl,
+    showConfirmModal,
+    showWarning,
+    showSuccess,
+    showInfo,
+    showError,
+    arraysShallowEqual,
+    formatShortDateBadge,
+  formatFullDateTime,
+  attachHorizontalSortable,
+  createImageViewerOverlay
 } from '../utils.js';
 import { DB } from '../storage/db.js';
 
@@ -165,138 +175,25 @@ function getLengthInfo(len) {
   return { label: 'قصة طويلة', level: 3 };
 }
 
-function arraysEqual(a, b) {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
-  return true;
-}
-
 // تنسيق تاريخ الإضافة
 function formatStoryDate(iso, prefix = 'أضيفت') {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return '';
-  const fmt = new Intl.DateTimeFormat('ar-EG-u-ca-gregory', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-    hour: 'numeric', minute: '2-digit', hour12: true
-  });
-  return `${prefix} في ${fmt.format(d)}`;
+  const body = formatFullDateTime(iso);
+  if (!body) return '';
+  return `${prefix} في ${body}`;
 }
-
-// تنسيق تاريخ الحدث كبادج
-function formatEventBadgeDate(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return '';
-  const fmt = new Intl.DateTimeFormat('ar-EG-u-ca-gregory', {
-    day: 'numeric', month: 'short', year: 'numeric'
-  });
-  return fmt.format(d);
-}
-
-// عارض الصور المشترك لكل القصص
-function ensureImageSlider() {
-  let overlay = document.querySelector('.story-image-viewer-overlay');
-  if (overlay && overlay._sliderApi) return overlay._sliderApi;
-
-  overlay = document.createElement('div');
-  overlay.className = 'story-image-viewer-overlay';
-
-  const backdrop = document.createElement('div');
-  backdrop.className = 'story-image-viewer-backdrop';
-
-  const dialog = document.createElement('div');
-  dialog.className = 'story-image-viewer-dialog';
-
-  const closeBtn = document.createElement('button');
-  closeBtn.type = 'button';
-  closeBtn.className = 'story-image-viewer-close';
-  closeBtn.textContent = '×';
-
-  const img = document.createElement('img');
-  img.className = 'story-image-viewer-img';
-  img.alt = 'معاينة الصورة';
-
-  const nav = document.createElement('div');
-  nav.className = 'story-image-viewer-nav';
-
-  const prevBtn = document.createElement('button');
-  prevBtn.type = 'button';
-  prevBtn.className = 'story-image-viewer-arrow story-image-viewer-arrow-prev';
-  prevBtn.textContent = '›';
-
-  const counter = document.createElement('div');
-  counter.className = 'story-image-viewer-counter';
-
-  const nextBtn = document.createElement('button');
-  nextBtn.type = 'button';
-  nextBtn.className = 'story-image-viewer-arrow story-image-viewer-arrow-next';
-  nextBtn.textContent = '‹';
-
-  nav.append(nextBtn, counter, prevBtn);
-  dialog.append(closeBtn, img, nav);
-  overlay.append(backdrop, dialog);
-  document.body.appendChild(overlay);
-
-  let urls = [];
-  let index = 0;
-
-  function updateUI() {
-    if (!urls.length) return;
-    img.src = urls[index];
-    counter.textContent = `${index + 1} / ${urls.length}`;
-    const single = urls.length <= 1;
-    const atFirst = index <= 0;
-    const atLast = index >= urls.length - 1;
-    prevBtn.disabled = single || atFirst;
-    nextBtn.disabled = single || atLast;
-    prevBtn.style.visibility = prevBtn.disabled ? 'hidden' : 'visible';
-    nextBtn.style.visibility = nextBtn.disabled ? 'hidden' : 'visible';
-  }
-
-  function closeViewer() {
-    overlay.classList.remove('is-open');
-  }
-
-  function open(list, startIndex = 0) {
-    urls = Array.isArray(list) ? list.filter(Boolean) : [];
-    if (!urls.length) return;
-    index = Math.min(Math.max(startIndex, 0), urls.length - 1);
-    updateUI();
-    overlay.classList.add('is-open');
-  }
-
-  prevBtn.addEventListener('click', e => {
-    e.stopPropagation();
-    if (!urls.length || index <= 0) return;
-    index -= 1;
-    updateUI();
-  });
-
-  nextBtn.addEventListener('click', e => {
-    e.stopPropagation();
-    if (!urls.length || index >= urls.length - 1) return;
-    index += 1;
-    updateUI();
-  });
-
-  backdrop.addEventListener('click', closeViewer);
-  closeBtn.addEventListener('click', closeViewer);
-  overlay.addEventListener('click', e => {
-    if (e.target === overlay) closeViewer();
-  });
-
-  document.addEventListener('keydown', e => {
-    if (!overlay.classList.contains('is-open')) return;
-    if (e.key === 'Escape') closeViewer();
-    if (e.key === 'ArrowLeft') { e.preventDefault(); prevBtn.click(); }
-    if (e.key === 'ArrowRight') { e.preventDefault(); nextBtn.click(); }
-  });
-
-  const api = { open };
-  overlay._sliderApi = api;
-  return api;
-}
+ 
+// عارض الصور المشترك لكل القصص (باستخدام الدالة العامة من utils)
+const storyImageViewer = createImageViewerOverlay({
+  overlayClass: 'story-image-viewer-overlay',
+  backdropClass: 'story-image-viewer-backdrop',
+  dialogClass: 'story-image-viewer-dialog',
+  imgClass: 'story-image-viewer-img',
+  closeBtnClass: 'story-image-viewer-close',
+  navClass: 'story-image-viewer-nav',
+  arrowPrevClass: 'story-image-viewer-arrow story-image-viewer-arrow-prev',
+  arrowNextClass: 'story-image-viewer-arrow story-image-viewer-arrow-next',
+  counterClass: 'story-image-viewer-counter'
+});
 
 async function openImageSlider(refs, startIndex = 0) {
   const list = Array.isArray(refs) ? refs : [];
@@ -306,7 +203,7 @@ async function openImageSlider(refs, startIndex = 0) {
     if (u) urls.push(u);
   }
   if (!urls.length) return;
-  ensureImageSlider().open(urls, startIndex);
+  storyImageViewer.open(urls, startIndex);
 }
 
 
@@ -407,11 +304,66 @@ export function createStoriesSection(person, handlers = {}) {
       addBtn.title = `هناك ${count} قصص محفوظة حتى الآن`;
     }
   }
+  function rebuildStoryTypeFilterOptions(){
+    ensureStories(person);
+    const stories = person.stories || [];
+
+    // الأنواع المستخدمة فعليًا في القصص
+    const usedTypesSet = new Set();
+    for (const s of stories){
+      const t = (s.type || '').trim();
+      if (t) usedTypesSet.add(t);
+    }
+
+    // حفظ الاختيار السابق
+    const prevValue = typeFilterSelect.value || currentTypeFilter || 'all';
+
+    // تنظيف القائمة
+    typeFilterSelect.innerHTML = '';
+
+    // خيار "كل الأنواع"
+    const optAll = el('option');
+    optAll.value = 'all';
+    optAll.textContent = 'كل الأنواع';
+    typeFilterSelect.appendChild(optAll);
+
+    // ترتيب الأنواع وفق STORY_TYPE_OPTIONS ثم أبجديًا للباقي (لو وُجِد كود غير معروف)
+    const order = Object.fromEntries(
+      STORY_TYPE_OPTIONS
+        .filter(([val]) => val && val !== 'all')
+        .map(([val], i) => [val, i])
+    );
+
+    const usedTypes = Array.from(usedTypesSet);
+    usedTypes.sort((a, b) => {
+      const ia = (order[a] !== undefined ? order[a] : 999);
+      const ib = (order[b] !== undefined ? order[b] : 999);
+      if (ia !== ib) return ia - ib;
+      return String(a).localeCompare(String(b), 'ar');
+    });
+
+    usedTypes.forEach(code => {
+      const opt = el('option');
+      opt.value = code;
+      opt.textContent = getTypeLabel(code) || code;
+      typeFilterSelect.appendChild(opt);
+    });
+
+    const canKeepPrev =
+      prevValue &&
+      prevValue !== 'all' &&
+      usedTypes.includes(prevValue);
+
+    const nextValue = canKeepPrev ? prevValue : 'all';
+    typeFilterSelect.value = nextValue;
+    currentTypeFilter = nextValue;
+  }
 
   function renderList() {
     list.innerHTML = '';
     ensureStories(person);
     updateAddButtonLabel();
+    rebuildStoryTypeFilterOptions(); // إعادة بناء خيارات الفلتر حسب الأنواع الحالية
 
     const filteredStories = person.stories.filter(story => {
       const typeOk =
@@ -462,7 +414,8 @@ export function createStoriesSection(person, handlers = {}) {
         pinned: !!story.pinned,
         note: (story.note || '').trim()
       };
-      const eventDateLabel = formatEventBadgeDate(original.eventDate);
+      const eventDateLabel = formatShortDateBadge(original.eventDate);
+
 
       let currentImages = Array.isArray(original.images) ? [...original.images]
         : [];
@@ -502,17 +455,22 @@ export function createStoriesSection(person, handlers = {}) {
         placeBadge.textContent = original.place;
         badgesWrap.appendChild(placeBadge);
       }
-      if (eventDateLabel) {
+         if (eventDateLabel) {
         const yearBadge = el('span', 'story-badge story-badge--year');
         yearBadge.textContent = eventDateLabel;
         badgesWrap.appendChild(yearBadge);
       }
+
+      let typeBadge = null;
       const typeLabel = getTypeLabel(original.type);
       if (typeLabel) {
-        const typeBadge = el('span', 'story-badge story-badge--type');
+        typeBadge = el('span', 'story-badge story-badge--type');
+        typeBadge.dataset.storyId = story.id;                     // ربط البادج بالقصة
+        typeBadge.dataset.type = original.type || 'general';      // مهم للأيقونة
         typeBadge.textContent = typeLabel;
         badgesWrap.appendChild(typeBadge);
       }
+
 
       const previewTitle = el('div', 'story-preview-title');
       previewTitle.textContent = original.title || 'قصة بدون عنوان';
@@ -759,41 +717,19 @@ export function createStoriesSection(person, handlers = {}) {
         }
       }
 
-      // ← هنا بالضبط نضيف الدالة الجديدة
-      function setupImagesSortable() {
-        // نتأكد أن المكتبة متوفّرة عالميًا
-        if (!window.Sortable) return;
-
-        // لا نعيد التهيئة لنفس الحاوية أكثر من مرة
-        if (imagesThumbs._sortableInstance) return;
-
-        imagesThumbs._sortableInstance = new window.Sortable(imagesThumbs, {
-          animation: 150,
-          direction: 'horizontal',
-          ghostClass: 'story-image-thumb--ghost',
-          dragClass: 'story-image-thumb--drag',
-          fallbackOnBody: true,
-          swapThreshold: 0.5,
-
-          onEnd() {
-            // نقرأ الترتيب الجديد من الـ DOM
-            const orderedRefs = Array.from(
-              imagesThumbs.querySelectorAll('.story-image-thumb')
-            )
-              .map(node => node.dataset.ref)
-              .filter(Boolean);
-
-            if (!orderedRefs.length) return;
-
-            // نحدّث مصفوفة الصور حسب الترتيب الجديد
-            currentImages = orderedRefs.slice();
-
-            // نعيد بناء المصغّرات ليتطابق index الأحداث مع الترتيب الجديد
-            renderThumbs();
-            recomputeDirty();
-          }
-        });
-      }
+function setupImagesSortable() {
+  attachHorizontalSortable({
+    container: imagesThumbs,
+    itemSelector: '.story-image-thumb',
+    ghostClass: 'story-image-thumb--ghost',
+    dragClass: 'story-image-thumb--drag',
+    onSorted(orderedRefs) {
+      currentImages = orderedRefs.slice();
+      renderThumbs();
+      recomputeDirty();
+    }
+  });
+}
 
       function renderThumbs() {
         imagesThumbs.innerHTML = '';
@@ -894,7 +830,7 @@ export function createStoriesSection(person, handlers = {}) {
       cancelBtn.textContent = 'إلغاء التعديل';
       const delBtn = el('button', 'story-delete-btn');
       delBtn.type = 'button';
-      delBtn.textContent = 'حذف';
+      delBtn.textContent = 'حذف القصة';
       footer.append(saveBtn, cancelBtn, delBtn);
       card.appendChild(footer);
 
@@ -930,7 +866,7 @@ export function createStoriesSection(person, handlers = {}) {
           curPinned !== original.pinned ||
           curNote !== original.note ||
           curTags.join('|') !== original.tags.join('|') ||
-          !arraysEqual(currentImages, original.images);
+          !arraysShallowEqual(currentImages, original.images);
 
         applyMode();
       }
@@ -1019,9 +955,11 @@ export function createStoriesSection(person, handlers = {}) {
 
         currentImages = [...original.images];
 
+        // تحديث العنوان
         previewTitle.textContent =
           original.title || 'قصة بدون عنوان';
 
+        // تحديث شريحة طول النص
         const trimmedText = original.text;
         const info2 = getLengthInfo(trimmedText.length);
         if (info2.level === 0) {
@@ -1037,21 +975,42 @@ export function createStoriesSection(person, handlers = {}) {
           lengthLabel.append(meter2, txtSpan2);
         }
 
+        // تحديث نص المعاينة
         previewText.textContent =
           trimmedText ||
           'لم تتم إضافة نص لهذه القصة حتى الآن. يمكنك فتح وضع التحرير لكتابته.';
 
+        // تحديث تاريخ الإضافة في الرأس والمعاينة
         if (effective.createdAt) {
           const labelText = formatStoryDate(effective.createdAt);
           dates.textContent = labelText;
           dateLabel.textContent = labelText;
         }
 
+        // NEW: تحديث بادج نوع القصة في هذه البطاقة + أي بادجات أخرى لنفس القصة
+        const effectiveType = (effective.type || '').trim() || 'general';
+        const newTypeLabel = getTypeLabel(effectiveType) || '';
+
+        if (typeBadge) {
+          typeBadge.textContent = newTypeLabel;
+          typeBadge.dataset.type = effectiveType;
+        }
+
+        document
+          .querySelectorAll(`.story-badge--type[data-story-id="${story.id}"]`)
+          .forEach(node => {
+            node.textContent = newTypeLabel;
+            node.dataset.type = effectiveType;
+          });
+
         isEditing = false;
         lastEditedId = null;
         isDirty = false;
+
+        // NEW: إعادة بناء القائمة كلها (ستُحدّث الفلتر + البادجات من البيانات المحدثة)
         renderList();
         showSuccess?.('تم حفظ تعديلات القصة بنجاح');
+
       });
 
       cancelBtn.addEventListener('click', () => {
