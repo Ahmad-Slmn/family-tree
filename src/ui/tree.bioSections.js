@@ -770,11 +770,12 @@ function buildStoriesSection(person, handlers){
   // كل المحتوى سيتم بناؤه داخل createStoriesSection
   const root = createStoriesSection(person, handlers);
 
-  // تعويضاً عن createBioSection — نستخدم العنصر كما هو من stories
   if (!root) return null;
 
-  // نضمن أن يحتوي فقط على class "bio-section bio-section-stories"
-  root.className = 'bio-section bio-section-stories';
+  // نضمن وجود كلاس bio-section + معرّف القسم ليستفيد منه السكрол
+  root.classList.add('bio-section', 'bio-section-stories');
+  root.dataset.sectionId = 'stories';
+
   return root;
 }
 

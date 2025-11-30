@@ -5,6 +5,7 @@ import { ModalManager } from './modalManager.js';
 import { generateFamilyKey, getFamily, normalizeNewFamilyForLineage } from '../model/families.js';
 
 import * as Form from '../features/familyForm.js';
+import { refreshFilterOptionsForCurrentFamily } from '../features/search.js';
 import {
   ensureBtnLabelSpan,
   createWifeBlock,
@@ -1526,8 +1527,17 @@ normalizeNewFamilyForLineage(familyObj);
     try{ onSave?.(key, familyObj); }
     catch(err){ console.error(err); showInfo('حدث خطأ أثناء الحفظ.'); return; }
 
+// ⬅️ بعد حفظ العائلة في الـ Model:
+// 1) حدّث فلاتر الدور/العشيرة
+refreshFilterOptionsForCurrentFamily();
+
+// 2) إن كانت نافذة الإحصاءات مفتوحة، أعد بناءها بالكامل
+try {
+  window.dispatchEvent(new Event('FT_VISIBILITY_REFRESH'));
+} catch {}
     // 6) تثبيت اللقطات وتنظيف المؤشرات وإغلاق
     committedAncestorsRawKey = Form.makeAncestorsRawKey(ancestors.map(a=>a.name));
+
     initialFormSnapshot = computeSnapshot();
 
     // نظّف مؤشرات “قيد الترتيب”

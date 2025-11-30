@@ -475,10 +475,16 @@ function findPersonByIdInFamily(fam, pid) {
    عمليات المستوى الأعلى
    ========================= */
 function onSelectFamily(key) {
-  Model.setSelectedKey(key);                 // كان مفقودًا
+  Model.setSelectedKey(key);
   setState({ selectedFamily: key });
-  if (dom.activeFamily) dom.activeFamily.value = key; // تأكيد بصري فوري
+  if (dom.activeFamily) dom.activeFamily.value = key;
+
+  // تحديث خيارات الدور والعشيرة عند تبديل العائلة
+  if (typeof FeatureSearch.refreshFilterOptionsForCurrentFamily === 'function') {
+    FeatureSearch.refreshFilterOptionsForCurrentFamily();
+  }
 }
+
 
 
 /* فتح محرّر العائلة */
@@ -744,7 +750,51 @@ async function onShowDetails(person, opts = {}) {
   }
 
   // 3) دالة إعادة الرسم حسب الوضع الحالي
-  const rerenderBio = () => {
+  // خريطة تربط mode بأهم section نريد التمرير إليه
+  const MODE_MAIN_SECTION = {
+    summary:  'basic',
+    family:   'family',
+    grands:   'grands',
+    children: 'children',
+    wives:    'wives',
+    stories:  'stories'
+  };
+
+  // دالة تساعد على تمرير modal-content إلى بداية القسم المطلوب
+  // دالة تساعد على تمرير المودال إلى بداية القسم المطلوب
+  const scrollToCurrentSection = () => {
+    const sectionId = MODE_MAIN_SECTION[mode] || null;
+    if (!sectionId) return;
+
+    // حاوية الأقسام داخل المودال
+    const container =
+      dom.bioSectionsContainer ||
+      document.getElementById('bioSectionsContainer') ||
+      dom.modalContent ||
+      document.getElementById('modalContent');
+
+    if (!container) return;
+
+    // نحاول إيجاد القسم بحسب data-section-id أولاً، ثم بالكلاس الاحتياطي
+    const sec =
+      container.querySelector(`.bio-section[data-section-id="${sectionId}"]`) ||
+      container.querySelector(`.bio-section-${sectionId}`);
+
+    if (!sec) return;
+
+    // تمرير ناعم إلى بداية القسم داخل أقرب عنصر قابل للتمرير (المودال)
+    sec.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+      inline: 'nearest'
+    });
+  };
+
+
+  // 3) دالة إعادة الرسم حسب الوضع الحالي
+  const rerenderBio = (options = {}) => {
+    const { skipScroll = false } = options;
+
     const target = dom.bioSectionsContainer || byId('bioSectionsContainer') || dom.modalContent;
     if (!target) return;
 
@@ -759,9 +809,14 @@ async function onShowDetails(person, opts = {}) {
       // تمرير وضع السيرة الحالي
       bioMode: mode
     });
+
+    // نؤجل التمرير لآخر فريم بعد اكتمال الرسم
+    if (!skipScroll) {
+      requestAnimationFrame(scrollToCurrentSection);
+    }
   };
 
-  // 4) ربط تغيير select بإعادة الرسم
+  // 4) ربط تغيير select بإعادة الرسم + التمرير
   if (modeSelect) {
     modeSelect.onchange = () => {
       mode = modeSelect.value || 'summary';
@@ -770,7 +825,7 @@ async function onShowDetails(person, opts = {}) {
   }
 
   // 5) أول رسم
-  rerenderBio();
+  rerenderBio({ skipScroll: true });
 
   if (personObj?._id) {
     location.hash = `#person=${encodeURIComponent(personObj._id)}`;
@@ -853,10 +908,17 @@ dom.bioSectionsContainer = byId('bioSectionsContainer');
 // تهيئة أزرار الصعود/النزول
 initScrollButtons();
 
-    bus.on('io:import:done', syncActiveFamilyUI);
-    bus.on('families:coreFlag:refresh', syncActiveFamilyUI);
+    const refreshFamiliesAndFilters = () => {
+      syncActiveFamilyUI();
+      if (typeof FeatureSearch.refreshFilterOptionsForCurrentFamily === 'function') {
+        FeatureSearch.refreshFilterOptionsForCurrentFamily();
+      }
+    };
+
+    bus.on('io:import:done', refreshFamiliesAndFilters);
+    bus.on('families:coreFlag:refresh', refreshFamiliesAndFilters);
     // عند تغيّر رؤية العائلات من ميزة visibility
-    bus.on('families:visibility:changed', syncActiveFamilyUI);
+    bus.on('families:visibility:changed', refreshFamiliesAndFilters);
 
     // عند “إظهار العائلات الأساسية” من نافذة إعادة التفضيلات
     window.addEventListener('FT_VISIBILITY_REFRESH', () => {

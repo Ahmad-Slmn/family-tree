@@ -59,7 +59,7 @@ export function updatePersonEverywhere(fam,personId,mutateFn){
   mirror.forEach(w=>{touch(w);(w?.children||[]).forEach(touch);});
 }
 
-/* جمع أشخاص العائلة بدون تكرار */
+/* جمع أشخاص العائلة الذين لهم بطاقة في الشجرة فقط */
 function listPersonsOfFamily(fam){
   if(!fam) return [];
   const seenStrict=new Set(),seenLoose=new Set(),acc=[];
@@ -74,13 +74,174 @@ function listPersonsOfFamily(fam){
     seenStrict.add(strict); seenLoose.add(loose);
     acc.push({name:p.name||'',role:p.role||'',cognomen:p?.bio?.cognomen||'',ref:p});
   };
-  const tops=[...(Array.isArray(fam.ancestors)?fam.ancestors:[]),fam.father,fam.rootPerson,...(fam.wives||[])].filter(Boolean);
+
+  const ancestors = Array.isArray(fam.ancestors) ? fam.ancestors : [];
+  const father    = fam.father || null;
+  const root      = fam.rootPerson || null;
+  const wivesTop  = Array.isArray(fam.wives) ? fam.wives : [];
+
+  const tops = [
+    ...ancestors,
+    father,
+    root,
+    ...wivesTop
+  ].filter(Boolean);
+
   tops.forEach(p=>{
-    add(p); (p.children||[]).forEach(add);
-    if(p!==fam.rootPerson) (p.wives||[]).forEach(w=>{add(w);(w.children||[]).forEach(add);});
+    add(p);
+
+    const isRoot   = (root && p === root);
+    const isTopWife= wivesTop.includes(p);
+
+    // في العرض العادي: البطاقات التفصيلية للأبناء تكون لصاحب الشجرة وأبناء الزوجات
+    if(isRoot || isTopWife){
+      (p.children || []).forEach(add);
+    }
   });
+
   return acc;
 }
+
+
+/* ===== أدوات فلاتر الدور والعشيرة ===== */
+
+// العائلة الحالية من الـ state
+function getCurrentFamily(){
+  const fams = Model.getFamilies();
+  const selectedKey = getState().selectedFamily;
+  return fams[selectedKey];
+}
+
+function fillClanOptionsForFamily(fam){
+  const sel = byId('fltClan');
+  if (!sel || !fam) return;
+
+  const ctx = Lineage.buildLineageContext ? Lineage.buildLineageContext(fam) : null;
+  const clansMap = new Map();
+
+  // فلاتر الحالة الحالية
+  const filters = getState().filters || {};
+
+  // فقط الأشخاص الذين لهم بطاقة في الشجرة
+  const persons = listPersonsOfFamily(fam);
+
+  persons.forEach(item => {
+    const p = item.ref || item;
+    if (!p) return;
+    const b = p.bio || {};
+
+    // 1) تطبيق فلتر الدور (إن وُجد)
+    if (filters.role) {
+      const g = roleGroup(p);
+      if (g !== filters.role) return;
+    }
+
+    // 2) تطبيق فلاتر التاريخ (إن وُجدت)
+    if (filters.birthFrom || filters.birthTo) {
+      const by = (p?.bio?.birthYear != null && String(p.bio.birthYear).trim()) ? String(p.bio.birthYear).padStart(4,'0')
+        : '';
+      const bd = String(p?.bio?.birthDate || '').trim();
+      const bNorm = bd ? bd : (by ? `${by}-01-01` : '');
+      if (!bNorm) return;
+      if (filters.birthFrom && bNorm < String(filters.birthFrom)) return;
+      if (filters.birthTo   && bNorm > String(filters.birthTo))   return;
+    }
+
+    // 3) حساب العشيرة من سياق النسب
+    const resolved = ctx && Lineage.resolveClan ? (Lineage.resolveClan(p, fam, ctx) || '')
+      : (b.clan || '');
+
+    const clan = String(resolved || '').trim();
+    if (!clan) return;
+
+    clansMap.set(clan, (clansMap.get(clan) || 0) + 1);
+  });
+
+  const items = Array.from(clansMap.entries())
+    .map(([clan, count]) => ({ clan, count }))
+    .sort((a, b) => b.count - a.count || a.clan.localeCompare(b.clan, 'ar'));
+
+  sel.innerHTML = '<option value="">كل العشائر</option>';
+  for (const item of items) {
+    const opt = document.createElement('option');
+    opt.value = item.clan;
+    opt.textContent = `${item.clan} (${item.count})`;
+    sel.appendChild(opt);
+  }
+}
+
+function fillRoleOptionsForFamily(fam){
+  const sel = byId('fltRole');
+  if (!sel || !fam) return;
+
+  // فلاتر الحالة الحالية
+  const filters = getState().filters || {};
+  const ctx = Lineage.buildLineageContext ? Lineage.buildLineageContext(fam) : null;
+
+  // فقط الأشخاص الذين لهم بطاقة في الشجرة
+  const persons = listPersonsOfFamily(fam);
+  const rolesMap = new Map(); // roleGroup -> count
+
+  persons.forEach(pItem => {
+    const ref = pItem.ref || pItem;
+    if (!ref) return;
+    const b = ref.bio || {};
+
+    // 1) تطبيق فلتر العشيرة (إن وُجد)
+    if (filters.clan) {
+      const resolved = ctx && Lineage.resolveClan ? (Lineage.resolveClan(ref, fam, ctx) || '')
+        : (b.clan || '');
+      const clan = String(resolved || '').trim();
+      if (!clan || clan !== filters.clan) return;
+    }
+
+    // 2) تطبيق فلاتر التاريخ (إن وُجدت)
+    if (filters.birthFrom || filters.birthTo) {
+      const by = (ref?.bio?.birthYear != null && String(ref.bio.birthYear).trim()) ? String(ref.bio.birthYear).padStart(4,'0')
+        : '';
+      const bd = String(ref?.bio?.birthDate || '').trim();
+      const bNorm = bd ? bd : (by ? `${by}-01-01` : '');
+      if (!bNorm) return;
+      if (filters.birthFrom && bNorm < String(filters.birthFrom)) return;
+      if (filters.birthTo   && bNorm > String(filters.birthTo))   return;
+    }
+
+    // 3) تجميع حسب مجموعة الدور
+    const g = roleGroup(ref); // نفس التجميع المستخدم في الفلترة
+    if (!g) return;
+    rolesMap.set(g, (rolesMap.get(g) || 0) + 1);
+  });
+
+  sel.innerHTML = '<option value="">الكل</option>';
+
+  // نرتّب الأدوار حسب ROLE_FILTER_VALUES لكن لا نضيف إلا ما له أشخاص في الشجرة
+  ROLE_FILTER_VALUES.forEach(v => {
+    const count = rolesMap.get(v);
+    if (!count) return;
+
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = `${v} (${count})`;
+    sel.appendChild(opt);
+  });
+}
+
+
+// NEW: دالة عامة يمكن استدعاؤها عند تغيير العائلة
+export function refreshFilterOptionsForCurrentFamily(){
+  const fam = getCurrentFamily();
+  if (!fam) return;
+
+  fillClanOptionsForFamily(fam);
+  fillRoleOptionsForFamily(fam);
+
+  const s = getState().filters || {};
+  const roleSel = byId('fltRole');
+  const clanSel = byId('fltClan');
+  if (roleSel) roleSel.value = s.role || '';
+  if (clanSel) clanSel.value = s.clan || '';
+}
+
 
 /* ===== ترتيب هرمي ثابت مطابق للشجرة (للترتيب في البحث/الاقتراحات) ===== */
 function buildHierarchyIndex(fam){
@@ -324,74 +485,13 @@ function mountAdvancedFilters(){
     </div>`;
 
   topBar.after(box);
-  const fams = Model.getFamilies();
-  const selectedKey = getState().selectedFamily;
-  const fam = fams[selectedKey];
+  // تعبئة خيارات الدور والعشيرة للعائلة الحالية
+  refreshFilterOptionsForCurrentFamily();
 
-  function fillClanOptions() {
-    const sel = byId('fltClan');
-    if (!sel || !fam) return;
+  const s = getState().filters || {};
+  byId('fltFrom').value = s.birthFrom || '';
+  byId('fltTo').value   = s.birthTo   || '';
 
-    const ctx = Lineage.buildLineageContext ? Lineage.buildLineageContext(fam) : null;
-    const clansMap = new Map();
-
-    const addPersonClan = (p) => {
-      if (!p) return;
-      const b = p.bio || {};
-      const resolved = ctx && Lineage.resolveClan ? (Lineage.resolveClan(p, fam, ctx) || '')
-        : (b.clan || '');
-      const clan = String(resolved || '').trim();
-      if (!clan) return;
-      clansMap.set(clan, (clansMap.get(clan) || 0) + 1);
-    };
-
-    // نفس مسار الأشخاص المستخدم في الإحصاءات تقريبًا
-    const tops = [
-      ...(Array.isArray(fam.ancestors) ? fam.ancestors : []),
-      fam.father,
-      fam.rootPerson,
-      ...(fam.wives || [])
-    ].filter(Boolean);
-
-    tops.forEach(p => {
-      addPersonClan(p);
-      (p.children || []).forEach(addPersonClan);
-      (p.wives || []).forEach(w => {
-        addPersonClan(w);
-        (w.children || []).forEach(addPersonClan);
-      });
-    });
-
-    // بناء الخيارات بالترتيب حسب عدد الأشخاص
-    const items = Array.from(clansMap.entries())
-      .map(([clan, count]) => ({ clan, count }))
-      .sort((a, b) => b.count - a.count || a.clan.localeCompare(b.clan, 'ar'));
-
-    sel.innerHTML = '<option value="">كل العشائر</option>';
-    for (const item of items) {
-      const opt = document.createElement('option');
-      opt.value = item.clan;
-      opt.textContent = `${item.clan} (${item.count})`;
-      sel.appendChild(opt);
-    }
-  }
-
-  fillClanOptions();
-
-  const roleSelect=byId('fltRole');
-  if(roleSelect){
-    const existing=new Set([...roleSelect.options].map(o=>o.value));
-    ROLE_FILTER_VALUES.forEach(v=>{
-      if(!v||existing.has(v)) return;
-      const opt=document.createElement('option'); opt.value=v; opt.textContent=v; roleSelect.appendChild(opt);
-    });
-  }
-
-  const s=getState().filters||{};
-  byId('fltRole').value=s.role||'';
-  byId('fltClan').value=s.clan||'';
-  byId('fltFrom').value=s.birthFrom||'';
-  byId('fltTo').value=s.birthTo||'';
 
   const push=()=>{
     const patch={filters:{
@@ -400,11 +500,19 @@ function mountAdvancedFilters(){
       birthFrom:byId('fltFrom').value||'',
       birthTo:byId('fltTo').value||''
     }};
+
+    // تحديث الـ state
     setState(patch);
+
+    // حفظ في localStorage
     localStorage.setItem('flt_role',patch.filters.role);
     localStorage.setItem('flt_clan',patch.filters.clan);
     localStorage.setItem('flt_from',patch.filters.birthFrom);
     localStorage.setItem('flt_to',patch.filters.birthTo);
+
+    // IMPORTANT: إعادة بناء خيارات (الدور) و(العشيرة)
+    // بناءً على التقاطع الجديد للفلاتر
+    refreshFilterOptionsForCurrentFamily();
   };
 
   ['change','input'].forEach(ev=>{
