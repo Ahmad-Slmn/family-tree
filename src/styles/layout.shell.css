@@ -249,7 +249,7 @@
 /* أقسام الشريط الجانبي */
 .side-section{
   background: var(--panel-bg);
-  padding:1rem;
+  padding:1rem .50re;
   border-bottom: .125rem dashed var(--section-divider-strong);
 }
 .side-section h4{margin:.25rem 0 .75rem;color:var(--title-color)}

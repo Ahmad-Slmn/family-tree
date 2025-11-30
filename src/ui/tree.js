@@ -282,77 +282,98 @@ export function drawFamilyTree(families = {}, selectedKey = null, domRefs = {}, 
     });
   }
 
-  if (q){
-    const tokens = normalizeAr(q).split(/\s+/).filter(Boolean);
-    const tokensRaw = String(q || '').trim().split(/\s+/).filter(Boolean);
+if (q){
+  const tokens = normalizeAr(q).split(/\s+/).filter(Boolean);
+  const tokensRaw = String(q || '').trim().split(/\s+/).filter(Boolean);
 
-    const pool = collectPersonsForSearch(fam);
-    const results = pool.filter(p => match(p) && passFilters(p));
+  const pool = collectPersonsForSearch(fam);
+  const results = pool.filter(p => match(p) && passFilters(p));
 
-    if (!results.length){
-      const empty = el('div','empty-state'); empty.style.cssText='padding:2rem;text-align:center;opacity:.8';
-      empty.append(textEl('span','لا توجد نتائج مطابقة لـ "'), textEl('strong', String(q)), textEl('span','"'));
-      tree.appendChild(empty);
-      setMotherVisibility(false); pruneRemoved(new Set()); toggleConnectors(tree, false);
-      return;
-    }
+  // NEW: إزالة التكرارات حتى لا يكون العدّ أكبر من عدد البطاقات/الاقتراحات
+  const seen = new Set();
+  const uniqResults = [];
+  for (const p of results){
+    const id = p?._id || p?.id || p?.__tempId || null;
+    const key = id  ? `id:${id}`
+      : `nr:${(p.name||'').trim()}|${(p.role||'').trim()}|${(p?.bio?.motherName||'').trim()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    uniqResults.push(p);
+  }
 
-    const coll = new Intl.Collator('ar', { usage:'search', sensitivity:'base', ignorePunctuation:true });
-    const hierarchyOrder = buildHierarchyIndex(fam);
-
-    results.sort((a,b)=>{
-      const ra = getHierarchyRank(hierarchyOrder, a);
-      const rb = getHierarchyRank(hierarchyOrder, b);
-      if (ra !== rb) return ra - rb;
-
-      const sa = scoreForSearch(a, tokens);
-      const sb = scoreForSearch(b, tokens);
-      if (sb !== sa) return sb - sa;
-
-      const coll2 = new Intl.Collator('ar', { usage:'search', sensitivity:'base', ignorePunctuation:true });
-      return coll2.compare(String(a.name||''), String(b.name||''));
-    });
-
-    const wrap = el('div','generation search-results');
-    const grid = el('div','children-grid');
-
-    results.forEach(p => {
-      const wrapCard = el('div','relative');
-      const cls = (p.role === 'ابن') ? 'son' : (p.role === 'بنت' ? 'daughter' : '');
-
-      const cgNorm = normalizeAr(p?.bio?.cognomen || '');
-      const nameRoleNorm = normalizeAr(`${p?.name||''} ${p?.role||''}`);
-      const hitCogOnly =
-        tokens.some(t => cgNorm.includes(t)) &&
-        !tokens.some(t => nameRoleNorm.includes(t));
-
-      const card = upsertCard(
-        wrapCard,
-        p,
-        handlers,
-        cls,
-        {
-          showMotherHint,
-          highlightTokens: tokensRaw,
-          showCognomenHint: hitCogOnly,
-          readonlyName: !!fam.__core
-        }
-      );
-
-      const box = createCounterBoxForPerson(p);
-      if (box && !card.querySelector('.counter-box')) card.appendChild(box);
-      grid.appendChild(wrapCard);
-      if (p && p._id) __currentIds.add(p._id);
-    });
-
-    wrap.appendChild(grid); tree.appendChild(wrap);
-    const numEl = tree.querySelector('#resultsNum'); if (numEl) numEl.textContent = String(results.length);
-
-    setMotherVisibility(showMotherHint);
-    pruneRemoved(__currentIds);
+  if (!uniqResults.length){
+    const empty = el('div','empty-state');
+    empty.style.cssText='padding:2rem;text-align:center;opacity:.8';
+    empty.append(textEl('span','لا توجد نتائج مطابقة لـ "'),
+                 textEl('strong', String(q)),
+                 textEl('span','"'));
+    tree.appendChild(empty);
+    setMotherVisibility(false);
+    pruneRemoved(new Set());
     toggleConnectors(tree, false);
     return;
   }
+
+  const coll = new Intl.Collator('ar', { usage:'search', sensitivity:'base', ignorePunctuation:true });
+  const hierarchyOrder = buildHierarchyIndex(fam);
+
+  uniqResults.sort((a,b)=>{
+    const ra = getHierarchyRank(hierarchyOrder, a);
+    const rb = getHierarchyRank(hierarchyOrder, b);
+    if (ra !== rb) return ra - rb;
+
+    const sa = scoreForSearch(a, tokens);
+    const sb = scoreForSearch(b, tokens);
+    if (sb !== sa) return sb - sa;
+
+    const coll2 = new Intl.Collator('ar', { usage:'search', sensitivity:'base', ignorePunctuation:true });
+    return coll2.compare(String(a.name||''), String(b.name||''));
+  });
+
+  const wrap = el('div','generation search-results');
+  const grid = el('div','children-grid');
+
+  uniqResults.forEach(p => {
+    const wrapCard = el('div','relative');
+    const cls = (p.role === 'ابن') ? 'son' : (p.role === 'بنت' ? 'daughter' : '');
+
+    const cgNorm = normalizeAr(p?.bio?.cognomen || '');
+    const nameRoleNorm = normalizeAr(`${p?.name||''} ${p?.role||''}`);
+    const hitCogOnly =
+      tokens.some(t => cgNorm.includes(t)) &&
+      !tokens.some(t => nameRoleNorm.includes(t));
+
+    const card = upsertCard(
+      wrapCard,
+      p,
+      handlers,
+      cls,
+      {
+        showMotherHint,
+        highlightTokens: tokensRaw,
+        showCognomenHint: hitCogOnly,
+        readonlyName: !!fam.__core
+      }
+    );
+
+    const box = createCounterBoxForPerson(p);
+    if (box && !card.querySelector('.counter-box')) card.appendChild(box);
+    grid.appendChild(wrapCard);
+    if (p && p._id) __currentIds.add(p._id);
+  });
+
+  wrap.appendChild(grid);
+  tree.appendChild(wrap);
+
+  const numEl = tree.querySelector('#resultsNum');
+  if (numEl) numEl.textContent = String(uniqResults.length);
+
+  setMotherVisibility(showMotherHint);
+  pruneRemoved(__currentIds);
+  toggleConnectors(tree, false);
+  return;
+}
+
 
   if (flt.role && !['زوجة','ابن','بنت'].includes(flt.role)){
     if (filtersActive && _drawnTotal === 0){

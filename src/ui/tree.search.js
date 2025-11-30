@@ -114,17 +114,45 @@ export function collectPersonsForSearch(fam){
   const out = [];
   if (!fam) return out;
 
-  const walkDeep = (p)=>{
-    if(!p) return;
+  const seenStrict = new Set();
+  const seenLoose  = new Set();
+
+  const makeLooseKey = (p) => {
+    const b = p.bio || {};
+    const name   = String(p.name || '').trim();
+    const role   = String(p.role || '').trim();
+    const mother = String(b.motherName || '').trim();
+    const clan   = String(b.clan || '').trim();
+    return `nr:${name}|${role}|${mother}|${clan}`;
+  };
+
+  const add = (p) => {
+    if (!p) return;
+
+    const id        = p._id || p.id || p.__tempId || null;
+    const looseKey  = makeLooseKey(p);
+    const strictKey = id ? `id:${id}` : looseKey;
+
+    // إذا سبق أن أضفناه، نتجاهله
+    if (seenStrict.has(strictKey) || seenLoose.has(looseKey)) return;
+
+    seenStrict.add(strictKey);
+    seenLoose.add(looseKey);
     out.push(p);
+  };
+
+  const walkDeep = (p) => {
+    if (!p) return;
+    add(p);
 
     (p.wives || []).forEach(walkDeep);
     (p.children || []).forEach(walkDeep);
   };
 
+  // نفس ترتيب المرور القديم تقريبًا
   (Array.isArray(fam.ancestors) ? fam.ancestors : []).forEach(walkDeep);
-  if (fam.father) walkDeep(fam.father);
-  if (fam.rootPerson) walkDeep(fam.rootPerson);
+  if (fam.father)      walkDeep(fam.father);
+  if (fam.rootPerson)  walkDeep(fam.rootPerson);
   (fam.wives || []).forEach(walkDeep);
 
   return out;
