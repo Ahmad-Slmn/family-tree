@@ -10,6 +10,19 @@
   flex-wrap:wrap;
 }
 
+.timeline-title-block{
+  display:flex;
+  flex-direction:column;
+  gap:.15rem;
+}
+
+.timeline-helper-text{
+  margin:0;
+  font-size:.8rem;
+  color:var(--text-muted);
+  max-width:32rem;
+}
+
 /* أدوات رأس الخط الزمني */
 .timeline-tools{
   display:flex;
@@ -23,6 +36,7 @@
   display:flex;
   align-items:center;
   gap:.4rem;
+  flex-wrap: wrap
 }
 
 .timeline-type-filter,
@@ -53,6 +67,7 @@
     color .18s ease,
     box-shadow .18s ease,
     transform .12s ease;
+  width: 100%
   
 }
 .timeline-view-btn:is(:hover,:focus-visible){
@@ -119,6 +134,38 @@
 .event-card--preview .event-edit{display:none}
 .event-card--edit .event-preview{display:none}
 
+.event-card-top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:.5rem;
+  margin-bottom:.35rem;
+}
+
+.timeline-jump-btn{
+  border:0;
+  background:color-mix(in oklab,var(--panel-bg) 95%,#fff);
+  border-radius:999px;
+  padding:.15rem .6rem;
+  font-size:.74rem;
+  cursor:pointer;
+  color:var(--arrow-color);
+  display:inline-flex;
+  align-items:center;
+  gap:.25rem;
+  transition:
+    background-color .16s ease,
+    box-shadow .16s ease,
+    transform .12s ease;
+}
+.timeline-jump-btn:hover,
+.timeline-jump-btn:focus-visible{
+  background:color-mix(in oklab,var(--accent-soft) 20%,#fff);
+  transform:translateY(-1px);
+  box-shadow:0 .08rem .24rem rgba(0,0,0,.1);
+  outline:none;
+}
+
 /* === بادجات أنواع أحداث الخط الزمني === */
 .timeline-badge--type[data-type="birth"]::before{content:"🎉"}
 .timeline-badge--type[data-type="marriage"]::before{content:"💍"}
@@ -174,6 +221,72 @@
 }
 .event-description-input{min-height:3.5rem}
 
+/* صف الحقول الإضافية: الوسوم + المصدر + درجة اليقين */
+.event-extra-row{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.6rem;
+  margin-top:.45rem;
+}
+
+/* نفس توزيع الحقول الأخرى (type/date/place): كل حقل يتمدّد بشكل متساوٍ */
+.event-extra-row .event-meta-field{
+  flex:1 1 0;
+  min-width:14rem;
+}
+
+/* مدخل الوسوم + المصدر + قائمة اليقين بنفس ستايل حقول المكان */
+.event-tags-input,
+.event-source-input,
+.event-certainty-select{
+  width:100%;
+  padding:.35rem .7rem;
+  border-radius:.6rem;
+  border:1px solid var(--surface-border);
+  background:var(--panel-bg);
+  font-size:.85rem;
+  color:var(--text-main);
+  outline:none!important;
+  transition:border-color .16s,box-shadow .16s,background-color .16s;
+}
+
+.event-tags-input::placeholder,
+.event-source-input::placeholder{
+  color:var(--text-muted);
+}
+
+.event-tags-input:hover,
+.event-source-input:hover,
+.event-certainty-select:hover{
+  border-color:color-mix(in oklab,var(--modal-primary)40%,var(--surface-border));
+  background:color-mix(in oklab,var(--panel-bg)94%,#fff);
+}
+
+.event-tags-input:focus-visible,
+.event-source-input:focus-visible,
+.event-certainty-select:focus-visible{
+  border-color:var(--modal-primary);
+  box-shadow:0 0 0 .09rem color-mix(in oklab,var(--modal-primary)40%,transparent);
+  background:var(--card-bg);
+}
+
+/* جعل قائمة اليقين بارتفاع مريح مثل الحقول النصية */
+.event-certainty-select{
+  -webkit-appearance:none;
+  -moz-appearance:none;
+  appearance:none;
+  padding-inline-start:1.8rem;
+  background-image:
+    linear-gradient(45deg,transparent 50%,var(--text-muted) 50%),
+    linear-gradient(135deg,var(--text-muted) 50%,transparent 50%);
+  background-position:
+    calc(100% - .9rem) 50%,
+    calc(100% - .6rem) 50%;
+  background-size:.4rem .4rem,.4rem .4rem;
+  background-repeat:no-repeat;
+}
+
+
 /* === الخط الزمني العمودي === */
 .events-timeline{margin-top:.6rem;position:relative}
 .timeline-list{list-style:none;margin:0;padding:0}
@@ -181,7 +294,7 @@
   border-inline-start:2px solid color-mix(in oklab,var(--accent-soft)70%,#000);
   padding-inline-start:1.5rem
 }
-.timeline-item{position:relative;padding:.5rem 0 .6rem}
+.timeline-item{position:relative;padding:.5rem 0 .6rem; cursor: pointer}
 .timeline-marker{
   position:absolute;inset-inline-start:-1.1rem;top:.7rem;
   width:1.3rem;height:1.3rem;border-radius:999px;
@@ -189,6 +302,44 @@
   font-size:.8rem;background:var(--card-bg);
   box-shadow:0 .15rem .4rem rgba(0,0,0,.12)
 }
+
+/* تمييز خفيف حسب نوع الحدث */
+.timeline-item[data-type="birth"] .timeline-marker{
+  border:2px solid color-mix(in oklab,var(--accent-soft) 75%,transparent);
+}
+
+.timeline-item[data-type="marriage"] .timeline-marker{
+  border:2px solid color-mix(in oklab,var(--modal-primary) 70%,transparent);
+}
+
+.timeline-item[data-type="death"] .timeline-marker{
+  border:2px solid color-mix(in oklab,#b3261e 70%,transparent);
+}
+
+.timeline-item[data-type="job"] .timeline-marker{
+  border:2px solid color-mix(in oklab,#0b7285 70%,transparent);
+}
+
+.timeline-item[data-type="move"] .timeline-marker{
+  border:2px solid color-mix(in oklab,#5f3dc4 70%,transparent);
+}
+
+.timeline-item[data-type="hajj"] .timeline-marker{
+  border:2px solid color-mix(in oklab,#047857 70%,transparent);
+}
+
+.timeline-item[data-type="child"] .timeline-marker{
+  border:2px solid color-mix(in oklab,#dc2626 70%,transparent);
+}
+
+/* تلوين خفيف لعنوان الحدث أيضًا */
+.timeline-item[data-type="death"] .timeline-title{
+  color:color-mix(in oklab,#b3261e 80%,var(--title-color));
+}
+.timeline-item[data-type="birth"] .timeline-title{
+  color:color-mix(in oklab,var(--accent-soft) 80%,var(--title-color));
+}
+
 
 /* فاصل السنوات في الخط الزمني */
 .timeline-year-separator{
@@ -258,6 +409,54 @@
   top:.18rem;background:rgba(0,0,0,.7);color:#fff
 }
 
+.event-extra-meta{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.35rem;
+  margin:.25rem 0 0;
+  font-size:.78rem;
+  color:var(--text-muted);
+}
+
+.timeline-badge--tag{
+  display:inline-flex;
+  align-items:center;
+  padding:.08rem .5rem;
+  border-radius:999px;
+  border:1px solid color-mix(in oklab,var(--surface-border) 70%,transparent);
+  background:color-mix(in oklab,var(--panel-bg) 96%,#fff);
+  font-size:.75rem;
+}
+
+.timeline-certainty-chip,
+.timeline-source-chip{
+  display:inline-flex;
+  align-items:center;
+  padding:.08rem .45rem;
+  border-radius:.5rem;
+  font-size:.75rem;
+  background:color-mix(in oklab,var(--panel-bg) 96%,#fff);
+  border:1px dashed color-mix(in oklab,var(--surface-border) 70%,transparent);
+}
+
+.timeline-tags-line{
+  margin-top:.2rem;
+  display:flex;
+  flex-wrap:wrap;
+  gap:.25rem;
+  font-size:.75rem;
+}
+
+.timeline-meta-extra{
+  margin-top:.15rem;
+  display:flex;
+  flex-wrap:wrap;
+  gap:.3rem;
+  font-size:.75rem;
+  color:var(--text-muted);
+}
+
+
 /* === الاستجابة (Responsive) === */
 /* 1) ≤23.9rem */
 @media(max-width:23.9rem){
@@ -271,6 +470,8 @@
   .event-date-input{width:100%}
   .timeline-vertical{padding-inline-start:1.1rem}
   .timeline-marker{inset-inline-start:-.9rem}
+  .event-extra-row{flex-direction:column;gap:.4rem;}
+  .event-extra-row .event-meta-field{min-width:100%;}
 }
 
 /* 2) 24–29.9rem */
@@ -285,6 +486,8 @@
   .event-head{gap:.45rem}
   .timeline-vertical{padding-inline-start:1.25rem}
   .timeline-marker{inset-inline-start:-1rem}
+  .event-extra-row{flex-direction:column;gap:.45rem;}
+  .event-extra-row .event-meta-field{min-width:100%;}
 }
 
 /* 3) 30–39.9rem */

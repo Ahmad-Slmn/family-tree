@@ -57,6 +57,26 @@ function normalizeEvent(raw){
     : [];
   const pinned = !!r.pinned;
 
+  // NEW: الوسوم (tags) كسلسلة أو مصفوفة
+  let tagsArr = [];
+  if (Array.isArray(r.tags)){
+    tagsArr = r.tags;
+  } else if (typeof r.tags === 'string'){
+    tagsArr = r.tags.split(',');
+  }
+  const tags = tagsArr
+    .map(String)
+    .map(t => t.trim())
+    .filter(Boolean);
+
+  // NEW: المرجع/المصدر
+  const source = String(r.source || '').trim();
+
+  // NEW: درجة اليقين
+  let certainty = String(r.certainty || '').trim();
+  const allowedCert = ['certain','probable','approx'];
+  if (!allowedCert.includes(certainty)) certainty = '';
+
   return {
     id,
     type,
@@ -66,10 +86,14 @@ function normalizeEvent(raw){
     description,
     media,
     pinned,
+    tags,
+    source,
+    certainty,
     createdAt: r.createdAt || nowIso,
     updatedAt: r.updatedAt || nowIso
   };
 }
+
 
 // طول وصف الحدث (نفس فكرة القصص لكن بنصوص "تفاصيل")
 function getEventLengthInfo(len){
@@ -214,6 +238,16 @@ function computeApproxAgeAtEvent(birthDate, eventDate){
   return age;
 }
 
+function getCertaintyLabel(code){
+  switch (code){
+    case 'certain':  return 'مؤكد';
+    case 'probable': return 'مرجَّح';
+    case 'approx':   return 'تقريبي';
+    default:         return '';
+  }
+}
+
+
 // ====================== واجهة القسم ======================
 export function createEventsSection(person, handlers = {}){
   if (!person || typeof person !== 'object') return null;
@@ -225,11 +259,20 @@ export function createEventsSection(person, handlers = {}){
   let currentSortMode   = 'oldest'; // الأقدم أولاً (زمنيًا) افتراضياً
   let lastEditedEventId = null;     // آخر حدث في وضع التعديل (مسودة)
 
-  const root   = el('section', 'bio-section bio-section-timeline');
-  const header = el('div', 'timeline-header');
-  const title  = textEl('h3', 'الخطّ الزمني للأحداث');
+const root   = el('section', 'bio-section bio-section-timeline');
+const header = el('div', 'timeline-header');
 
-  const tools     = el('div', 'timeline-tools');
+const titleBlock = el('div', 'timeline-title-block');
+const title  = textEl('h3', 'الخطّ الزمني للأحداث');
+const helper = textEl(
+  'p',
+  'سجّل أهمّ محطات حياة الشخص (ميلاد، زواج، عمل، انتقال …)، ثم استعرضها كقائمة أو كخط زمني مرتب حسب السنوات.',
+  'timeline-helper-text'
+);
+titleBlock.append(title, helper);
+
+const tools     = el('div', 'timeline-tools');
+
   const toolsLeft = el('div', 'timeline-tools-left');
   const toolsRight= el('div', 'timeline-tools-right');
 
@@ -267,7 +310,8 @@ export function createEventsSection(person, handlers = {}){
   toolsRight.append(viewToggle, addBtn);
   tools.append(toolsLeft, toolsRight);
 
-  header.append(title, tools);
+  header.append(titleBlock, tools);
+
 
 
   const listWrap     = el('div', 'events-list');
@@ -295,15 +339,19 @@ export function createEventsSection(person, handlers = {}){
   function createEventCard(ev, index){
     const personId = person && person._id ? String(person._id) : null;
 
-    const original = {
-      type: ev.type || 'custom',
-      date: ev.date || '',
-      title: ev.title || '',
-      place: ev.place || '',
-      description: ev.description || '',
-      media: Array.isArray(ev.media) ? ev.media.slice() : [],
-      pinned: !!ev.pinned
-    };
+const original = {
+  type: ev.type || 'custom',
+  date: ev.date || '',
+  title: ev.title || '',
+  place: ev.place || '',
+  description: ev.description || '',
+  media: Array.isArray(ev.media) ? ev.media.slice() : [],
+  pinned: !!ev.pinned,
+  tags: Array.isArray(ev.tags) ? ev.tags.slice() : [],
+  source: ev.source || '',
+  certainty: ev.certainty || ''
+};
+
 
     let currentMedia = Array.isArray(ev.media) ? ev.media.slice() : [];
     let isEditing =
@@ -335,6 +383,31 @@ export function createEventsSection(person, handlers = {}){
       pinnedBadge.textContent = 'حدث مميّز';
       topRow.appendChild(pinnedBadge);
     }
+    
+    // NEW: زر للانتقال لعرض الخط الزمني لهذا الحدث
+const jumpBtn = textEl('button', 'عرض على الخط الزمني', 'timeline-jump-btn');
+jumpBtn.type = 'button';
+jumpBtn.title = 'الانتقال إلى هذا الحدث في عرض الخط الزمني';
+
+jumpBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  root.dataset.view = 'timeline';
+  visBtn.classList.add('is-active');
+  listBtn.classList.remove('is-active');
+  renderTimelineView();
+
+  const item = timelineWrap.querySelector(`.timeline-item[data-event-id="${ev.id}"]`);
+  if (item){
+    try {
+      item.scrollIntoView({ block:'nearest', behavior:'smooth' });
+    } catch(e){
+      item.scrollIntoView(true);
+    }
+  }
+});
+
+topRow.appendChild(jumpBtn);
+
 
     card.appendChild(topRow);
 
@@ -410,6 +483,29 @@ if (meta.label){
   badgesWrap.appendChild(typeBadge);
 }
 
+// NEW: وسوم + مصدر + درجة يقين (معاينة)
+const extraMetaPreview = el('div', 'event-extra-meta');
+
+if (Array.isArray(ev.tags) && ev.tags.length){
+  ev.tags.forEach(tag => {
+    const tagBadge = el('span', 'timeline-badge timeline-badge--tag');
+    tagBadge.textContent = tag;
+    extraMetaPreview.appendChild(tagBadge);
+  });
+}
+
+const certLabel = getCertaintyLabel(ev.certainty);
+if (certLabel){
+  const cChip = el('span', 'timeline-certainty-chip');
+  cChip.textContent = `درجة اليقين: ${certLabel}`;
+  extraMetaPreview.appendChild(cChip);
+}
+
+if (ev.source){
+  const sChip = el('span', 'timeline-source-chip');
+  sChip.textContent = `المصدر: ${ev.source}`;
+  extraMetaPreview.appendChild(sChip);
+}
 
 
     const previewTitle = textEl(
@@ -480,10 +576,14 @@ if (meta.label){
     renderPreviewImages();
 
         // تجميع عناصر المعاينة بالترتيب: ميتا الإضافة، تاريخ الحدث، العمر، البادجات، ثم العنوان والتفاصيل والصور
-    const previewChildren = [previewMeta];
-    if (eventDateLine) previewChildren.push(eventDateLine);
-    if (ageLine) previewChildren.push(ageLine);
-    previewChildren.push(badgesWrap, previewTitle, previewDesc, previewImagesWrap, sliderBtn);
+const previewChildren = [previewMeta];
+if (eventDateLine) previewChildren.push(eventDateLine);
+if (ageLine) previewChildren.push(ageLine);
+previewChildren.push(badgesWrap);
+if (extraMetaPreview.childNodes.length){
+  previewChildren.push(extraMetaPreview);
+}
+previewChildren.push(previewTitle, previewDesc, previewImagesWrap, sliderBtn);
 
     previewBox.append(...previewChildren);
 
@@ -708,7 +808,61 @@ function setupMediaSortable() {
     const pinText = textEl('span', 'تعيين هذا الحدث كمميّز');
     pinWrap.append(pinCheckbox, pinText);
 
-    body.append(metaRow, desc, mediaWrap, pinWrap);
+    // NEW: صف إضافي للوسوم + المصدر + درجة اليقين
+const extraRow = el('div', 'event-extra-row timeline-extra-row');
+
+// حقول الوسوم
+const tagsField = el('div', 'event-meta-field timeline-meta-field');
+const tagsLabelBox = el('div', 'event-meta-label timeline-meta-label');
+tagsLabelBox.innerHTML = '<span class="event-meta-icon timeline-meta-icon">🏷️</span> وسوم الحدث';
+const tagsInput = document.createElement('input');
+tagsInput.type = 'text';
+tagsInput.className = 'event-tags-input';
+tagsInput.name = `event_tags_${ev.id}`;
+tagsInput.placeholder = 'مثال: الهجرة، السفر، العمل (مفصولة بفواصل)';
+tagsInput.value = (Array.isArray(ev.tags) ? ev.tags.join(', ') : '');
+tagsField.append(tagsLabelBox, tagsInput);
+
+// حقل المرجع/المصدر
+const sourceField = el('div', 'event-meta-field timeline-meta-field');
+const sourceLabelBox = el('div', 'event-meta-label timeline-meta-label');
+sourceLabelBox.innerHTML = '<span class="event-meta-icon timeline-meta-icon">📚</span> المرجع / المصدر';
+const sourceInput = document.createElement('input');
+sourceInput.type = 'text';
+sourceInput.className = 'event-source-input';
+sourceInput.name = `event_source_${ev.id}`;
+sourceInput.placeholder = 'مثال: رُوي عن فلان، أو موثّق من بطاقة هوية...';
+sourceInput.value = ev.source || '';
+sourceField.append(sourceLabelBox, sourceInput);
+
+// حقل درجة اليقين
+const certaintyField = el('div', 'event-meta-field timeline-meta-field');
+const certaintyLabelBox = el('div', 'event-meta-label timeline-meta-label');
+certaintyLabelBox.innerHTML = '<span class="event-meta-icon timeline-meta-icon">✨</span> درجة اليقين';
+const certaintySelect = document.createElement('select');
+certaintySelect.className = 'event-certainty-select';
+certaintySelect.name = `event_certainty_${ev.id}`;
+
+[
+  { value:'',          label:'غير محددة' },
+  { value:'certain',   label:'مؤكد' },
+  { value:'probable',  label:'مرجَّح' },
+  { value:'approx',    label:'تقريبي' }
+].forEach(optDef => {
+  const opt = document.createElement('option');
+  opt.value = optDef.value;
+  opt.textContent = optDef.label;
+  if (optDef.value === (ev.certainty || '')) opt.selected = true;
+  certaintySelect.appendChild(opt);
+});
+
+certaintyField.append(certaintyLabelBox, certaintySelect);
+
+// تجميع الصف الإضافي
+extraRow.append(tagsField, sourceField, certaintyField);
+
+body.append(metaRow, desc, extraRow, mediaWrap, pinWrap);
+
     editBox.appendChild(body);
     card.appendChild(editBox);
 
@@ -724,25 +878,31 @@ function setupMediaSortable() {
     footer.append(saveBtn, cancelBtn, delBtn);
     card.appendChild(footer);
 
-    function fillEditFromEvent() {
-      select.value = ev.type || 'custom';
-      if (!Array.from(select.options).some(o => o.value === select.value)) {
-        select.value = 'custom';
-      }
+function fillEditFromEvent() {
+  select.value = ev.type || 'custom';
+  if (!Array.from(select.options).some(o => o.value === select.value)) {
+    select.value = 'custom';
+  }
 
-      dateInput.value =
-        ev.date && /^\d{4}-\d{2}-\d{2}$/.test(ev.date) ? ev.date : '';
+  dateInput.value =
+    ev.date && /^\d{4}-\d{2}-\d{2}$/.test(ev.date) ? ev.date : '';
 
-      titleInput.value = ev.title || '';
-      placeInput.value = ev.place || '';
-      desc.value = ev.description || '';
+  titleInput.value = ev.title || '';
+  placeInput.value = ev.place || '';
+  desc.value = ev.description || '';
 
-      pinCheckbox.checked = !!ev.pinned;
+  // NEW: الحقول الإضافية
+  tagsInput.value = Array.isArray(ev.tags) ? ev.tags.join(', ') : '';
+  sourceInput.value = ev.source || '';
+  certaintySelect.value = ev.certainty || '';
 
-      currentMedia = Array.isArray(ev.media) ? ev.media.slice() : [];
-      renderThumbs();
-      recomputeDirty();
-    }
+  pinCheckbox.checked = !!ev.pinned;
+
+  currentMedia = Array.isArray(ev.media) ? ev.media.slice() : [];
+  renderThumbs();
+  recomputeDirty();
+}
+
 
     function applyMode() {
       card.classList.toggle('event-card--edit', isEditing);
@@ -761,26 +921,37 @@ function setupMediaSortable() {
       cancelBtn.style.display = isEditing && isDirty ? '' : 'none';
     }
 
-    function recomputeDirty() {
-      const curType  = (select.value || 'custom').trim();
-      const curDate  = String(dateInput.value || '').trim();
-      const curTitle = titleInput.value.trim();
-      const curPlace = placeInput.value.trim();
-      const curDesc  = desc.value.trim();
-      const curPinned= !!pinCheckbox.checked;
+function recomputeDirty() {
+  const curType   = (select.value || 'custom').trim();
+  const curDate   = String(dateInput.value || '').trim();
+  const curTitle  = titleInput.value.trim();
+  const curPlace  = placeInput.value.trim();
+  const curDesc   = desc.value.trim();
+  const curPinned = !!pinCheckbox.checked;
 
-      isDirty =
-        curType  !== original.type ||
-        curDate  !== (original.date || '') ||
-        curTitle !== original.title ||
-        curPlace !== original.place ||
-        curDesc  !== original.description ||
-        curPinned !== original.pinned ||
-        !arraysShallowEqual(currentMedia, original.media);
+  const curTags = (tagsInput.value || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
 
+  const curSource = sourceInput.value.trim();
+  const curCertainty = (certaintySelect.value || '').trim();
 
-      applyMode();
-    }
+  isDirty =
+    curType   !== original.type ||
+    curDate   !== (original.date || '') ||
+    curTitle  !== original.title ||
+    curPlace  !== original.place ||
+    curDesc   !== original.description ||
+    curPinned !== original.pinned ||
+    !arraysShallowEqual(currentMedia, original.media) ||
+    !arraysShallowEqual(curTags, original.tags || []) ||
+    curSource !== (original.source || '') ||
+    curCertainty !== (original.certainty || '');
+
+  applyMode();
+}
+
 
     applyMode();
     renderThumbs();
@@ -792,6 +963,9 @@ function setupMediaSortable() {
     placeInput.addEventListener('input', recomputeDirty);
     desc.addEventListener('input', recomputeDirty);
     pinCheckbox.addEventListener('change', recomputeDirty);
+tagsInput.addEventListener('input', recomputeDirty);
+sourceInput.addEventListener('input', recomputeDirty);
+certaintySelect.addEventListener('change', recomputeDirty);
 
     // أحداث الأزرار
     saveBtn.addEventListener('click', async () => {
@@ -810,6 +984,11 @@ function setupMediaSortable() {
         return;
       }
 
+      const curTags = (tagsInput.value || '')
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean);
+
       const patch = {
         type: (select.value || 'custom').trim(),
         date: String(dateInput.value || '').trim(),
@@ -817,8 +996,12 @@ function setupMediaSortable() {
         place: placeInput.value.trim(),
         description: desc.value.trim(),
         media: currentMedia.slice(),
-        pinned: !!pinCheckbox.checked
+        pinned: !!pinCheckbox.checked,
+        tags: curTags,
+        source: sourceInput.value.trim(),
+        certainty: (certaintySelect.value || '').trim()
       };
+
 
       // 1) تحديث كائن الحدث في البيانات
       updateEvent(ev, patch);
@@ -854,6 +1037,7 @@ function setupMediaSortable() {
     cancelBtn.addEventListener('click', () => {
       if (!isEditing) return;
 
+      // الحقول الأساسية
       select.value = original.type || 'custom';
       if (!Array.from(select.options).some(o => o.value === select.value)) {
         select.value = 'custom';
@@ -864,6 +1048,12 @@ function setupMediaSortable() {
       desc.value = original.description;
       pinCheckbox.checked = original.pinned;
 
+      // NEW: إعادة حقول الوسوم + المصدر + درجة اليقين لحالتها المحفوظة
+      tagsInput.value = (original.tags || []).join(', ');
+      sourceInput.value = original.source || '';
+      certaintySelect.value = original.certainty || '';
+
+      // الصور
       currentMedia = original.media.slice();
       renderThumbs();
 
@@ -873,6 +1063,7 @@ function setupMediaSortable() {
 
       showInfo?.('تم تجاهل التعديلات والرجوع لآخر نسخة محفوظة من الحدث.');
     });
+
 
     delBtn.addEventListener('click', async () => {
       const ok = await showConfirmModal?.(
@@ -962,6 +1153,7 @@ function setupMediaSortable() {
 
     return events;
   }
+  
 
   function renderList(){
     listWrap.innerHTML = '';
@@ -971,7 +1163,8 @@ function setupMediaSortable() {
     if (!events.length){
       const empty = el('div', 'events-empty');
       empty.textContent = allEvents.length ? 'لا توجد أحداث مطابقة لخيارات التصفية الحالية.'
-        : 'لا توجد أحداث مسجّلة بعد. استخدم زر "إضافة حدث جديد" لبدء توثيق حياة هذا الشخص.';
+        : 'لا توجد أحداث مسجّلة بعد. ابدأ بإضافة أول حدث (مثل: تاريخ الميلاد) ثم أضف بقية المحطات المهمة.';
+
       listWrap.appendChild(empty);
       return;
     }
@@ -987,7 +1180,8 @@ function setupMediaSortable() {
     const events = getFilteredSortedEvents();
     if (!events.length){
       const empty = el('div', 'timeline-empty');
-      empty.textContent = 'لا توجد أحداث لعرضها على الخط الزمني.';
+      empty.textContent = 'لا توجد أحداث لعرضها على الخط الزمني بعد. ابدأ من تبويب القائمة بإضافة أول حدث.';
+
       timelineWrap.appendChild(empty);
       return;
     }
@@ -1013,10 +1207,13 @@ function setupMediaSortable() {
         lastYear = year;
       }
 
-      const item = el('li', 'timeline-item');
-      if (ev.pinned){
-        item.classList.add('is-pinned');
-      }
+  const item = el('li', 'timeline-item');
+item.dataset.eventId = ev.id;
+item.dataset.type = ev.type || 'custom';
+
+if (ev.pinned){
+  item.classList.add('is-pinned');
+}
 
       const marker = el('div', 'timeline-marker');
       marker.textContent = meta.icon;
@@ -1064,10 +1261,17 @@ function setupMediaSortable() {
         const place = textEl('div', `المكان: ${ev.place}`, 'timeline-place');
         content.appendChild(place);
       }
-      if (ev.description){
-        const desc = textEl('p', ev.description, 'timeline-description');
-        content.appendChild(desc);
-      }
+  if (ev.description){
+  const maxLen = 200;
+  let text = ev.description;
+  let hint = '';
+  if (text.length > maxLen){
+    text = text.slice(0, maxLen).trim();
+    hint = '… (التفاصيل الكاملة من عرض القائمة).';
+  }
+  const desc = textEl('p', text + hint, 'timeline-description');
+  content.appendChild(desc);
+}
 
       // ثَمبنيل صور مصغّرة بدل الروابط النصية
       if (ev.media && ev.media.length){
@@ -1093,9 +1297,67 @@ function setupMediaSortable() {
 
         content.appendChild(mWrap);
       }
+      
+            // NEW: وسوم الحدث
+      if (Array.isArray(ev.tags) && ev.tags.length){
+        const tagsLine = el('div', 'timeline-tags-line');
+        ev.tags.forEach(tag => {
+          const tagBadge = el('span', 'timeline-badge timeline-badge--tag');
+          tagBadge.textContent = tag;
+          tagsLine.appendChild(tagBadge);
+        });
+        content.appendChild(tagsLine);
+      }
 
-      item.append(marker, content);
+      // NEW: مصدر + درجة يقين
+      const certLabel2 = getCertaintyLabel(ev.certainty);
+      if (certLabel2 || ev.source){
+        const metaExtra = el('div', 'timeline-meta-extra');
+        if (certLabel2){
+          const cChip = el('span', 'timeline-certainty-chip');
+          cChip.textContent = `درجة اليقين: ${certLabel2}`;
+          metaExtra.appendChild(cChip);
+        }
+        if (ev.source){
+          const sChip = el('span', 'timeline-source-chip');
+          sChip.textContent = `المصدر: ${ev.source}`;
+          metaExtra.appendChild(sChip);
+        }
+        content.appendChild(metaExtra);
+      }
+
+
+        item.append(marker, content);
+
+      // NEW: عند الضغط على عنصر الخط الزمني → افتح نفس الحدث في وضع القائمة مع تمرير
+      item.addEventListener('click', () => {
+        // الانتقال إلى وضع القائمة
+        root.dataset.view = 'list';
+        listBtn.classList.add('is-active');
+        visBtn.classList.remove('is-active');
+
+        // جعل هذا الحدث هو الأخير في وضع التعديل
+        lastEditedEventId = ev.id;
+        renderAll();
+
+        const card = listWrap.querySelector(`.event-card[data-event-id="${ev.id}"]`);
+        if (card){
+          try {
+            card.scrollIntoView({ block:'nearest', behavior:'smooth' });
+          } catch(e){
+            card.scrollIntoView(true);
+          }
+          const focusTarget =
+            card.querySelector('.event-title-input') ||
+            card.querySelector('.event-description-input');
+          if (focusTarget && typeof focusTarget.focus === 'function'){
+            focusTarget.focus();
+          }
+        }
+      });
+
       list.appendChild(item);
+
     });
 
     timelineWrap.appendChild(list);
