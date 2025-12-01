@@ -206,6 +206,20 @@ async function openImageSlider(refs, startIndex = 0) {
   storyImageViewer.open(urls, startIndex);
 }
 
+function autoResizeStoryTextareas(root){
+  const areas = root.querySelectorAll('.story-textarea, .story-note-input');
+  areas.forEach(ta => {
+    const resize = () => {
+      ta.style.height = 'auto';
+      ta.style.height = ta.scrollHeight + 'px';
+    };
+    resize();
+    ta.removeEventListener('input', ta._autoResizeHandler || (()=>{}));
+    ta._autoResizeHandler = resize;
+    ta.addEventListener('input', resize);
+  });
+}
+
 
 // ====================== بناء القسم ======================
 
@@ -243,9 +257,16 @@ export function createStoriesSection(person, handlers = {}) {
     (handlers.getSortMode && handlers.getSortMode()) || 'latest';
   sortStories(person, sortMode);
 
-  const root = el('section', 'bio-section bio-section-stories');
-  const titleEl = textEl('h3', 'القصص والمذكّرات');
-  root.appendChild(titleEl);
+const root = el('section', 'bio-section bio-section-stories');
+const titleEl = textEl('h3', 'القصص والمذكّرات');
+const countBadge = el('span', 'stories-count-badge');
+titleEl.append(' ', countBadge);
+root.appendChild(titleEl);
+
+function updateStoriesCountBadge(){
+  const n = (person.stories || []).length;
+  countBadge.textContent = n ? `(${n})` : '(لا توجد قصص بعد)';
+}
 
   const header = el('div', 'stories-header');
   const tools = el('div', 'stories-tools');
@@ -282,10 +303,10 @@ export function createStoriesSection(person, handlers = {}) {
   header.appendChild(tools);
   root.appendChild(header);
 
-  const metaEl = el('div', 'stories-meta');
-  metaEl.textContent =
-    'يمكنك إرفاق صور بكل قصة، مع حفظ القصة ثم عرضها في وضع المعاينة.';
-  root.appendChild(metaEl);
+const metaEl = el('div', 'stories-meta');
+metaEl.textContent =
+  'دوّن المواقف والذكريات المهمّة في حياة هذا الشخص (مواقف طريفة، أخبار العمل، الانتقال، مواقف مؤثّرة...)، ثم اعرضها كنصوص منظّمة مع صور مرفقة.';
+root.appendChild(metaEl);
 
   const list = el('div', 'stories-list');
   root.appendChild(list);
@@ -360,10 +381,11 @@ export function createStoriesSection(person, handlers = {}) {
   }
 
   function renderList() {
-    list.innerHTML = '';
-    ensureStories(person);
-    updateAddButtonLabel();
-    rebuildStoryTypeFilterOptions(); // إعادة بناء خيارات الفلتر حسب الأنواع الحالية
+ list.innerHTML = '';
+ensureStories(person);
+updateStoriesCountBadge();
+updateAddButtonLabel();
+rebuildStoryTypeFilterOptions(); // إعادة بناء خيارات الفلتر حسب الأنواع الحالية
 
     const filteredStories = person.stories.filter(story => {
       const typeOk =
@@ -378,8 +400,9 @@ export function createStoriesSection(person, handlers = {}) {
 
     if (!filteredStories.length) {
       const empty = el('div', 'stories-empty');
-      empty.textContent = person.stories.length ? 'لا توجد قصص مطابقة لخيارات التصفية الحالية.'
-        : 'لا توجد قصص مضافة بعد. يمكنك البدء بإضافة أول قصة.';
+   empty.textContent = person.stories.length ? 'لا توجد قصص مطابقة لخيارات التصفية الحالية.'
+  : 'ابدأ بإضافة أول قصة (مثلاً: موقف جميل، أو وصف مختصر لصفات هذا الشخص)، ثم أضف بقية المواقف المهمة.';
+
       list.appendChild(empty);
       return;
     }
@@ -397,6 +420,9 @@ export function createStoriesSection(person, handlers = {}) {
       pinnedBadge = el('div', 'story-pinned-badge');
       pinnedBadge.textContent = 'قصة مميّزة';
     }
+if (story.pinned) {
+  card.classList.add('story-card--pinned');
+}
 
     const topRow = el('div', 'story-card-top');
     topRow.appendChild(indexBadge);
@@ -455,11 +481,18 @@ export function createStoriesSection(person, handlers = {}) {
         placeBadge.textContent = original.place;
         badgesWrap.appendChild(placeBadge);
       }
-         if (eventDateLabel) {
-        const yearBadge = el('span', 'story-badge story-badge--year');
-        yearBadge.textContent = eventDateLabel;
-        badgesWrap.appendChild(yearBadge);
-      }
+   const isDated = !!eventDateLabel;
+if (eventDateLabel) {
+  const yearBadge = el('span', 'story-badge story-badge--year');
+  yearBadge.textContent = eventDateLabel;
+  badgesWrap.appendChild(yearBadge);
+}
+if (!isDated){
+  const undatedBadge = el('span', 'story-badge story-badge--undated');
+  undatedBadge.textContent = 'بدون تاريخ محدّد';
+  badgesWrap.appendChild(undatedBadge);
+}
+
 
       let typeBadge = null;
       const typeLabel = getTypeLabel(original.type);
@@ -471,14 +504,14 @@ export function createStoriesSection(person, handlers = {}) {
         badgesWrap.appendChild(typeBadge);
       }
 
+const previewTitle = el('div', 'story-preview-title');
+previewTitle.textContent = original.title || 'قصة بدون عنوان';
 
-      const previewTitle = el('div', 'story-preview-title');
-      previewTitle.textContent = original.title || 'قصة بدون عنوان';
+const previewText = el('p', 'story-preview-text');
+previewText.textContent =
+  original.text ||
+  'لم تتم إضافة نص لهذه القصة حتى الآن. يمكنك فتح وضع التحرير لكتابته.';
 
-      const previewText = el('p', 'story-preview-text');
-      previewText.textContent =
-        original.text ||
-        'لم تتم إضافة نص لهذه القصة حتى الآن. يمكنك فتح وضع التحرير لكتابته.';
 
       const tagsWrap = el('div', 'story-tags-list');
       if (original.tags && original.tags.length) {
@@ -553,6 +586,7 @@ export function createStoriesSection(person, handlers = {}) {
     thumb.append(imgEl, viewBtn);
     previewImagesWrap.appendChild(thumb);
   });
+
 }
 
 
@@ -975,10 +1009,10 @@ function setupImagesSortable() {
           lengthLabel.append(meter2, txtSpan2);
         }
 
-        // تحديث نص المعاينة
-        previewText.textContent =
-          trimmedText ||
-          'لم تتم إضافة نص لهذه القصة حتى الآن. يمكنك فتح وضع التحرير لكتابته.';
+// تحديث نص المعاينة
+previewText.textContent =
+  trimmedText ||
+  'لم تتم إضافة نص لهذه القصة حتى الآن. يمكنك فتح وضع التحرير لكتابته.';
 
         // تحديث تاريخ الإضافة في الرأس والمعاينة
         if (effective.createdAt) {
@@ -1076,6 +1110,8 @@ function setupImagesSortable() {
 
       list.appendChild(card);
     });
+    autoResizeStoryTextareas(list);
+
   }
 
   addBtn.addEventListener('click', () => {

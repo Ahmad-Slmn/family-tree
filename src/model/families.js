@@ -193,9 +193,12 @@ function _normalizeChild(c){
     // الحفاظ على القصص إن وُجدت
     stories: Array.isArray(c?.stories) ? c.stories : [],
     // الحفاظ على الأحداث إن وُجدت
-    events: Array.isArray(c?.events) ? c.events : []
+    events: Array.isArray(c?.events) ? c.events : [],
+    // NEW: الحفاظ على المصادر/الوثائق إن وُجدت
+    sources: Array.isArray(c?.sources) ? c.sources : []
   };
 }
+
 
 
 function _normalizeWifeRole(role, idx){
@@ -216,7 +219,11 @@ function _normalizeWife(w, idx){
     role: _normalizeWifeRole(w?.role, idx),
     bio: wifeBio,
     // قصص الزوجة
-    stories: Array.isArray(w?.stories) ? w.stories : []
+    stories: Array.isArray(w?.stories) ? w.stories : [],
+    // أحداث الزوجة
+    events: Array.isArray(w?.events) ? w.events : [],
+    // مصادر الزوجة
+    sources: Array.isArray(w?.sources) ? w.sources : []
   };
   ww.children = (w?.children || []).map(_normalizeChild);
   return ww;
@@ -233,7 +240,8 @@ function ensureBio(person) {
 
   person.bio = _withBio(person.bio);
   ensureStoriesArray(person);
-ensureEventsArray(person);
+  ensureEventsArray(person);
+  ensureSourcesArray(person);
   if (Array.isArray(person.children)) {
     person.children = person.children.map(_normalizeChild);
   }
@@ -242,6 +250,7 @@ ensureEventsArray(person);
     person.wives = person.wives.map(_normalizeWife);
   }
 }
+
 
 // ضمان وجود مصفوفة قصص لكل شخص
 function ensureStoriesArray(person) {
@@ -255,6 +264,11 @@ function ensureEventsArray(person) {
   if (!Array.isArray(person.events)) person.events = [];
 }
 
+// ضمان وجود مصفوفة مصادر/وثائق لكل شخص
+function ensureSourcesArray(person) {
+  if (!person || typeof person !== 'object') return;
+  if (!Array.isArray(person.sources)) person.sources = [];
+}
 
 
 // تهيئة Bio للعائلة كاملة
@@ -349,19 +363,23 @@ export function normalizeNewFamilyForLineage(f){
   f.rootPerson.wives = f.wives;
 
   // ---- 2) كل شخص له _id ----
-function visit(p){
-  if (!p) return;
-  if (!p._id) p._id = newId();
-  if (!p.bio) p.bio = {};
-  if (!Array.isArray(p.children)) p.children = [];
-  if (!Array.isArray(p.wives)) p.wives = [];
-  // ضمان مصفوفة القصص
-  if (!Array.isArray(p.stories)) p.stories = [];
-  // ضمان مصفوفة الأحداث الشخصية
-  if (!Array.isArray(p.events)) p.events = [];
-  p.children.forEach(visit);
-  p.wives.forEach(visit);
-}
+  function visit(p){
+    if (!p) return;
+    if (!p._id) p._id = newId();
+    if (!p.bio) p.bio = {};
+    if (!Array.isArray(p.children)) p.children = [];
+    if (!Array.isArray(p.wives)) p.wives = [];
+    // ضمان مصفوفة القصص
+    if (!Array.isArray(p.stories)) p.stories = [];
+    // ضمان مصفوفة الأحداث الشخصية
+    if (!Array.isArray(p.events)) p.events = [];
+    // NEW: ضمان مصفوفة المصادر/الوثائق
+    if (!Array.isArray(p.sources)) p.sources = [];
+
+    p.children.forEach(visit);
+    p.wives.forEach(visit);
+  }
+
 
 
   visit(f.rootPerson);
@@ -1090,6 +1108,8 @@ function _normalizeChildForLoad(c) {
       stories: [],
       // NEW: أحداث فارغة
       events: [],
+      // NEW: مصادر فارغة
+      sources: [],
       children: [],
       wives: []
     };
@@ -1106,12 +1126,15 @@ function _normalizeChildForLoad(c) {
     stories: Array.isArray(c.stories) ? c.stories : [],
     // NEW: الأحداث
     events: Array.isArray(c.events) ? c.events : [],
+    // NEW: المصادر/الوثائق
+    sources: Array.isArray(c.sources) ? c.sources : [],
 
     // NEW: تحميل عميق لما تحت الابن
     children: Array.isArray(c.children) ? c.children.map(_normalizeChildForLoad).filter(Boolean) : [],
     wives: Array.isArray(c.wives) ? c.wives.map(_normalizeWifeForLoad).filter(Boolean) : []
   };
 }
+
 
 function _normalizeWifeForLoad(w, i){
   const idxLabel = ['الأولى','الثانية','الثالثة','الرابعة','الخامسة'][i] || `رقم ${i+1}`;
@@ -1128,6 +1151,8 @@ function _normalizeWifeForLoad(w, i){
     stories: Array.isArray(w?.stories) ? w.stories : [],
     // NEW: أحداث الزوجة
     events: Array.isArray(w?.events) ? w.events : [],
+    // NEW: مصادر الزوجة
+    sources: Array.isArray(w?.sources) ? w.sources : [],
     children: Array.isArray(w?.children) ? w.children.map(_normalizeChildForLoad).filter(Boolean)
       : []
   };
@@ -1244,36 +1269,39 @@ function linkRootPersonWives(targetFam) {
           : JSON.parse(JSON.stringify(DEFAULT_BIO));
 
         var child;
-if (typeof c === 'string') {
-  child = {
-    name: c,
-    role: 'ابن',
-    bio: Object.assign(base, {}),
-    // NEW: قصص فارغة
-    stories: [],
-    // NEW: أحداث فارغة
-    events: [],
-    children: [],
-    wives: []
-  };
-} else {
-  child = {
-    name: c.name || '',
-    role: c.role || 'ابن',
-    bio: Object.assign(base, c.bio || {}),
-    _id: c._id,
-    fatherId: (c.fatherId != null) ? c.fatherId : (c.bio && c.bio.fatherId) || null,
-    motherId: (c.motherId != null) ? c.motherId : (c.bio && c.bio.motherId) || null,
-    // NEW: عدم فقدان القصص
-    stories: Array.isArray(c.stories) ? c.stories : [],
-    // NEW: عدم فقدان الأحداث
-    events: Array.isArray(c.events) ? c.events : [],
-    // NEW: لا تمسح ما تحت الابن
-    children: Array.isArray(c.children) ? c.children : [],
-    wives: Array.isArray(c.wives) ? c.wives : []
-  };
-}
-
+        if (typeof c === 'string') {
+          child = {
+            name: c,
+            role: 'ابن',
+            bio: Object.assign(base, {}),
+            // NEW: قصص فارغة
+            stories: [],
+            // NEW: أحداث فارغة
+            events: [],
+            // NEW: مصادر فارغة
+            sources: [],
+            children: [],
+            wives: []
+          };
+        } else {
+          child = {
+            name: c.name || '',
+            role: c.role || 'ابن',
+            bio: Object.assign(base, c.bio || {}),
+            _id: c._id,
+            fatherId: (c.fatherId != null) ? c.fatherId : (c.bio && c.bio.fatherId) || null,
+            motherId: (c.motherId != null) ? c.motherId : (c.bio && c.bio.motherId) || null,
+            // NEW: عدم فقدان القصص
+            stories: Array.isArray(c.stories) ? c.stories : [],
+            // NEW: عدم فقدان الأحداث
+            events: Array.isArray(c.events) ? c.events : [],
+            // NEW: عدم فقدان المصادر
+            sources: Array.isArray(c.sources) ? c.sources : [],
+            // NEW: لا تمسح ما تحت الابن
+            children: Array.isArray(c.children) ? c.children : [],
+            wives: Array.isArray(c.wives) ? c.wives : []
+          };
+        }
 
         normalizeLifeDatesOnBio(child.bio);
         setChildDefaults(child, fam, ww);

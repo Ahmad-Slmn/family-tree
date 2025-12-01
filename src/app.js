@@ -364,7 +364,9 @@ const handlers = {
   highlight,
   getSearch: () => (getState().search || ''),
   getFilters: () => (getState().filters || {}),
+
   onUpdateStories,           // القصص
+  onUpdateSources,           // NEW: المصادر والوثائق
   onEventsChange: onUpdateEvents // الخط الزمني للأحداث
 };
 
@@ -617,6 +619,38 @@ function onUpdateStories(personId, stories) {
   Model.commitFamily(famKey);
 }
 
+/* حفظ المصادر/الوثائق لشخص معيّن */
+function onUpdateSources(personId, sources) {
+  const famKey = Model.getSelectedKey();
+  const fam = Model.getFamilies()[famKey];
+  if (!fam || !personId) return;
+
+  // ابحث عن الشخص داخل العائلة الحالية
+  const person = findPersonByIdInFamily(fam, personId);
+  if (!person) return;
+
+  // ضمان أن المصادر مصفوفة
+  if (!Array.isArray(sources)) sources = [];
+
+  // نحافظ على كل الحقول القادمة من person.sources.js مع تأكيد id والتواريخ
+  person.sources = sources.map(src => {
+    const now       = new Date().toISOString();
+    const createdAt = src.createdAt || now;
+    const updatedAt = src.updatedAt || createdAt;
+
+    return {
+      id: src.id || (crypto?.randomUUID?.() || ('src_' + Math.random().toString(36).slice(2))),
+      ...src,
+      createdAt,
+      updatedAt
+    };
+  });
+
+  // التزام العائلة وحفظها في IndexedDB
+  Model.commitFamily(famKey);
+}
+
+
 /* حفظ الخط الزمني للأحداث لشخص معيّن */
 function onUpdateEvents(personWithEvents) {
   if (!personWithEvents || !personWithEvents._id) return;
@@ -777,15 +811,16 @@ async function onShowDetails(person, opts = {}) {
 
   // 3) دالة إعادة الرسم حسب الوضع الحالي
   // خريطة تربط mode بأهم section نريد التمرير إليه
-  const MODE_MAIN_SECTION = {
-    summary:  'basic',
-    family:   'family',
-    grands:   'grands',
-    children: 'children',
-    wives:    'wives',
-    stories:  'stories',
-    timeline: 'timeline'   // NEW: قسم الخط الزمني للأحداث
-  };
+const MODE_MAIN_SECTION = {
+  summary:  'basic',
+  family:   'family',
+  grands:   'grands',
+  children: 'children',
+  wives:    'wives',
+  stories:  'stories',
+  timeline: 'timeline',  // قسم الخط الزمني للأحداث
+  sources:  'sources'    // NEW: قسم المصادر والوثائق
+};
 
 
   // دالة تساعد على تمرير modal-content إلى بداية القسم المطلوب

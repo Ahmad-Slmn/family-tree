@@ -194,8 +194,7 @@
   border:.0625rem solid var(--surface-border);
   padding:.5rem .9rem;border-radius:.55rem;font-size:.93rem;
   color:var(--text-main);
-  transition:background .2s,color .2s,transform .16s;
-  margin: 1rem 0
+  transition:background .2s,color .2s,transform .16s
 }
 .bio-section li:hover{
   background:var(--ctl-hover-bg);

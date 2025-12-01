@@ -1331,30 +1331,22 @@ if (ev.pinned){
 
       // NEW: عند الضغط على عنصر الخط الزمني → افتح نفس الحدث في وضع القائمة مع تمرير
       item.addEventListener('click', () => {
-        // الانتقال إلى وضع القائمة
+        // الانتقال إلى وضع القائمة مع الحفاظ على وضع المعاينة
         root.dataset.view = 'list';
         listBtn.classList.add('is-active');
         visBtn.classList.remove('is-active');
 
-        // جعل هذا الحدث هو الأخير في وضع التعديل
-        lastEditedEventId = ev.id;
-        renderAll();
-
+        // تمرير القائمة إلى بطاقة الحدث المقابلة بدون فتح وضع التعديل
         const card = listWrap.querySelector(`.event-card[data-event-id="${ev.id}"]`);
         if (card){
           try {
-            card.scrollIntoView({ block:'nearest', behavior:'smooth' });
+            card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
           } catch(e){
             card.scrollIntoView(true);
           }
-          const focusTarget =
-            card.querySelector('.event-title-input') ||
-            card.querySelector('.event-description-input');
-          if (focusTarget && typeof focusTarget.focus === 'function'){
-            focusTarget.focus();
-          }
         }
       });
+
 
       list.appendChild(item);
 

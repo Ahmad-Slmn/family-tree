@@ -5,6 +5,7 @@ import { LABELS } from '../model/families.js';
 import * as Lineage from '../features/lineage.js';
 import { createStoriesSection } from '../features/person.stories.js';
 import { createEventsSection } from '../features/person.events.js';
+import { createSourcesSection } from '../features/person.sources.js';
 /* =========================
    توابع العمر والتواريخ
    ========================= */
@@ -173,11 +174,13 @@ const BIO_SECTION_KEYS = [
   'grands',     // الأسلاف والأجداد + الأحفاد
   'children',   // الأبناء والبنات
   'wives',      // الزوجات
-  'timeline',   // الخط الزمني للأحداث (NEW)
+  'timeline',   // الخط الزمني للأحداث
   'stories',    // القصص والمذكّرات
+  'sources',    // المصادر والوثائق (NEW)
   'achievements',
   'hobbies'
 ];
+
 
 const ALWAYS_ON_SECTIONS = ['basic'];
 
@@ -187,8 +190,10 @@ const BIO_SECTION_GROUPS = {
   children: ['children'],
   wives:    ['wives'],
   stories:  ['stories'],
+  sources:  ['sources'],
   timeline: ['timeline'] 
 };
+
 
 const SUMMARY_ALLOWED_SECTIONS = new Set(['basic', 'achievements', 'hobbies']);
 
@@ -278,8 +283,10 @@ function detectSectionPresence(bio, person, family){
     hasChildren: false,
     hasWives:    false,
     hasStories:  false,
-    hasTimeline: false
+    hasTimeline: false,
+    hasSources:  false
   };
+
 
   bio = bio || {};
   if (!person || !family) return out;
@@ -371,8 +378,13 @@ function detectSectionPresence(bio, person, family){
   const events = Array.isArray(person.events) ? person.events : [];
   out.hasTimeline = events.length > 0;
 
+  // المصادر والوثائق
+  const sources = Array.isArray(person.sources) ? person.sources : [];
+  out.hasSources = sources.length > 0;
+
   return out;
 }
+
 
 
 /* =========================
@@ -787,6 +799,22 @@ function buildStoriesSection(person, handlers){
   return root;
 }
 
+/* ===== 6b) المصادر والوثائق ===== */
+function buildSourcesSection(person, handlers){
+  if (!person) return null;
+
+  // كل المحتوى سيتم بناؤه داخل createSourcesSection
+  const root = createSourcesSection(person, handlers);
+  if (!root) return null;
+
+  // نضمن وجود كلاس bio-section + معرّف القسم ليستفيد منه السكول/الوضع
+  root.classList.add('bio-section', 'bio-section-sources');
+  root.dataset.sectionId = 'sources';
+
+  return root;
+}
+
+
 /* ===== X) الخط الزمني للأحداث ===== */
 function buildTimelineSection(person, handlers){
   if (!person) return null;
@@ -855,9 +883,11 @@ export function renderBioSections(container, bio, person = null, family = null, 
     children:     () => buildChildrenSection(person, family, handlers),
     timeline:     () => buildTimelineSection(person, handlers),
     stories:      () => buildStoriesSection(person, handlers),
+    sources:      () => buildSourcesSection(person, handlers),
     achievements: () => buildAchievementsSection(bio),
     hobbies:      () => buildHobbiesSection(bio)
   };
+
 
   const order = getBioSectionsOrder(handlers);
   order.forEach(key => {
@@ -880,7 +910,12 @@ export function getAvailableBioModes(bio, person, family){
   if (p.hasGrands)   modes.push({ value:'grands',   label:'الأسلاف والأجداد' });
   if (p.hasChildren) modes.push({ value:'children', label:'الأبناء والبنات' });
   if (p.hasWives)    modes.push({ value:'wives',    label:'الزوجات' });
-  modes.push({ value:'stories',  label:'القصص والمذكّرات' }); // نُظهره دائمًا
-  modes.push({ value:'timeline', label:'الخطّ الزمني للأحداث' }); // NEW: دائمًا لإتاحة إضافة أحداث
+
+  // نُظهر القصص/الخط الزمني/المصادر دائمًا لإتاحة الإضافة حتى لو لا توجد بيانات بعد
+  modes.push({ value:'stories',  label:'القصص والمذكّرات' });
+  modes.push({ value:'sources',  label:'المصادر والوثائق' });
+  modes.push({ value:'timeline', label:'الخطّ الزمني للأحداث' });
+
   return modes;
 }
+

@@ -8,7 +8,7 @@ const STORE = 'families';
 const PHOTO_STORE = 'photos';
 const STORY_PHOTO_STORE = 'storyPhotos';
 const EVENT_PHOTO_STORE = 'eventPhotos';
-
+const SOURCE_PHOTO_STORE = 'sourcePhotos';
 if (!('indexedDB' in window)) {
   console.warn('IndexedDB not supported');
 }
@@ -27,7 +27,8 @@ function _rw(db, store){ return db.transaction(store, 'readwrite').objectStore(s
 function open() {
   if (dbp) return dbp;
   dbp = new Promise((res, rej) => {
-    const req = indexedDB.open(DB_NAME, 4);
+        const req = indexedDB.open(DB_NAME, 5);
+
 
     req.onupgradeneeded = (e) => {
       const db = req.result;
@@ -60,6 +61,14 @@ function open() {
           db.createObjectStore(EVENT_PHOTO_STORE);
         }
       }
+      
+            // v=4 → إضافة مخزن مرفقات المصادر/الوثائق
+      if (v < 5) {
+        if (!db.objectStoreNames.contains(SOURCE_PHOTO_STORE)) {
+          db.createObjectStore(SOURCE_PHOTO_STORE);
+        }
+      }
+
     };
 
     req.onsuccess = () => {
@@ -185,10 +194,11 @@ async function _closeConn() {
 async function _clearStores() {
   const db = await open();
   await new Promise((res, rej) => {
-    const tx = db.transaction(
-      [STORE, PHOTO_STORE, STORY_PHOTO_STORE, EVENT_PHOTO_STORE],
+       const tx = db.transaction(
+      [STORE, PHOTO_STORE, STORY_PHOTO_STORE, EVENT_PHOTO_STORE, SOURCE_PHOTO_STORE],
       'readwrite'
     );
+
     tx.objectStore(STORE).clear();
     tx.objectStore(PHOTO_STORE).clear();
     tx.objectStore(STORY_PHOTO_STORE).clear(); // مسح صور القصص
@@ -404,6 +414,87 @@ async function getEventImageURL(ref) {
   return URL.createObjectURL(blob);
 }
 
+/* =========================
+   صور/مرفقات المصادر (sourcePhotos)
+========================= */
+
+// حفظ ملف مصدر (عادة صورة وثيقة، وقد يكون PDF) في مخزن خاص
+// ويُرجِع مرجعًا من نوع idb:src_... لتخزينه داخل كائن المصدر
+async function putSourceImage({ file, personId = null, sourceId = null }) {
+  if (!(file instanceof Blob)) {
+    throw new TypeError('putSourceImage: expected File/Blob');
+  }
+
+  const mt = file.type || '';
+  let blobToStore = file;
+
+  // نضغط فقط الملفات التي هي صور، والباقي نخزّنه كما هو (PDF، إلخ)
+  if (/^image\//i.test(mt)) {
+    blobToStore = await _compressImageFileToBlob(file, {
+      maxWidth: 1600,
+      maxHeight: 1600,
+      quality: 0.8,
+      mimeType: 'image/jpeg'
+    });
+  }
+
+  // حد آمن للحجم (مثلاً 16MB بعد الضغط/بدونه)
+  if (blobToStore.size > 16 * 1024 * 1024) {
+    throw new Error('putSourceImage: blob too large');
+  }
+
+  const db = await open();
+  const key = _genId('src_'); // مثل: src_r4x...
+
+  const value = {
+    blob: blobToStore,
+    meta: {
+      personId: personId || null,
+      sourceId: sourceId || null,
+      mimeType: mt || blobToStore.type || '',
+      createdAt: new Date().toISOString()
+    }
+  };
+
+  await new Promise((res, rej) => {
+    const tx = db.transaction(SOURCE_PHOTO_STORE, 'readwrite');
+    tx.objectStore(SOURCE_PHOTO_STORE).put(value, key);
+    tx.oncomplete = res;
+    tx.onerror    = () => rej(tx.error);
+    tx.onabort    = () => rej(tx.error);
+  });
+
+  // هذا المرجع هو الذي يُحفَظ في source.files[] أو ما يماثله
+  return `idb:${key}`;
+}
+
+// تحويل مرجع idb:src_... إلى blob: URL للعرض / التحميل
+async function getSourceImageURL(ref) {
+  if (!ref) return null;
+  const key = String(ref).replace(/^idb:/, '');
+
+  const db = await open();
+  const record = await new Promise((res, rej) => {
+    const tx = db.transaction(SOURCE_PHOTO_STORE, 'readonly');
+    const r  = tx.objectStore(SOURCE_PHOTO_STORE).get(key);
+    let out = null;
+    r.onsuccess = () => { out = r.result || null; };
+    tx.oncomplete = () => res(out);
+    tx.onerror    = () => rej(tx.error);
+    tx.onabort    = () => rej(tx.error);
+  });
+
+  if (!record) return null;
+
+  const blob =
+    record.blob instanceof Blob ? record.blob
+      : (record instanceof Blob ? record : null);
+
+  if (!blob) return null;
+
+  return URL.createObjectURL(blob);
+}
+
 
 /* =========================
    مخزن العائلات (KV)
@@ -553,12 +644,17 @@ export const DB = {
   // Photos الأحداث
   putEventImage, getEventImageURL,
 
+  // Photos المصادر/الوثائق
+  putSourceImage, getSourceImageURL,
+
   // إدارة
   nuke,
 
   // تشخيص
-  _countFamilies: () => count(STORE),
-  _countPhotos:   () => count(PHOTO_STORE),
-  _keysFamilies:  () => keys(STORE),
-  _keysPhotos:    () => keys(PHOTO_STORE),
+  _countFamilies:    () => count(STORE),
+  _countPhotos:      () => count(PHOTO_STORE),
+  _keysFamilies:     () => keys(STORE),
+  _keysPhotos:       () => keys(PHOTO_STORE),
+  _countSourceFiles: () => count(SOURCE_PHOTO_STORE),
+  _keysSourceFiles:  () => keys(SOURCE_PHOTO_STORE),
 };

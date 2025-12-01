@@ -1,0 +1,212 @@
+/* ==========================================================================
+   bio-sources.css
+   تنسيقات تبويب "المصادر والوثائق"
+   ========================================================================== */
+
+/* ===== رأس القسم + الوصف المختصر ===== */
+.sources-header{display:flex;align-items:flex-start;justify-content:space-between;gap:.6rem;margin-bottom:.4rem}
+.sources-count-badge{display:inline-flex;align-items:center;padding:.05rem .45rem;margin-inline-start:.35rem;font-size:.78rem;font-weight:500;border-radius:999px;background:color-mix(in oklab,var(--panel-bg)92%,#fff);border:1px solid color-mix(in oklab,var(--surface-border)75%,transparent);color:color-mix(in oklab,var(--text-muted)80%,var(--text-main));box-shadow:0 .05rem .25rem rgba(0,0,0,.05)}
+.sources-meta{margin:.15rem 0 .6rem;font-size:.8rem;line-height:1.8;color:color-mix(in oklab,var(--text-muted)88%,var(--text-main))}
+
+/* ===== إبراز الكرت عند كونه "وثيقة أساسية" ===== */
+.source-card--pinned{border-color:color-mix(in oklab,var(--modal-primary)50%,var(--surface-border));background:color-mix(in oklab,var(--modal-primary)6%,var(--card-bg));box-shadow:0 .28rem .9rem rgba(0,0,0,.09)}
+.source-card--pinned .source-card-index{background:color-mix(in oklab,var(--arrow-color)18%,transparent)}
+
+/* ===== تمييز وضع المعاينة / وضع التحرير ===== */
+.source-card--preview .source-preview{display:flex;flex-direction:column;gap:.25rem}
+.source-card--preview .source-edit{display:none}
+.source-card--edit{position:relative;border-color:color-mix(in oklab,var(--modal-primary)55%,var(--surface-border));background:linear-gradient(135deg,color-mix(in oklab,var(--modal-primary)10%,var(--card-bg)) 0%,color-mix(in oklab,var(--modal-primary)4%,var(--card-bg)) 45%,var(--card-bg) 100%);box-shadow:0 .38rem 1.2rem rgba(0,0,0,.16);border-inline-start:3px solid color-mix(in oklab,var(--modal-primary)70%,var(--arrow-color))}
+.source-card--edit .source-preview{display:none}
+.source-card--edit .source-edit{display:flex;flex-direction:column;gap:.5rem}
+.source-card--edit::before{content:"";position:absolute;inset-block:.55rem .55rem;inset-inline-start:.2rem;width:3px;border-radius:999px;background:linear-gradient(to bottom,color-mix(in oklab,var(--modal-primary)75%,var(--arrow-color)),color-mix(in oklab,var(--modal-primary)35%,transparent))}
+.source-edit-icon{display:none;font-size:1rem;margin-inline-start:.25rem;opacity:.9}
+.source-card--edit .source-edit-icon{display:inline-flex;align-items:center;justify-content:center}
+
+/* ===== بادجات المصادر ===== */
+.source-badge--place{background:color-mix(in oklab,var(--accent-success)9%,#fff);color:color-mix(in oklab,var(--accent-success)55%,#000)}
+.source-badge--year{background:color-mix(in oklab,var(--arrow-color)10%,#fff);color:color-mix(in oklab,var(--arrow-color)52%,#000)}
+.source-badge--undated{background:color-mix(in oklab,var(--surface-border)12%,#fff);color:color-mix(in oklab,var(--text-muted)92%,var(--text-main));font-style:italic}
+.source-badge--type{border-style:solid}
+.source-badge--type[data-type="birth"]{background:color-mix(in oklab,var(--accent-success)14%,#fff);border-color:color-mix(in oklab,var(--accent-success)50%,transparent);color:color-mix(in oklab,var(--accent-success)55%,#000)}
+.source-badge--type[data-type="marriage"]{background:color-mix(in oklab,var(--arrow-color)13%,#fff);border-color:color-mix(in oklab,var(--arrow-color)50%,transparent);color:color-mix(in oklab,var(--arrow-color)55%,#000)}
+.source-badge--type[data-type="death"]{background:color-mix(in oklab,var(--modal-danger)10%,#fff);border-color:color-mix(in oklab,var(--modal-danger)50%,transparent);color:color-mix(in oklab,var(--modal-danger)55%,#000)}
+.source-badge--type[data-type="inheritance"],
+.source-badge--type[data-type="property"]{background:color-mix(in oklab,var(--surface-border)11%,#fff);border-color:color-mix(in oklab,var(--surface-border)70%,transparent);color:color-mix(in oklab,var(--text-main)85%,#000)}
+.source-badge--issuer{background:color-mix(in oklab,var(--panel-bg)92%,#fff);color:color-mix(in oklab,var(--text-muted)88%,var(--text-main))}
+.source-badge--reference{font-family:var(--mono-font,ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace);background:color-mix(in oklab,var(--panel-bg)94%,#fff);color:color-mix(in oklab,var(--text-main)90%,#000)}
+.source-badge--files{background:color-mix(in oklab,var(--surface-border)14%,#fff);color:color-mix(in oklab,var(--text-main)88%,#000)}
+.source-badge--confidence{background:color-mix(in oklab,var(--panel-bg)93%,#fff);color:color-mix(in oklab,var(--text-main)92%,#000)}
+.source-badge--confidence[data-level="official"]{background:color-mix(in oklab,var(--accent-success)14%,#fff);color:color-mix(in oklab,var(--accent-success)60%,#000)}
+.source-badge--confidence[data-level="family"]{background:color-mix(in oklab,var(--arrow-color)12%,#fff);color:color-mix(in oklab,var(--arrow-color)58%,#000)}
+.source-badge--confidence[data-level="oral"]{background:color-mix(in oklab,var(--surface-border)13%,#fff);color:color-mix(in oklab,var(--text-main)85%,#000);font-style:italic}
+.source-badge--confidence[data-level="copy"]{background:color-mix(in oklab,var(--modal-danger)8%,#fff);color:color-mix(in oklab,var(--modal-danger)58%,#000)}
+.source-badge--confidentiality{background:color-mix(in oklab,var(--panel-bg)92%,#fff);color:color-mix(in oklab,var(--text-main)88%,#000)}
+.source-badge--confidentiality[data-level="public"]{background:color-mix(in oklab,var(--accent-success)9%,#fff);color:color-mix(in oklab,var(--accent-success)55%,#000)}
+.source-badge--confidentiality[data-level="private"]{background:color-mix(in oklab,var(--surface-border)16%,#fff);color:color-mix(in oklab,var(--text-main)90%,#000)}
+.source-badge--confidentiality[data-level="sensitive"]{background:color-mix(in oklab,var(--modal-danger)11%,#fff);color:color-mix(in oklab,var(--modal-danger)60%,#000)}
+.source-badge--verified{background:color-mix(in oklab,var(--accent-soft)70%,#fff);color:color-mix(in oklab,var(--arrow-color)65%,#000);font-weight:600}
+.source-lock-icon{display:inline-flex;align-items:center;justify-content:center;margin-inline-start:.25rem;font-size:.9rem;opacity:.8}
+
+/* تنبيه غياب المصادر المهمة */
+.sources-missing-warning{margin:.1rem 0 .4rem;padding:.25rem .55rem;border-radius:.6rem;font-size:.78rem;background:color-mix(in oklab,var(--modal-warning-bg,#fff7e0) 85%,#fff);color:color-mix(in oklab,var(--modal-warning-text,#7a4c00) 80%,#000);border:1px solid color-mix(in oklab,var(--surface-border)80%,transparent)}
+
+/* ===== وسوم الوثائق ===== */
+.source-tags-list{display:flex;flex-wrap:wrap;gap:.28rem;margin-top:.25rem}
+.source-tag-chip{border:none;padding:.08rem .55rem;border-radius:999px;font-size:.78rem;cursor:pointer;background:color-mix(in oklab,var(--panel-bg)95%,#fff);color:color-mix(in oklab,var(--text-muted)90%,var(--text-main));box-shadow:0 .05rem .18rem rgba(0,0,0,.05);transition:background-color .14s,color .14s,transform .1s,box-shadow .1s}
+.source-tag-chip:hover{transform:translateY(-1px);background:color-mix(in oklab,var(--panel-bg)90%,#fff);box-shadow:0 .12rem .32rem rgba(0,0,0,.08)}
+.source-tag-chip.is-active{background:color-mix(in oklab,var(--modal-primary)22%,#fff);color:color-mix(in oklab,var(--modal-primary)55%,#000);box-shadow:0 .14rem .38rem rgba(0,0,0,.12)}
+
+/* ===== معاينة الصور في وضع العرض ===== */
+.source-preview-images{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.3rem}
+.source-file-thumb--preview{cursor:pointer}
+.source-file-thumb--image{background:color-mix(in oklab,var(--accent-success)9%,#fff)}
+.source-file-thumb--pdf{background:color-mix(in oklab,var(--modal-danger)9%,#fff)}
+.source-file-thumb--word,.source-file-thumb--doc{background:color-mix(in oklab,var(--arrow-color)9%,#fff)}
+.source-file-thumb--other{background:color-mix(in oklab,var(--surface-border)12%,#fff)}
+.source-file-ext{position:absolute;inset-inline-end:.2rem;inset-block-end:.2rem;padding:.05rem .4rem;border-radius:.6rem;font-size:.68rem;background:rgba(0,0,0,.6);color:#fff;pointer-events:none}
+
+/* زر "عرض الوثائق كشرائح" */
+.source-files-slider-btn{margin-top:.3rem;align-self:flex-start;padding:.18rem .7rem;border-radius:.7rem;border:1px solid color-mix(in oklab,var(--surface-border)85%,transparent);background:color-mix(in oklab,var(--panel-bg)96%,#fff);font-size:.8rem;cursor:pointer;color:color-mix(in oklab,var(--text-muted)92%,var(--text-main));box-shadow:0 .04rem .16rem rgba(0,0,0,.06);transition:background-color .16s,border-color .16s,color .16s,transform .12s,box-shadow .12s}
+.source-files-slider-btn:hover{background:color-mix(in oklab,var(--panel-bg)92%,#fff);border-color:color-mix(in oklab,var(--surface-border)72%,transparent);transform:translateY(-1px);box-shadow:0 .12rem .35rem rgba(0,0,0,.08)}
+
+/* ===== أزرار التحميل / الإجراءات ===== */
+.source-actions{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.35rem}
+.source-download-btn{display:inline-flex;align-items:center;justify-content:center;gap:.3rem;padding:.22rem .85rem;border-radius:.65rem;border:1px dashed color-mix(in oklab,var(--surface-border)80%,transparent);background:color-mix(in oklab,var(--panel-bg)96%,#fff);font-size:.8rem;cursor:pointer;color:color-mix(in oklab,var(--text-muted)90%,var(--text-main));box-shadow:0 .05rem .2rem rgba(0,0,0,.05);transition:background-color .16s,border-color .16s,color .16s,transform .12s,box-shadow .12s}
+.source-download-btn:hover{background:color-mix(in oklab,var(--panel-bg)92%,#fff);border-color:color-mix(in oklab,var(--surface-border)70%,transparent);transform:translateY(-1px);box-shadow:0 .12rem .35rem rgba(0,0,0,.08)}
+.source-download-btn-icon{font-size:.9rem}
+
+/* ===== التحقق ===== */
+.source-verified-inline{display:flex;flex-wrap:wrap;gap:.35rem}
+.source-verified-check-label{display:inline-flex;align-items:center;gap:.25rem;cursor:pointer}
+.source-verified-check-label input[type="checkbox"]{cursor:pointer}
+
+/* ===== تخطيط الجدول المختصر ===== */
+.sources-table-view{display:grid;grid-template-columns:minmax(0,2.2fr) minmax(0,1.3fr) minmax(0,1.1fr);gap:.3rem .7rem;align-items:center;margin-top:.15rem}
+.sources-table-header{grid-column:1 / -1;display:grid;grid-template-columns:inherit;gap:.25rem .7rem;font-size:.78rem;font-weight:600;color:color-mix(in oklab,var(--text-muted)88%,var(--text-main));padding-bottom:.25rem;border-bottom:1px solid color-mix(in oklab,var(--surface-border)85%,transparent);margin-bottom:.3rem}
+.sources-table-cell--title{font-weight:600}
+.sources-table-cell--meta{font-size:.8rem;color:color-mix(in oklab,var(--text-muted)90%,var(--text-main))}
+
+/* ===== Grid لحقول التفاصيل ===== */
+.source-details-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:.45rem .6rem;margin-top:.45rem}
+.source-details-field{display:flex;flex-direction:column;gap:.15rem}
+.source-details-field--full{grid-column:1 / -1}
+.source-details-label{font-size:.78rem;color:color-mix(in oklab,var(--text-muted)90%,var(--text-main));display:flex;align-items:center;gap:.25rem}
+.source-details-icon{font-size:.85rem;opacity:.85}
+
+/* مدخلات النص / التاريخ / select / textarea */
+.source-details-grid input[type="text"],
+.source-details-grid input[type="date"],
+.source-details-grid select,
+.source-details-grid .source-note-input{width:100%;padding:.32rem .65rem;border-radius:.6rem;border:1px solid var(--surface-border);background:var(--panel-bg);font-size:.84rem;color:var(--text-main);outline:none!important;box-shadow:0 .06rem .18rem rgba(0,0,0,.03);transition:border-color .16s,box-shadow .16s,background-color .16s,transform .12s}
+.source-details-grid select{cursor:pointer}
+.source-details-grid input[type="text"]::placeholder,
+.source-details-grid .source-note-input::placeholder{color:var(--text-muted)}
+.source-details-grid input[type="text"]:hover,
+.source-details-grid input[type="date"]:hover,
+.source-details-grid select:hover,
+.source-details-grid .source-note-input:hover{border-color:color-mix(in oklab,var(--modal-primary)40%,var(--surface-border));background:color-mix(in oklab,var(--panel-bg)94%,#fff);transform:translateY(-1px);box-shadow:0 .12rem .32rem rgba(0,0,0,.06)}
+.source-details-grid input[type="text"]:focus-visible,
+.source-details-grid input[type="date"]:focus-visible,
+.source-details-grid select:focus-visible,
+.source-details-grid .source-note-input:focus-visible{border-color:var(--modal-primary);box-shadow:0 0 0 .09rem color-mix(in oklab,var(--modal-primary)40%,transparent);background:var(--card-bg)}
+
+/* صف حالة التحقق (النص + التاريخ) */
+.source-details-field--full .source-details-label+div{display:flex;flex-wrap:wrap;gap:.35rem}
+.source-details-field--full .source-details-label+div input[type="text"],
+.source-details-field--full .source-details-label+div input[type="date"]{flex:1 1 10rem;min-width:9rem}
+
+/* textarea للملاحظات */
+.source-note-input{min-height:4.2rem;resize:vertical;line-height:1.7}
+
+/* سطر ميتا مختصر أسفل العنوان */
+.source-preview-meta-line{margin:.05rem 0 .25rem;font-size:.78rem;color:color-mix(in oklab,var(--text-muted)88%,var(--text-main))}
+
+/* ===== أدوات البحث والفلاتر في الهيدر ===== */
+.sources-tools{display:flex;flex-wrap:wrap;gap:.4rem .6rem;align-items:center;justify-content:space-between}
+.sources-tools-left,
+.sources-tools-right{width:100%;display:flex;justify-content:space-between;flex-wrap:wrap;gap:.35rem;align-items:center}
+.sources-search-input{min-width:17rem;max-width:18rem;padding:.24rem .55rem;border-radius:.6rem;border:1px solid color-mix(in oklab,var(--surface-border)90%,transparent);background:color-mix(in oklab,var(--panel-bg)97%,#fff);font-size:.8rem;color:var(--text-main);box-shadow:0 .05rem .18rem rgba(0,0,0,.03)}
+.sources-search-input::placeholder{color:color-mix(in oklab,var(--text-muted)90%,var(--text-main))}
+.sources-search-input:focus-visible{outline:none;border-color:var(--modal-primary);box-shadow:0 0 0 .08rem color-mix(in oklab,var(--modal-primary)40%,transparent);background:#fff}
+
+/* فلتر "الوثائق الأساسية فقط" */
+.sources-pinned-filter{display:inline-flex;align-items:center;gap:.25rem;font-size:.78rem;color:color-mix(in oklab,var(--text-muted)88%,var(--text-main));cursor:pointer}
+.sources-pinned-filter input[type="checkbox"]{width:.9rem;height:.9rem;cursor:pointer}
+
+/* شريط إحصائي أعلى القائمة */
+.sources-stats-bar{margin:.15rem 0 .4rem;font-size:.78rem;color:color-mix(in oklab,var(--text-muted)88%,var(--text-main))}
+
+/* زر تبديل عرض البطاقات / الجدول */
+.sources-view-toggle{display:inline-flex;border-radius:.6rem;overflow:hidden;border:1px solid color-mix(in oklab,var(--surface-border)85%,transparent);background:color-mix(in oklab,var(--panel-bg)96%,#fff)}
+.sources-view-btn{border:none;padding:.35rem .9rem;font-size:.76rem;cursor:pointer;background:transparent;color:color-mix(in oklab,var(--text-muted)88%,var(--text-main))}
+.sources-view-btn.is-active{background:color-mix(in oklab,var(--accent-soft)70%,#fff);color:var(--arrow-color);font-weight:600;box-shadow:0 .1rem .3rem rgba(0,0,0,.12)}
+
+/* إبراز الحقول الأساسية في صف الميتا */
+.source-meta-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.4rem .6rem;margin-bottom:.4rem}
+.source-meta-field--primary .source-meta-label{font-weight:600;color:color-mix(in oklab,var(--modal-primary)45%,var(--text-main))}
+.source-meta-field--primary select,
+.source-meta-field--primary input{border-color:color-mix(in oklab,var(--modal-primary)30%,var(--surface-border));background:color-mix(in oklab,var(--panel-bg)94%,#fff)}
+
+/* ========================================================================== */
+/*                             نقاط التوقف (Responsive)                       */
+/* ========================================================================== */
+
+/* 1) ≤ 23.9rem — شاشات صغيرة جداً */
+@media (max-width:23.9rem){
+  .sources-header{flex-direction:column;align-items:stretch}
+  .sources-tools{flex-direction:column;align-items:stretch}
+  .sources-tools-left,.sources-tools-right{flex-direction:column;align-items:stretch}
+  .sources-search-input{min-width:100%;max-width:100%}
+  .sources-view-toggle{width:100%}
+  .sources-view-btn{flex:1 1 50%;text-align:center}
+  .sources-table-view{grid-template-columns:minmax(0,1fr)}
+  .source-details-grid{grid-template-columns:minmax(0,1fr)}
+  .source-preview-images{flex-direction:column}
+}
+
+/* 2) 24rem – 29.9rem */
+@media (min-width:24rem) and (max-width:29.9rem){
+  .sources-header{flex-direction:column;align-items:stretch}
+  .sources-tools{flex-direction:column;align-items:stretch}
+  .sources-tools-left,.sources-tools-right{flex-direction:column;align-items:stretch}
+  .sources-search-input{min-width:100%;max-width:100%}
+  .sources-table-view{grid-template-columns:minmax(0,1fr)}
+  .source-details-grid{grid-template-columns:minmax(0,1fr)}
+}
+
+/* 3) 30rem – 39.9rem */
+@media (min-width:30rem) and (max-width:39.9rem){
+  .sources-header{flex-direction:column;align-items:stretch}
+  .sources-tools-left,.sources-tools-right{justify-content:space-between}
+  .sources-search-input{min-width:14rem;max-width:100%}
+  .sources-table-view{grid-template-columns:minmax(0,1.7fr) minmax(0,1.3fr)}
+  .source-details-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+}
+
+/* 4) 40rem – 47.9rem */
+@media (min-width:40rem) and (max-width:47.9rem){
+  .sources-header{flex-direction:row;align-items:flex-start}
+  .sources-tools-left,.sources-tools-right{width:100%;justify-content:space-between}
+  .sources-search-input{min-width:15rem;max-width:16rem}
+  .sources-table-view{grid-template-columns:minmax(0,2fr) minmax(0,1.4fr)}
+  .source-details-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+}
+
+/* 5) 48rem – 63.9rem */
+@media (min-width:48rem) and (max-width:63.9rem){
+  .sources-header{flex-direction:row;align-items:flex-start}
+  .sources-tools-left,.sources-tools-right{width:auto;flex:1 1 auto}
+  .sources-search-input{min-width:16rem;max-width:18rem}
+  .sources-table-view{grid-template-columns:minmax(0,2.2fr) minmax(0,1.3fr) minmax(0,1.1fr)}
+  .source-details-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+}
+
+/* 6) ≥ 64rem — شاشات واسعة (ديسكتوب) */
+@media (min-width:64rem){
+  .sources-header{gap:.8rem}
+  .sources-tools{gap:.5rem .9rem}
+  .sources-tools-left,.sources-tools-right{width:auto;flex:1 1 auto}
+  .sources-search-input{min-width:18rem;max-width:20rem}
+  .sources-table-view{grid-template-columns:minmax(0,2.4fr) minmax(0,1.4fr) minmax(0,1.2fr)}
+  .source-details-grid{grid-template-columns:minmax(0,1.1fr) minmax(0,1.1fr)}
+}

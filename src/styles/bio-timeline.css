@@ -294,7 +294,7 @@
   border-inline-start:2px solid color-mix(in oklab,var(--accent-soft)70%,#000);
   padding-inline-start:1.5rem
 }
-.timeline-item{position:relative;padding:.5rem 0 .6rem; cursor: pointer}
+.timeline-item{position:relative;padding:.5rem 0 .6rem; cursor: pointer; margin: .80rem 0}
 .timeline-marker{
   position:absolute;inset-inline-start:-1.1rem;top:.7rem;
   width:1.3rem;height:1.3rem;border-radius:999px;

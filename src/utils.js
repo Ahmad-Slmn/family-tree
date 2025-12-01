@@ -711,7 +711,6 @@ export function attachHorizontalSortable({
   });
 }
 
-// utils.js
 export function createImageViewerOverlay({
   overlayClass = 'image-viewer-overlay',
   backdropClass = 'image-viewer-backdrop',
@@ -772,6 +771,16 @@ export function createImageViewerOverlay({
   let urls = [];
   let index = 0;
 
+  // استخراج كلاسات السهمين (prev/next) بشكل ديناميكي
+  const prevTokens = arrowPrevClass
+    .split(/\s+/)
+    .map(c => c.trim())
+    .filter(c => c && /prev$/i.test(c));
+  const nextTokens = arrowNextClass
+    .split(/\s+/)
+    .map(c => c.trim())
+    .filter(c => c && /next$/i.test(c));
+
   function updateUI() {
     if (!urls.length) return;
     img.src = urls[index];
@@ -799,19 +808,45 @@ export function createImageViewerOverlay({
     overlay.classList.add('is-open');
   }
 
-  // الأحداث
-  prevBtn.addEventListener('click', e => {
-    e.stopPropagation();
+  // التنقل
+  function goPrev() {
     if (!urls.length || index <= 0) return;
     index -= 1;
     updateUI();
-  });
+  }
 
-  nextBtn.addEventListener('click', e => {
-    e.stopPropagation();
+  function goNext() {
     if (!urls.length || index >= urls.length - 1) return;
     index += 1;
     updateUI();
+  }
+
+  // أي نقرة داخل شريط التنقل: نحدد الزر ديناميكياً (يدعم القصص/الخط الزمني/السيرة/المصادر)
+  nav.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn || btn.disabled) return;
+
+    const isPrev =
+      prevTokens.some(cls => btn.classList.contains(cls)) ||
+      btn.classList.contains('image-viewer-arrow-prev') ||
+      btn.classList.contains('story-image-viewer-arrow-prev') ||
+      btn.classList.contains('timeline-image-viewer-arrow-prev') ||
+      btn.classList.contains('bio-image-viewer-arrow-prev') ||
+      btn.classList.contains('sources-image-viewer-arrow-prev');
+
+    const isNext =
+      nextTokens.some(cls => btn.classList.contains(cls)) ||
+      btn.classList.contains('image-viewer-arrow-next') ||
+      btn.classList.contains('story-image-viewer-arrow-next') ||
+      btn.classList.contains('timeline-image-viewer-arrow-next') ||
+      btn.classList.contains('bio-image-viewer-arrow-next') ||
+      btn.classList.contains('sources-image-viewer-arrow-next');
+
+    if (!isPrev && !isNext) return;
+
+    e.stopPropagation();
+    if (isPrev) goPrev();
+    else if (isNext) goNext();
   });
 
   backdrop.addEventListener('click', closeViewer);
