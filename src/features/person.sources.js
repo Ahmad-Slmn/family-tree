@@ -290,18 +290,32 @@ const sources = Array.isArray(person.sources) ? person.sources.map(s => ({
   const sortMode = (handlers.getSourcesSortMode && handlers.getSourcesSortMode()) || 'latest';
   sortSources(person, sortMode);
 
-  const root = el('section', 'bio-section bio-section-sources');
-  const titleEl = textEl('h3', 'المصادر والوثائق');
-  const countBadge = el('span', 'sources-count-badge');
-  titleEl.append(' ', countBadge);
-  root.appendChild(titleEl);
+const root = el('section', 'bio-section bio-section-sources');
 
-  function updateSourcesCountBadge(){
-    const n = (person.sources || []).length;
-    countBadge.textContent = n ? `(${n})` : '(لا توجد وثائق بعد)';
-  }
+const titleEl   = el('h3');
+const iconEl    = el('i');
+iconEl.className = 'fa-solid fa-file-circle-check';
+iconEl.setAttribute('aria-hidden', 'true');
 
-  const header = el('div', 'sources-header');
+const titleText = textEl('span', 'المصادر والوثائق');
+const countBadge = el('span', 'sources-count-badge');
+
+titleEl.append(iconEl, ' ', titleText, ' ', countBadge);
+root.appendChild(titleEl);
+
+// الوصف مباشرة بعد العنوان
+const metaEl = el('div', 'sources-meta');
+metaEl.textContent =
+  'امنح السيرة العائلية قيمة أوثق بجمع كل وثيقة تدعم معلومة أو تاريخًا أو حدثًا في حياة هذا الشخص؛ من شهادات الميلاد والزواج والهوية إلى صكوك الميراث والملكية، وصولًا إلى الصور والوثائق القديمة التي تحفظ الإرث العائلي عبر الزمن.';
+
+root.appendChild(metaEl);
+
+function updateSourcesCountBadge(){
+  const n = (person.sources || []).length;
+  countBadge.textContent = n ? `(${n})` : '(لا توجد وثائق بعد)';
+}
+
+const header = el('div', 'sources-header');
   const tools  = el('div', 'sources-tools');
   const toolsLeft  = el('div', 'sources-tools-left');
   const toolsRight = el('div', 'sources-tools-right');
@@ -368,11 +382,8 @@ viewToggle.append(viewBtnCards, viewBtnTable);
   header.appendChild(tools);
   root.appendChild(header);
 
-  const metaEl = el('div', 'sources-meta');
-  metaEl.textContent =
-    'اربط كل معلومة في السيرة بمصدر موثّق: صكوك، شهادات ميلاد وزواج، صكوك ميراث، بطاقات الهوية، أو صور للوثائق القديمة.';
-  root.appendChild(metaEl);
-
+header.appendChild(tools);
+root.appendChild(header);
   const statsBar = el('div', 'sources-stats-bar');
   root.appendChild(statsBar);
 
@@ -789,10 +800,13 @@ if (original.confidentiality && original.confidentiality !== 'public'){
         });
       }
 
-      const previewFilesWrap = el('div', 'source-preview-images');
-      const sliderBtn = el('button', 'source-files-slider-btn');
-      sliderBtn.type = 'button';
-      sliderBtn.textContent = 'عرض الوثائق كشرائح';
+     const previewFilesWrap = el('div', 'source-preview-images');
+const sliderBtn = el('button', 'source-files-slider-btn');
+sliderBtn.type = 'button';
+sliderBtn.innerHTML =
+  '<i class="fa-solid fa-images" aria-hidden="true"></i> ' +
+  '<span>عرض الوثائق كشرائح</span>';
+
       sliderBtn.addEventListener('click', ()=>{
         if (!original.files || original.files.length < 2) return;
         openSourceSlider(original.files, 0);
@@ -877,16 +891,17 @@ if (original.confidentiality && original.confidentiality !== 'public'){
       }
 
       previewBox.append(
-        previewMeta,
-        badgesWrap,
         previewTitle,
         previewMetaLine,
+        badgesWrap,
+        previewMeta,
         previewNote,
         tagsWrap,
         previewFilesWrap,
         sliderBtn,
         actionsWrap
       );
+
 
 
       card.appendChild(previewBox);
@@ -1091,10 +1106,10 @@ addFileIcon.innerHTML = '<i class="fa-solid fa-file-circle-plus" aria-hidden="tr
           addFileText.textContent = 'إرفاق صور للوثيقة';
           addFileLabel.title = 'أرفق أول صورة أو مسح ضوئي لهذه الوثيقة';
         }else if (count === 1){
-          addFileText.textContent = 'إضافة صورة أخرى';
+          addFileText.textContent = 'إضافة وثيقة أخرى';
           addFileLabel.title = 'أضف صورة أخرى لنفس الوثيقة (صفحة ثانية مثلاً)';
         }else{
-          addFileText.textContent = 'إضافة مزيد من الصور';
+          addFileText.textContent = 'إضافة مزيد من الوثائق';
           addFileLabel.title = `هناك ${count} صور مرفقة حاليًا`;
         }
       }

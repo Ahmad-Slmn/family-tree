@@ -20,20 +20,26 @@ import { DB } from '../storage/db.js';
 // ====================== بيانات الحدث ======================
 
 const EVENT_TYPES = [
-  { value:'birth',    label:'ميلاد',          icon:'🎉' },
-  { value:'marriage', label:'زواج',           icon:'💍' },
-  { value:'child',    label:'إنجاب',          icon:'👶' },
-  { value:'move',     label:'انتقال/هجرة',   icon:'📦' },
-  { value:'job',      label:'عمل/وظيفة',     icon:'💼' },
-  { value:'hajj',     label:'حج/عمرة',       icon:'🕋' },
-  { value:'death',    label:'وفاة',           icon:'🕊️' },
-  { value:'custom',   label:'حدث مخصّص',     icon:'⭐' }
+  { value:'birth',    label:'ميلاد',          emoji:'👶' },
+  { value:'marriage', label:'زواج',           emoji:'💍' },
+  { value:'child',    label:'إنجاب',          emoji:'🧒' },
+  { value:'move',     label:'انتقال/هجرة',   emoji:'🚚' },
+  { value:'job',      label:'عمل/وظيفة',     emoji:'💼' },
+  { value:'hajj',     label:'حج/عمرة',       emoji:'🕋' },
+  { value:'death',    label:'وفاة',           emoji:'🕊️' },
+  { value:'custom',   label:'حدث مخصّص',     emoji:'⭐' }
 ];
 
 function _getTypeMeta(type){
   const t = EVENT_TYPES.find(e => e.value === type);
-  return t || { value:type || 'custom', label:'حدث', icon:'★' };
+  return t || {
+    value: type || 'custom',
+    label: 'حدث',
+    emoji: '⭐'
+  };
 }
+
+
 
 function _newId(){
   try {
@@ -263,12 +269,17 @@ const root   = el('section', 'bio-section bio-section-timeline');
 const header = el('div', 'timeline-header');
 
 const titleBlock = el('div', 'timeline-title-block');
-const title  = textEl('h3', 'الخطّ الزمني للأحداث');
+const title = el('h3', 'timeline-title');
+title.innerHTML =
+  '<i class="fa-solid fa-timeline" aria-hidden="true"></i>' +
+  '<span>الخطّ الزمني للأحداث</span>';
+
 const helper = textEl(
   'p',
-  'سجّل أهمّ محطات حياة الشخص (ميلاد، زواج، عمل، انتقال …)، ثم استعرضها كقائمة أو كخط زمني مرتب حسب السنوات.',
+  'حوِّل محطات الحياة إلى قصة واضحة: وثِّق الميلاد والدراسة والزواج والعمل والانتقالات وغيرها، ثم اعرضها كقائمة أو خط زمني أنيق يكشف تطوّر السنين ويلهم على إضافة مزيد من اللحظات المميّزة.',
   'timeline-helper-text'
 );
+
 titleBlock.append(title, helper);
 
 const tools     = el('div', 'timeline-tools');
@@ -295,16 +306,27 @@ const tools     = el('div', 'timeline-tools');
     sortSelect.value = 'oldest';
   }
 
-  const addBtn = textEl('button', 'إضافة حدث جديد', 'timeline-add-btn');
-  addBtn.type  = 'button';
+const addBtn = el('button', 'timeline-add-btn');
+addBtn.type  = 'button';
+addBtn.innerHTML =
+  '<i class="fa-solid fa-plus" aria-hidden="true"></i>' +
+  '<span>إضافة حدث جديد</span>';
 
-  const viewToggle = el('div', 'timeline-view-toggle');
-  const listBtn    = textEl('button', 'عرض قائمة', 'timeline-view-btn is-active');
-  const visBtn     = textEl('button', 'عرض خط زمني', 'timeline-view-btn');
+const viewToggle = el('div', 'timeline-view-toggle');
 
-  listBtn.type = visBtn.type = 'button';
+const listBtn = el('button', 'timeline-view-btn is-active');
+listBtn.innerHTML =
+  '<i class="fa-solid fa-list" aria-hidden="true"></i>' +
+  '<span>عرض قائمة</span>';
 
-  viewToggle.append(listBtn, visBtn);
+const visBtn  = el('button', 'timeline-view-btn');
+visBtn.innerHTML =
+  '<i class="fa-solid fa-timeline" aria-hidden="true"></i>' +
+  '<span>عرض خط زمني</span>';
+
+listBtn.type = visBtn.type = 'button';
+
+viewToggle.append(listBtn, visBtn);
 
   toolsLeft.append(typeFilterSelect, sortSelect);
   toolsRight.append(viewToggle, addBtn);
@@ -522,12 +544,14 @@ if (ev.source){
     );
 
     const previewImagesWrap = el('div', 'event-preview-images timeline-preview-images');
-    const sliderBtn = textEl(
-      'button',
-      'عرض الصور كشرائح',
-      'event-images-slider-btn timeline-images-slider-btn'
-    );
-    sliderBtn.type = 'button';
+const sliderBtn = el(
+  'button',
+  'event-images-slider-btn timeline-images-slider-btn'
+);
+sliderBtn.type = 'button';
+sliderBtn.innerHTML =
+  '<i class="fa-solid fa-images" aria-hidden="true"></i>' +
+  '<span>عرض الصور كشرائح</span>';
 
     sliderBtn.addEventListener('click', () => {
       if (!ev.media || ev.media.length < 2) return;
@@ -575,19 +599,36 @@ if (ev.source){
 
     renderPreviewImages();
 
-        // تجميع عناصر المعاينة بالترتيب: ميتا الإضافة، تاريخ الحدث، العمر، البادجات، ثم العنوان والتفاصيل والصور
-const previewChildren = [previewMeta];
-if (eventDateLine) previewChildren.push(eventDateLine);
-if (ageLine) previewChildren.push(ageLine);
-previewChildren.push(badgesWrap);
-if (extraMetaPreview.childNodes.length){
-  previewChildren.push(extraMetaPreview);
-}
-previewChildren.push(previewTitle, previewDesc, previewImagesWrap, sliderBtn);
+    // تجميع عناصر المعاينة بالترتيب الجديد:
+    // 1) العنوان + 2) تاريخ الحدث/العمر/البادجات + 3) الوصف والصور + 4) الميتا الإدارية
+    const previewChildren = [];
+
+    // 1) العنوان أولاً
+    previewChildren.push(previewTitle);
+
+    // 2) تاريخ الحدث + العمر التقريبي + بادجات المكان/السنة/النوع
+    if (eventDateLine) previewChildren.push(eventDateLine);
+    if (ageLine) previewChildren.push(ageLine);
+    previewChildren.push(badgesWrap);
+
+    // 3) نص الوصف
+    previewChildren.push(previewDesc);
+
+    // 4) الصور + زر السلايدر
+    previewChildren.push(previewImagesWrap, sliderBtn);
+
+    // 5) ميتا الإضافة (تاريخ الإضافة + طول الوصف)
+    previewChildren.push(previewMeta);
+
+    // 6) وسوم + مصدر + درجة يقين (إن وُجدت)
+    if (extraMetaPreview.childNodes.length) {
+      previewChildren.push(extraMetaPreview);
+    }
 
     previewBox.append(...previewChildren);
 
     card.appendChild(previewBox);
+
 
     // ===== وضع التعديل =====
     const editBox = el('div', 'event-edit');
@@ -616,17 +657,17 @@ previewChildren.push(previewTitle, previewDesc, previewImagesWrap, sliderBtn);
     select.className = 'event-type-select';
     select.name = `event_type_${ev.id}`;
 
-    EVENT_TYPES.forEach(t => {
-      const opt = document.createElement('option');
-      opt.value = t.value;
-      opt.textContent = `${t.icon} ${t.label}`;
-      if (t.value === ev.type) opt.selected = true;
-      select.appendChild(opt);
-    });
+EVENT_TYPES.forEach(t => {
+  const opt = document.createElement('option');
+  opt.value = t.value;
+  opt.textContent = t.label; // بدون إيموجي، الأيقونة ستظهر في باقي الواجهة
+  if (t.value === ev.type) opt.selected = true;
+  select.appendChild(opt);
+});
 
     const typeField = el('div', 'event-meta-field timeline-meta-field');
     const typeLabelBox = el('div', 'event-meta-label timeline-meta-label');
-    typeLabelBox.innerHTML = '<span class="event-meta-icon timeline-meta-icon">🏷️</span> نوع الحدث';
+    typeLabelBox.innerHTML = '<span class="event-meta-icon timeline-meta-icon"><i class="fa-solid fa-tag" aria-hidden="true"></i></span> نوع الحدث';
     typeField.append(typeLabelBox, select);
 
     const dateInput = document.createElement('input');
@@ -637,7 +678,7 @@ previewChildren.push(previewTitle, previewDesc, previewImagesWrap, sliderBtn);
 
     const dateField = el('div', 'event-meta-field timeline-meta-field');
     const dateLabelBox = el('div', 'event-meta-label timeline-meta-label');
-    dateLabelBox.innerHTML = '<span class="event-meta-icon timeline-meta-icon">📅</span> تاريخ الحدث';
+    dateLabelBox.innerHTML =   '<span class="event-meta-icon timeline-meta-icon"><i class="fa-solid fa-calendar-day" aria-hidden="true"></i></span> تاريخ الحدث';
     dateField.append(dateLabelBox, dateInput);
 
     const placeInput = document.createElement('input');
@@ -650,7 +691,7 @@ previewChildren.push(previewTitle, previewDesc, previewImagesWrap, sliderBtn);
 
     const placeField = el('div', 'event-meta-field timeline-meta-field');
     const placeLabelBox = el('div', 'event-meta-label timeline-meta-label');
-    placeLabelBox.innerHTML = '<span class="event-meta-icon timeline-meta-icon">📍</span> المكان';
+    placeLabelBox.innerHTML =   '<span class="event-meta-icon timeline-meta-icon"><i class="fa-solid fa-location-dot" aria-hidden="true"></i></span> المكان';
     placeField.append(placeLabelBox, placeInput);
 
     metaRow.append(typeField, dateField, placeField);
@@ -670,9 +711,11 @@ previewChildren.push(previewTitle, previewDesc, previewImagesWrap, sliderBtn);
     const mediaRow  = el('div', 'event-media-row');
     const thumbs    = el('div', 'event-media-thumbs');
 
-    const addLabel = el('label', 'event-media-add-btn timeline-image-add-btn');
-    const addIcon  = textEl('span', '📷', 'event-media-add-icon timeline-image-add-icon');
-    const addText  = textEl('span', 'إضافة صور للحدث', 'event-media-add-text timeline-image-add-text');
+const addLabel = el('label', 'event-media-add-btn timeline-image-add-btn');
+const addIcon  = el('span', 'event-media-add-icon timeline-image-add-icon');
+addIcon.innerHTML =
+  '<i class="fa-solid fa-camera" aria-hidden="true"></i>';
+const addText  = textEl('span', 'إضافة صور للحدث', 'event-media-add-text timeline-image-add-text');
 
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
@@ -814,7 +857,7 @@ const extraRow = el('div', 'event-extra-row timeline-extra-row');
 // حقول الوسوم
 const tagsField = el('div', 'event-meta-field timeline-meta-field');
 const tagsLabelBox = el('div', 'event-meta-label timeline-meta-label');
-tagsLabelBox.innerHTML = '<span class="event-meta-icon timeline-meta-icon">🏷️</span> وسوم الحدث';
+tagsLabelBox.innerHTML =   '<span class="event-meta-icon timeline-meta-icon"><i class="fa-solid fa-tags" aria-hidden="true"></i></span> وسوم الحدث';
 const tagsInput = document.createElement('input');
 tagsInput.type = 'text';
 tagsInput.className = 'event-tags-input';
@@ -826,7 +869,7 @@ tagsField.append(tagsLabelBox, tagsInput);
 // حقل المرجع/المصدر
 const sourceField = el('div', 'event-meta-field timeline-meta-field');
 const sourceLabelBox = el('div', 'event-meta-label timeline-meta-label');
-sourceLabelBox.innerHTML = '<span class="event-meta-icon timeline-meta-icon">📚</span> المرجع / المصدر';
+sourceLabelBox.innerHTML =   '<span class="event-meta-icon timeline-meta-icon"><i class="fa-solid fa-book" aria-hidden="true"></i></span> المرجع / المصدر';
 const sourceInput = document.createElement('input');
 sourceInput.type = 'text';
 sourceInput.className = 'event-source-input';
@@ -838,7 +881,7 @@ sourceField.append(sourceLabelBox, sourceInput);
 // حقل درجة اليقين
 const certaintyField = el('div', 'event-meta-field timeline-meta-field');
 const certaintyLabelBox = el('div', 'event-meta-label timeline-meta-label');
-certaintyLabelBox.innerHTML = '<span class="event-meta-icon timeline-meta-icon">✨</span> درجة اليقين';
+certaintyLabelBox.innerHTML =   '<span class="event-meta-icon timeline-meta-icon"><i class="fa-solid fa-circle-question" aria-hidden="true"></i></span> درجة اليقين';
 const certaintySelect = document.createElement('select');
 certaintySelect.className = 'event-certainty-select';
 certaintySelect.name = `event_certainty_${ev.id}`;
@@ -867,16 +910,28 @@ body.append(metaRow, desc, extraRow, mediaWrap, pinWrap);
     card.appendChild(editBox);
 
     // ===== أزرار القدم =====
-    const footer   = el('div', 'event-footer');
-    const saveBtn  = textEl('button', 'تعديل', 'event-save-btn');
-    const cancelBtn = textEl('button', 'إلغاء التعديل', 'event-cancel-btn');
-    const delBtn   = textEl('button', 'حذف الحدث', 'event-delete-btn');
+const footer   = el('div', 'event-footer');
 
-    saveBtn.type = cancelBtn.type = delBtn.type = 'button';
-    cancelBtn.style.display = 'none';
+const saveBtn  = el('button', 'event-save-btn');
+const cancelBtn = el('button', 'event-cancel-btn');
+const delBtn   = el('button', 'event-delete-btn');
 
-    footer.append(saveBtn, cancelBtn, delBtn);
-    card.appendChild(footer);
+saveBtn.type = cancelBtn.type = delBtn.type = 'button';
+
+// إلغاء التعديل
+cancelBtn.innerHTML =
+  '<i class="fa-solid fa-rotate-left" aria-hidden="true"></i>' +
+  '<span>إلغاء التعديل</span>';
+cancelBtn.style.display = 'none';
+
+// حذف الحدث
+delBtn.innerHTML =
+  '<i class="fa-solid fa-trash-can" aria-hidden="true"></i>' +
+  '<span>حذف الحدث</span>';
+
+footer.append(saveBtn, cancelBtn, delBtn);
+card.appendChild(footer);
+
 
 function fillEditFromEvent() {
   select.value = ev.type || 'custom';
@@ -903,23 +958,36 @@ function fillEditFromEvent() {
   recomputeDirty();
 }
 
+function updateSaveBtnLabel(){
+  if (!isEditing){
+    // وضع المعاينة: زر "تعديل"
+    saveBtn.innerHTML =
+      '<i class="fa-solid fa-pen-to-square" aria-hidden="true"></i>' +
+      '<span>تعديل</span>';
+  } else if (!isDirty){
+    // وضع التعديل بدون تغييرات: زر "إغلاق"
+    saveBtn.innerHTML =
+      '<i class="fa-solid fa-xmark" aria-hidden="true"></i>' +
+      '<span>إغلاق</span>';
+  } else {
+    // وضع التعديل مع تغييرات: زر "حفظ"
+    saveBtn.innerHTML =
+      '<i class="fa-solid fa-floppy-disk" aria-hidden="true"></i>' +
+      '<span>حفظ</span>';
+  }
+}
 
-    function applyMode() {
-      card.classList.toggle('event-card--edit', isEditing);
-      card.classList.toggle('event-card--preview', !isEditing);
-      previewBox.style.display = isEditing ? 'none' : '';
-      editBox.style.display = isEditing ? '' : 'none';
+function applyMode() {
+  card.classList.toggle('event-card--edit', isEditing);
+  card.classList.toggle('event-card--preview', !isEditing);
+  previewBox.style.display = isEditing ? 'none' : '';
+  editBox.style.display = isEditing ? '' : 'none';
 
-      if (!isEditing) {
-        saveBtn.textContent = 'تعديل';
-      } else if (!isDirty) {
-        saveBtn.textContent = 'إغلاق';
-      } else {
-        saveBtn.textContent = 'حفظ';
-      }
+  // تحديث أيقونة/نص زر الحفظ/التعديل/الإغلاق
+  updateSaveBtnLabel();
 
-      cancelBtn.style.display = isEditing && isDirty ? '' : 'none';
-    }
+  cancelBtn.style.display = isEditing && isDirty ? '' : 'none';
+}
 
 function recomputeDirty() {
   const curType   = (select.value || 'custom').trim();
@@ -1207,7 +1275,7 @@ certaintySelect.addEventListener('change', recomputeDirty);
         lastYear = year;
       }
 
-  const item = el('li', 'timeline-item');
+const item = el('li', 'timeline-item');
 item.dataset.eventId = ev.id;
 item.dataset.type = ev.type || 'custom';
 
@@ -1215,11 +1283,12 @@ if (ev.pinned){
   item.classList.add('is-pinned');
 }
 
-      const marker = el('div', 'timeline-marker');
-      marker.textContent = meta.icon;
+const marker = el('div', 'timeline-marker');
+const markerIcon = el('span', 'timeline-marker-emoji');
+markerIcon.textContent = meta.emoji || '⭐';
+marker.appendChild(markerIcon);
 
-      const content = el('div', 'timeline-content');
-
+const content = el('div', 'timeline-content');
       // تاريخ الحدث في أعلى الكتلة
       const dateLabel = textEl(
         'div',
@@ -1227,12 +1296,15 @@ if (ev.pinned){
         'timeline-date'
       );
 
-      const titleText = ev.title || meta.label;
-      const titleRow  = el('div', 'timeline-title-row');
-      const iconSpan  = textEl('span', meta.icon, 'timeline-title-icon');
-      const titleSpan = textEl('span', titleText, 'timeline-title');
+const titleText = ev.title || meta.label;
+const titleRow  = el('div', 'timeline-title-row');
+const iconSpan  = el('span', 'timeline-title-icon');
+const iconEmoji = el('span', 'timeline-title-emoji');
+iconEmoji.textContent = meta.emoji || '⭐';
+iconSpan.appendChild(iconEmoji);
+const titleSpan = textEl('span', titleText, 'timeline-title');
 
-      titleRow.append(iconSpan, titleSpan);
+titleRow.append(iconSpan, titleSpan);
 
       // بادج نوع الحدث داخل عنصر الخط الزمني:
       // نضيفه فقط إذا كان هناك عنوان مخصّص حتى لا يتكرّر نفس النص

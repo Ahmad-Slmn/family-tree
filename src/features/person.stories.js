@@ -257,16 +257,30 @@ export function createStoriesSection(person, handlers = {}) {
     (handlers.getSortMode && handlers.getSortMode()) || 'latest';
   sortStories(person, sortMode);
 
-const root = el('section', 'bio-section bio-section-stories');
-const titleEl = textEl('h3', 'القصص والمذكّرات');
-const countBadge = el('span', 'stories-count-badge');
-titleEl.append(' ', countBadge);
-root.appendChild(titleEl);
+  const root = el('section', 'bio-section bio-section-stories');
 
-function updateStoriesCountBadge(){
-  const n = (person.stories || []).length;
-  countBadge.textContent = n ? `(${n})` : '(لا توجد قصص بعد)';
-}
+  const titleEl = el('h3');
+  const iconEl = el('i');
+  iconEl.className = 'fa-solid fa-book-open-reader';
+  iconEl.setAttribute('aria-hidden', 'true');
+
+  const titleText = textEl('span', 'القصص والمذكّرات');
+  const countBadge = el('span', 'stories-count-badge');
+
+  titleEl.append(iconEl, ' ', titleText, ' ', countBadge);
+  root.appendChild(titleEl);
+
+  // الوصف مباشرة بعد العنوان
+  const metaEl = el('div', 'stories-meta');
+metaEl.textContent =
+  'حوِّل الذكريات إلى قصص حيّة تحفظ أثره للأبناء والأحفاد؛ دوّن المواقف المؤثّرة والطرائف والنجاحات والتحوّلات المهمّة، ثم أرفق الصور المناسبة ليبقى تاريخاً واضحًا وملهمًا لكل من يطالع هذه السيرة.';
+
+  root.appendChild(metaEl);
+
+  function updateStoriesCountBadge() {
+    const n = (person.stories || []).length;
+    countBadge.textContent = n ? `(${n})` : '(لا توجد قصص بعد)';
+  }
 
   const header = el('div', 'stories-header');
   const tools = el('div', 'stories-tools');
@@ -303,28 +317,31 @@ function updateStoriesCountBadge(){
   header.appendChild(tools);
   root.appendChild(header);
 
-const metaEl = el('div', 'stories-meta');
-metaEl.textContent =
-  'دوّن المواقف والذكريات المهمّة في حياة هذا الشخص (مواقف طريفة، أخبار العمل، الانتقال، مواقف مؤثّرة...)، ثم اعرضها كنصوص منظّمة مع صور مرفقة.';
-root.appendChild(metaEl);
-
   const list = el('div', 'stories-list');
   root.appendChild(list);
 
   function updateAddButtonLabel() {
     ensureStories(person);
     const count = person.stories.length || 0;
+
     if (count === 0) {
-      addBtn.textContent = 'إضافة أول قصة';
+      addBtn.innerHTML =
+        '<i class="fa-solid fa-plus" aria-hidden="true"></i> ' +
+        '<span>إضافة أول قصة</span>';
       addBtn.title = 'ابدأ بتوثيق أول موقف أو ذكرى لهذا الشخص';
     } else if (count === 1) {
-      addBtn.textContent = 'إضافة قصة جديدة';
+      addBtn.innerHTML =
+        '<i class="fa-solid fa-plus" aria-hidden="true"></i> ' +
+        '<span>إضافة قصة جديدة</span>';
       addBtn.title = 'هناك قصة واحدة محفوظة حتى الآن';
     } else {
-      addBtn.textContent = 'إضافة قصة جديدة';
+      addBtn.innerHTML =
+        '<i class="fa-solid fa-plus" aria-hidden="true"></i> ' +
+        '<span>إضافة قصة جديدة</span>';
       addBtn.title = `هناك ${count} قصص محفوظة حتى الآن`;
     }
   }
+
   function rebuildStoryTypeFilterOptions(){
     ensureStories(person);
     const stories = person.stories || [];
@@ -542,10 +559,14 @@ previewText.textContent =
             })()
           : null;
 
-      const previewImagesWrap = el('div', 'story-preview-images');
-      const sliderBtn = el('button', 'story-images-slider-btn');
-      sliderBtn.type = 'button';
-      sliderBtn.textContent = 'عرض الصور كشرائح';
+const previewImagesWrap = el('div', 'story-preview-images');
+
+const sliderBtn = el('button', 'story-images-slider-btn');
+sliderBtn.type = 'button';
+sliderBtn.innerHTML =
+  '<i class="fa-solid fa-images" aria-hidden="true"></i> ' +
+  '<span>عرض الصور كشرائح</span>';
+
       sliderBtn.addEventListener('click', () => {
         if (!original.images || original.images.length < 2) return;
         openImageSlider(original.images, 0);
@@ -592,15 +613,16 @@ previewText.textContent =
 
       renderPreviewImages();
 
-      previewBox.append(
-        previewMeta,
-        badgesWrap,
-        previewTitle,
-        previewText,
-        tagsWrap
-      );
-      if (notePreview) previewBox.appendChild(notePreview);
-      previewBox.append(previewImagesWrap, sliderBtn);
+ previewBox.append(
+  previewTitle,
+  previewMeta,
+  badgesWrap,
+  previewText,
+  tagsWrap
+);
+if (notePreview) previewBox.appendChild(notePreview);
+previewBox.append(previewImagesWrap, sliderBtn);
+
             card.appendChild(previewBox);
 
       // ===== التحرير =====
@@ -643,7 +665,7 @@ previewText.textContent =
 
           const typeField = el('div', 'story-meta-field');
       const typeLabelBox = el('div', 'story-meta-label');
-      typeLabelBox.innerHTML = '<span class="story-meta-icon">🏷️</span> نوع القصة';
+      typeLabelBox.innerHTML =   '<span class="story-meta-icon"><i class="fa-solid fa-tag" aria-hidden="true"></i></span> نوع القصة';
       typeField.append(typeLabelBox, typeSelect);
 
       // حقل تاريخ الحدث
@@ -654,7 +676,7 @@ previewText.textContent =
 
       const eventField = el('div', 'story-meta-field');
       const eventLabel = el('div', 'story-meta-label');
-      eventLabel.innerHTML = '<span class="story-meta-icon">📅</span> تاريخ الحدث';
+      eventLabel.innerHTML =   '<span class="story-meta-icon"><i class="fa-solid fa-calendar-day" aria-hidden="true"></i></span> تاريخ الحدث';
       eventField.append(eventLabel, eventInput);
 
       // حقل المكان
@@ -666,7 +688,7 @@ previewText.textContent =
 
       const placeField = el('div', 'story-meta-field');
       const placeLabel = el('div', 'story-meta-label');
-      placeLabel.innerHTML = '<span class="story-meta-icon">📍</span> المكان';
+      placeLabel.innerHTML =   '<span class="story-meta-icon"><i class="fa-solid fa-location-dot" aria-hidden="true"></i></span> المكان';
       placeField.append(placeLabel, placeInput);
 
       metaRow.append(typeField, eventField, placeField);
@@ -704,10 +726,11 @@ previewText.textContent =
       const imagesThumbs = el('div', 'story-images-thumbs');
 
       // زر إضافة الصور + حقل الملف
-      const addImageLabel = el('label', 'story-image-add-btn');
-      const addImageIcon = el('span', 'story-image-add-icon');
-      addImageIcon.textContent = '📷';
-      const addImageText = el('span', 'story-image-add-text');
+const addImageLabel = el('label', 'story-image-add-btn');
+const addImageIcon = el('span', 'story-image-add-icon');
+addImageIcon.innerHTML =
+  '<i class="fa-solid fa-camera" aria-hidden="true"></i>';
+const addImageText = el('span', 'story-image-add-text');
 
       const fileInput = el('input');
       fileInput.type = 'file';
@@ -856,27 +879,57 @@ function setupImagesSortable() {
       editBox.appendChild(body);
       card.appendChild(editBox);
 
-      const footer = el('div', 'story-footer');
-      const saveBtn = el('button', 'story-save-btn');
-      saveBtn.type = 'button';
-      const cancelBtn = el('button', 'story-cancel-btn');
-      cancelBtn.type = 'button';
-      cancelBtn.textContent = 'إلغاء التعديل';
-      const delBtn = el('button', 'story-delete-btn');
-      delBtn.type = 'button';
-      delBtn.textContent = 'حذف القصة';
-      footer.append(saveBtn, cancelBtn, delBtn);
-      card.appendChild(footer);
+const footer = el('div', 'story-footer');
+const saveBtn = el('button', 'story-save-btn');
+saveBtn.type = 'button';
 
-      function applyMode() {
-        card.classList.toggle('story-card--edit', isEditing);
-        card.classList.toggle('story-card--preview', !isEditing);
-        if (dates) dates.style.display = isEditing ? 'none' : '';
-        if (!isEditing) saveBtn.textContent = 'تعديل';
-        else if (!isDirty) saveBtn.textContent = 'إغلاق';
-        else saveBtn.textContent = 'حفظ';
-        cancelBtn.style.display = isEditing && isDirty ? '' : 'none';
-      }
+const cancelBtn = el('button', 'story-cancel-btn');
+cancelBtn.type = 'button';
+cancelBtn.innerHTML =
+  '<i class="fa-solid fa-arrow-rotate-left" aria-hidden="true"></i> ' +
+  '<span>إلغاء التعديل</span>';
+
+const delBtn = el('button', 'story-delete-btn');
+delBtn.type = 'button';
+delBtn.innerHTML =
+  '<i class="fa-solid fa-trash-can" aria-hidden="true"></i> ' +
+  '<span>حذف القصة</span>';
+
+footer.append(saveBtn, cancelBtn, delBtn);
+card.appendChild(footer);
+
+// دالة مساعدة لتغيير نص/أيقونة زر الحفظ حسب الحالة
+function setSaveBtnLabel(state) {
+  if (!state || state === 'edit') {
+    saveBtn.innerHTML =
+      '<i class="fa-solid fa-pen-to-square" aria-hidden="true"></i> ' +
+      '<span>تعديل</span>';
+  } else if (state === 'close') {
+    saveBtn.innerHTML =
+      '<i class="fa-solid fa-circle-xmark" aria-hidden="true"></i> ' +
+      '<span>إغلاق</span>';
+  } else if (state === 'save') {
+    saveBtn.innerHTML =
+      '<i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> ' +
+      '<span>حفظ</span>';
+  }
+}
+
+  function applyMode() {
+  card.classList.toggle('story-card--edit', isEditing);
+  card.classList.toggle('story-card--preview', !isEditing);
+  if (dates) dates.style.display = isEditing ? 'none' : '';
+
+  if (!isEditing) {
+    setSaveBtnLabel('edit');
+  } else if (!isDirty) {
+    setSaveBtnLabel('close');
+  } else {
+    setSaveBtnLabel('save');
+  }
+
+  cancelBtn.style.display = isEditing && isDirty ? '' : 'none';
+}
 
       function recomputeDirty() {
         const curTitle = titleInput.value.trim();

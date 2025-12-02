@@ -720,7 +720,9 @@ export function createImageViewerOverlay({
   navClass      = 'image-viewer-nav',
   arrowPrevClass= 'image-viewer-arrow image-viewer-arrow-prev',
   arrowNextClass= 'image-viewer-arrow image-viewer-arrow-next',
-  counterClass  = 'image-viewer-counter'
+  counterClass  = 'image-viewer-counter',
+  // جديد (اختياري): كلاس زر الحفظ
+  saveBtnClass  = 'image-viewer-save'
 } = {}) {
 
   // لو العارض موجود مسبقًا ومعه API، نعيده مباشرة
@@ -757,12 +759,26 @@ export function createImageViewerOverlay({
   const counter = document.createElement('div');
   counter.className = counterClass;
 
+  // زر حفظ الصورة (جديد)
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.className = saveBtnClass;
+  saveBtn.innerHTML =
+    '<i class="fa-solid fa-download" aria-hidden="true"></i><span>حفظ الصورة</span>';
+
   const nextBtn = document.createElement('button');
   nextBtn.type = 'button';
   nextBtn.className = arrowNextClass;
   nextBtn.textContent = '‹';
 
-  nav.append(nextBtn, counter, prevBtn);
+  // حاوية وسطية للعداد + زر الحفظ
+  const centerWrap = document.createElement('div');
+  centerWrap.className = 'image-viewer-center';
+  centerWrap.append(counter, saveBtn);
+
+  // مع RTL: nextBtn يكون يمين، ثم الوسط، ثم prevBtn يسار
+  nav.append(nextBtn, centerWrap, prevBtn);
+
   dialog.append(closeBtn, img, nav);
   overlay.append(backdrop, dialog);
   document.body.appendChild(overlay);
@@ -821,6 +837,23 @@ export function createImageViewerOverlay({
     updateUI();
   }
 
+  // حفظ الصورة الحالية (جديد)
+  function downloadCurrentImage() {
+    if (!urls.length) return;
+    const url = urls[index];
+    if (!url) return;
+
+    const a = document.createElement('a');
+    a.href = url;
+
+    const filename = `image-${index + 1}`;
+    a.download = filename;
+
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
   // أي نقرة داخل شريط التنقل: نحدد الزر ديناميكياً (يدعم القصص/الخط الزمني/السيرة/المصادر)
   nav.addEventListener('click', (e) => {
     const btn = e.target.closest('button');
@@ -847,6 +880,12 @@ export function createImageViewerOverlay({
     e.stopPropagation();
     if (isPrev) goPrev();
     else if (isNext) goNext();
+  });
+
+  // حدث خاص بزر الحفظ (لا يمر عبر لوجيك الأسهم)
+  saveBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    downloadCurrentImage();
   });
 
   backdrop.addEventListener('click', closeViewer);
