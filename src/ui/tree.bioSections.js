@@ -918,4 +918,3 @@ export function getAvailableBioModes(bio, person, family){
 
   return modes;
 }
-

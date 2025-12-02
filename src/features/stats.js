@@ -660,27 +660,43 @@ function renderStats(){
     <section class="filters-wrap">
       <div class="stats-toolbar" id="stFilters">
         <div class="stats-field">
-          <label for="fScope">النطاق</label>
+          <label for="fScope">
+            <i class="fa-solid fa-layer-group" aria-hidden="true"></i>
+            <span>النطاق</span>
+          </label>
           <select id="fScope" class="stats-select"></select>
         </div>
 
         <div class="stats-field">
-          <label for="fSearch">بحث العائلة</label>
+          <label for="fSearch">
+            <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+            <span>بحث العائلة</span>
+          </label>
           <input id="fSearch" class="stats-input" type="search" placeholder="اكتب اسم العائلة">
         </div>
 
         <div class="stats-field">
-          <label for="fClan">العشيرة</label>
+          <label for="fClan">
+            <i class="fa-solid fa-users" aria-hidden="true"></i>
+            <span>العشيرة</span>
+          </label>
           <select id="fClan" class="stats-select"><option value="">الكل</option></select>
         </div>
 
-        <div class="stats-field">
-          <label for="fMin">حد أدنى للأشخاص</label>
+            <div class="stats-field">
+          <label for="fMin">
+            <i class="fa-solid fa-user-group" aria-hidden="true"></i>
+            <span>حد أدنى للأشخاص</span>
+          </label>
           <input id="fMin" class="stats-input" type="number" min="0" step="1" value="0">
         </div>
 
+
         <div class="stats-field">
-          <label for="fSort">ترتيب</label>
+          <label for="fSort">
+            <i class="fa-solid fa-arrow-down-wide-short" aria-hidden="true"></i>
+            <span>ترتيب</span>
+          </label>
           <select id="fSort" class="stats-select">
             <option value="total">الإجمالي</option>
             <option value="sons">الأبناء</option>
@@ -689,15 +705,22 @@ function renderStats(){
         </div>
 
         <div class="stats-field">
-          <label for="fTopN">عدد الأعمدة</label>
+          <label for="fTopN">
+            <i class="fa-solid fa-table-columns" aria-hidden="true"></i>
+            <span>عدد الأعمدة</span>
+          </label>
           <select id="fTopN" class="stats-select">
             <option>10</option><option selected>20</option><option>30</option><option>50</option>
           </select>
         </div>
 
-        <button id="btnExportCsv" class="btn primary" type="button" title="تصدير CSV">تصدير CSV</button>
+        <button id="btnExportCsv" class="btn primary" type="button" title="تصدير CSV">
+          <i class="fa-solid fa-file-export" aria-hidden="true"></i>
+          <span>تصدير CSV</span>
+        </button>
       </div>
     </section>
+
 
     <section class="chart-wrap">
       <header class="chart-header"><h4>مخطط مكدّس لكل عائلة</h4></header>
@@ -766,26 +789,38 @@ if (selScope){
     return (scopeVal !== 'all') ? computeStats(scopeVal) : sAll;
   };
 
-  // بطاقات الملخص + شريط أبناء/بنات (لا تتأثر بالبحث النصي، فقط بالنطاق)
+  // بطاقات الملخص + شريط أبناء/بنات
   const renderSummary = (stats)=>{
     const grid = byId('stGrid');
-    grid.innerHTML = [
-      ['عدد العائلات', stats.familiesCount],
-      ['جميع الأشخاص', stats.persons],
-      ['الزوجات', stats.wives],
-      ['الأبناء', stats.sons],
-      ['البنات', stats.daughters],
-      ['غير محدد', stats.unknown],
-      ['متوسط الأبناء/عائلة', stats.avgChildren],
-      ['متوسط الأبناء/جذر فعّال', stats.avgChildrenPerRoot],
-      ['توفر الميلاد', `${pct(stats.persons - stats.missing.birthInfo, stats.persons)}%`],
-      ['توفر العشيرة', `${pct(stats.persons - stats.missing.clan, stats.persons)}%`],
-      ['توفر الصورة', `${pct(stats.persons - stats.missing.photoAny, stats.persons)}%`]
-    ].map(([k,v]) => `<div class="stat-card"><h4>${k}</h4><div class="stat-value">${v}</div></div>`).join('');
+
+    // عنوان → أيقونة مناسبة من Font Awesome 7 (fa-solid)
+    const items = [
+      ['عدد العائلات',          stats.familiesCount,       'fa-people-roof'],          // عائلات
+      ['جميع الأشخاص',          stats.persons,             'fa-users'],                // أشخاص
+      ['الزوجات',               stats.wives,               'fa-person-dress'],         // زوجات
+      ['الأبناء',               stats.sons,                'fa-person'],               // أبناء
+      ['البنات',                stats.daughters,           'fa-person-dress'],         // بنات
+      ['غير محدد',              stats.unknown,             'fa-user-large-slash'],     // غير محدد
+      ['متوسط الأبناء/عائلة',   stats.avgChildren,         'fa-chart-column'],         // متوسط/إحصاء
+      ['متوسط الأبناء/جذر فعّال', stats.avgChildrenPerRoot,'fa-chart-line'],          // متوسط/منحنى
+      ['توفر الميلاد',          `${pct(stats.persons - stats.missing.birthInfo, stats.persons)}%`, 'fa-cake-candles'],  // ميلاد
+      ['توفر العشيرة',          `${pct(stats.persons - stats.missing.clan, stats.persons)}%`,       'fa-people-group'],  // عشيرة
+      ['توفر الصورة',           `${pct(stats.persons - stats.missing.photoAny, stats.persons)}%`,   'fa-image']          // صورة
+    ];
+
+    grid.innerHTML = items.map(([label, value, icon]) => `
+      <div class="stat-card">
+        <h4>
+          <i class="fa-solid ${icon}" aria-hidden="true"></i>
+          <span>${label}</span>
+        </h4>
+        <div class="stat-value">${value}</div>
+      </div>
+    `).join('');
 
     requestAnimationFrame(()=> drawBars(cvBar, [
       { label:'أبناء',  value:stats.sons },
-      { label:'بنات',  value:stats.daughters }
+      { label:'بنات',   value:stats.daughters }
     ]));
   };
 

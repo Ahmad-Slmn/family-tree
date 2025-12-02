@@ -141,9 +141,10 @@
   color:color-mix(in oklab,var(--text-main)90%,#000);
 }
 .source-badge--files{
-  background:color-mix(in oklab,var(--surface-border)14%,#fff);
-  color:color-mix(in oklab,var(--text-main)88%,#000);
+  background:color-mix(in oklab,var(--accent-soft) 45%,var(--badge-bg));
+  color:color-mix(in oklab,var(--text-main) 90%,#000);
 }
+
 .source-badge--confidence{
   background:color-mix(in oklab,var(--panel-bg)93%,#fff);
   color:color-mix(in oklab,var(--text-main)92%,#000);
@@ -507,7 +508,7 @@
   padding:.24rem .55rem;
   border-radius:.6rem;
   border:1px solid color-mix(in oklab,var(--surface-border)90%,transparent);
-  background:color-mix(in oklab,var(--panel-bg)97%,#fff);
+  background: transparent;
   font-size:.8rem;
   color:var(--text-main);
   box-shadow:0 .05rem .18rem rgba(0,0,0,.03);
@@ -519,7 +520,6 @@
   outline:none;
   border-color:var(--modal-primary);
   box-shadow:0 0 0 .08rem color-mix(in oklab,var(--modal-primary)40%,transparent);
-  background:#fff;
 }
 
 /* فلتر "الوثائق الأساسية فقط" */

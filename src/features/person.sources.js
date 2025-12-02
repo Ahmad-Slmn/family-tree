@@ -306,7 +306,7 @@ root.appendChild(titleEl);
 // الوصف مباشرة بعد العنوان
 const metaEl = el('div', 'sources-meta');
 metaEl.textContent =
-  'امنح السيرة العائلية قيمة أوثق بجمع كل وثيقة تدعم معلومة أو تاريخًا أو حدثًا في حياة هذا الشخص؛ من شهادات الميلاد والزواج والهوية إلى صكوك الميراث والملكية، وصولًا إلى الصور والوثائق القديمة التي تحفظ الإرث العائلي عبر الزمن.';
+  'امنح السيرة العائلية قيمة أوثق بجمع كل وثيقة تدعم أي معلومة أو تاريخ أو حدث، من شهادات الميلاد والزواج والهوية إلى صكوك الميراث والملكية، وصولًا إلى الصور والوثائق القديمة التي تحفظ الإرث العائلي عبر الزمن.';
 
 root.appendChild(metaEl);
 
@@ -1050,6 +1050,42 @@ editIcon.innerHTML = '<i class="fa-solid fa-pen-to-square" aria-hidden="true"></
       verifiedAtInput.name = `source_verified_at_${src.id}`;
       verifiedAtInput.value = original.verifiedAt || '';
 
+      // كتلة التوثيق
+      const verifiedWrap  = el('div', 'source-details-field source-details-field--full');
+      const verifiedLabel = el('div', 'source-details-label');
+      verifiedLabel.innerHTML =
+        '<span class="source-details-icon"><i class="fa-solid fa-file-circle-check" aria-hidden="true"></i></span> حالة التحقق من الوثيقة';
+
+      // سطر اختيار "موثَّق"
+      const verifiedInlineTop   = el('div', 'source-verified-inline');
+      const verifiedChkLabel    = el('label', 'source-verified-check-label');
+      verifiedChkLabel.append(
+        verifiedCheckbox,
+        textEl('span', 'تم التحقق من صحة هذا المصدر')
+      );
+      verifiedInlineTop.append(verifiedChkLabel);
+
+      // حقل "تم التوثيق بواسطة"
+      const verifiedByWrap   = el('div', 'source-details-field');
+      const verifiedByLabel  = el('div', 'source-details-label');
+      verifiedByLabel.innerHTML =
+        '<span class="source-details-icon"><i class="fa-solid fa-user-check" aria-hidden="true"></i></span> تم التوثيق بواسطة';
+      verifiedByWrap.append(verifiedByLabel, verifiedByInput);
+
+      // حقل "تاريخ التوثيق"
+      const verifiedAtWrap   = el('div', 'source-details-field');
+      const verifiedAtLabel  = el('div', 'source-details-label');
+      verifiedAtLabel.innerHTML =
+        '<span class="source-details-icon"><i class="fa-solid fa-calendar-check" aria-hidden="true"></i></span> تاريخ التوثيق';
+      verifiedAtWrap.append(verifiedAtLabel, verifiedAtInput);
+
+      verifiedWrap.append(
+        verifiedLabel,
+        verifiedInlineTop,
+        verifiedByWrap,
+        verifiedAtWrap
+      );
+
       // ملاحظات / وصف
       const noteInput = el('textarea', 'source-note-input');
 
@@ -1072,8 +1108,8 @@ editIcon.innerHTML = '<i class="fa-solid fa-pen-to-square" aria-hidden="true"></
       const filesThumbs = el('div', 'source-files-thumbs');
 
       const addFileLabel = el('label', 'source-file-add-btn');
-     const addFileIcon  = el('span', 'source-file-add-icon');
-addFileIcon.innerHTML = '<i class="fa-solid fa-file-circle-plus" aria-hidden="true"></i>';
+      const addFileIcon  = el('span', 'source-file-add-icon');
+      addFileIcon.innerHTML = '<i class="fa-solid fa-file-circle-plus" aria-hidden="true"></i>';
 
       const addFileText  = el('span', 'source-file-add-text');
       addFileText.textContent = 'إرفاق صور للوثيقة';
@@ -1142,7 +1178,7 @@ addFileIcon.innerHTML = '<i class="fa-solid fa-file-circle-plus" aria-hidden="tr
         currentFiles.forEach((ref, idx)=>{
           const thumb = el('div', 'source-file-thumb');
           thumb.dataset.ref = ref;
-classifyFileThumb(thumb, ref);
+          classifyFileThumb(thumb, ref);
 
           const imgEl = el('img');
           imgEl.alt = 'صورة/وثيقة مرفقة';
@@ -1206,38 +1242,38 @@ classifyFileThumb(thumb, ref);
 
       const forFieldWrap = el('div', 'source-details-field');
       const forFieldLabel = el('div', 'source-details-label');
-      forFieldLabel.innerHTML =   '<span class="source-details-icon"><i class="fa-solid fa-bullseye" aria-hidden="true"></i></span> هذه الوثيقة متعلقة بـ';
+      forFieldLabel.innerHTML = '<span class="source-details-icon"><i class="fa-solid fa-bullseye" aria-hidden="true"></i></span> هذه الوثيقة متعلقة بـ';
 
       forFieldWrap.append(forFieldLabel, forFieldInput);
 
       const issuerWrap = el('div', 'source-meta-field');
 
       const issuerLabel = el('div', 'source-details-label');
-      issuerLabel.innerHTML =   '<span class="source-details-icon"><i class="fa-solid fa-landmark" aria-hidden="true"></i></span> الجهة المصدرة';
+      issuerLabel.innerHTML = '<span class="source-details-icon"><i class="fa-solid fa-landmark" aria-hidden="true"></i></span> الجهة المصدرة';
 
       issuerWrap.append(issuerLabel, issuerInput);
 
       const refWrap = el('div', 'source-meta-field');
       const refLabel = el('div', 'source-details-label');
-      refLabel.innerHTML =   '<span class="source-details-icon"><i class="fa-solid fa-hashtag" aria-hidden="true"></i></span> رقم الصك / رقم الوثيقة';
+      refLabel.innerHTML = '<span class="source-details-icon"><i class="fa-solid fa-hashtag" aria-hidden="true"></i></span> رقم الصك / رقم الوثيقة';
 
       refWrap.append(refLabel, referenceInput);
 
       const pagesWrap = el('div', 'source-details-field');
       const pagesLabel = el('div', 'source-details-label');
-      pagesLabel.innerHTML =   '<span class="source-details-icon"><i class="fa-solid fa-file-lines" aria-hidden="true"></i></span> عدد الصفحات (اختياري)';
+      pagesLabel.innerHTML = '<span class="source-details-icon"><i class="fa-solid fa-file-lines" aria-hidden="true"></i></span> عدد الصفحات (اختياري)';
 
       pagesWrap.append(pagesLabel, pagesInput);
 
       const noteWrap = el('div', 'source-details-field source-details-field--full');
       const noteLabel = el('div', 'source-details-label');
-      noteLabel.innerHTML =   '<span class="source-details-icon"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></span> ملخص محتوى الوثيقة';
+      noteLabel.innerHTML = '<span class="source-details-icon"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></span> ملخص محتوى الوثيقة';
 
       noteWrap.append(noteLabel, noteInput);
 
       const tagsWrapField = el('div', 'source-details-field source-details-field--full');
       const tagsLabel = el('div', 'source-details-label');
-      tagsLabel.innerHTML =   '<span class="source-details-icon"><i class="fa-solid fa-tag" aria-hidden="true"></i></span> وسوم الوثيقة';
+      tagsLabel.innerHTML = '<span class="source-details-icon"><i class="fa-solid fa-tag" aria-hidden="true"></i></span> وسوم الوثيقة';
 
       tagsWrapField.append(tagsLabel, tagsInput);
 
@@ -1258,30 +1294,26 @@ classifyFileThumb(thumb, ref);
       // درجة الاعتماد
       const confWrap = el('div', 'source-details-field');
       const confLabel = el('div', 'source-details-label');
-      confLabel.innerHTML =   '<span class="source-details-icon"><i class="fa-solid fa-circle-check" aria-hidden="true"></i></span> درجة الاعتماد على المصدر';
+      confLabel.innerHTML = '<span class="source-details-icon"><i class="fa-solid fa-circle-check" aria-hidden="true"></i></span> درجة الاعتماد على المصدر';
       confWrap.append(confLabel, confidenceSelect);
 
       // مستوى السرية
       const confPrivWrap = el('div', 'source-details-field');
       const confPrivLabel = el('div', 'source-details-label');
-      confPrivLabel.innerHTML =   '<span class="source-details-icon"><i class="fa-solid fa-lock" aria-hidden="true"></i></span> مستوى السرية / الخصوصية';
+      confPrivLabel.innerHTML = '<span class="source-details-icon"><i class="fa-solid fa-lock" aria-hidden="true"></i></span> مستوى السرية / الخصوصية';
 
       confPrivWrap.append(confPrivLabel, confidentialitySelect);
 
-      // التوثيق
-      const verifiedWrap = el('div', 'source-details-field source-details-field--full');
-      const verifiedLabel = el('div', 'source-details-label');
-      verifiedLabel.innerHTML =   '<span class="source-details-icon"><i class="fa-solid fa-file-circle-check" aria-hidden="true"></i></span> حالة التحقق من الوثيقة';
-    const verifiedInline = el('div', 'source-verified-inline');
-const verifiedChkLabel = el('label', 'source-verified-check-label');
-
-      verifiedChkLabel.append(verifiedCheckbox, textEl('span', 'تم التحقق من صحة هذا المصدر'));
-      verifiedInline.append(
-        verifiedChkLabel,
-        verifiedByInput,
-        verifiedAtInput
+      // تفاصيل إضافية أسفل صف الميتا
+      detailsGrid.append(
+        forFieldWrap,
+        pagesWrap,
+        confWrap,
+        confPrivWrap,
+        verifiedWrap,
+        noteWrap,
+        tagsWrapField
       );
-      verifiedWrap.append(verifiedLabel, verifiedInline);
 
       // تفاصيل إضافية أسفل صف الميتا
       detailsGrid.append(
