@@ -42,14 +42,12 @@
 .search-box .search-icon{margin-inline-end:.15rem;pointer-events:none;opacity:1}
 .search-icon-btn{border:0;cursor:pointer}
 .search-icon-btn i{pointer-events:none}
-
 .search-box input{
   flex:1;border:0;background:transparent;font-size:.98rem;letter-spacing:.01em;
   color:var(--text-main);caret-color:var(--title-color);padding-inline-start:.1rem
 }
 .search-box input:focus{outline:none}
 #quickSearch::placeholder{font-size:.90em;color:color-mix(in oklab,var(--placeholder-fg) 85%,transparent)}
-
 .search-box:focus-within{
   border-color:var(--focus-border);transform:translateY(-1px);
   box-shadow:0 0 0 3px var(--focus-ring-soft),0 10px 24px color-mix(in oklab,var(--text-main) 10%,transparent)
@@ -116,6 +114,126 @@
 }
 .family-button i{font-size:.95rem;opacity:.8}
 
+/* مبدّل العائلة كقائمة منسدلة ناعمة */
+.family-switcher{
+  position:relative;
+  display:inline-flex;
+  align-items:stretch;
+  min-width:12rem;
+  max-width:24rem;
+}
+
+/* زر الرأس (يستفيد من .family-button) */
+.family-switcher-toggle{
+  display:flex;align-items:center;justify-content:space-between;
+  width:100%;padding-inline:.6rem .7rem;gap:.4rem;
+  transition:
+    border-color var(--motion-dur) var(--motion-ease),
+    box-shadow var(--motion-dur) var(--motion-ease),
+    transform var(--motion-dur) var(--motion-ease),
+    background var(--motion-dur) var(--motion-ease),
+    color var(--motion-dur) var(--motion-ease)
+}
+.family-switcher-label{
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap
+}
+
+/* سهم صغير */
+.family-switcher-arrow{
+  margin-inline-start:.4rem;font-size:.8rem;opacity:.8;
+  transition:transform var(--motion-dur) var(--motion-ease),
+             opacity var(--motion-dur) var(--motion-ease),
+             color var(--motion-dur) var(--motion-ease)
+}
+/* الرمز الافتراضي (مغلق) */
+.family-switcher-arrow::before{content:"▾"}
+
+/* حالة الفتح: تغيير اللون + الرمز (بدون تدوير) */
+.family-switcher.is-open .family-switcher-arrow{
+  opacity:1;color:var(--title-color)
+}
+.family-switcher.is-open .family-switcher-arrow::before{content:"▴"}
+
+/* حالة الفتح: إبراز الزر */
+.family-switcher.is-open .family-switcher-toggle{
+  transform:translateY(-1px);
+  box-shadow:0 8px 20px color-mix(in oklab,var(--text-main) 12%,transparent);
+  border-color:var(--focus-border)
+}
+
+/* القائمة نفسها (الانزلاق/التلاشي) */
+.family-switcher-menu{
+  position:absolute;inset-inline:auto;inset-inline-end:0;
+  min-width:100%;width:max-content;max-width:24rem;
+  margin-top:.25rem;padding:.30rem .28rem .32rem;
+  background:var(--panel-bg,#fff);
+  border:1px solid color-mix(in oklab,var(--surface-border,#ddd) 80%,transparent);
+  border-radius:.7rem;
+  box-shadow:0 .7rem 1.6rem color-mix(in oklab,var(--text-main) 14%,transparent);
+  max-height:14rem;overflow-y:auto;
+  transform-origin:top center;transform:translateY(-6px) scaleY(.96);
+  opacity:0;visibility:hidden;pointer-events:none;
+  transition:
+    transform var(--motion-dur) var(--motion-ease),
+    opacity var(--motion-dur) var(--motion-ease),
+    visibility 0s linear var(--motion-dur);
+  will-change:transform,opacity;
+  z-index:15
+}
+
+/* عند الفتح */
+.family-switcher.is-open .family-switcher-menu{
+  opacity:1;visibility:visible;
+  transform:translateY(0) scaleY(1);
+  pointer-events:auto;transition-delay:0s,0s,0s
+}
+
+/* زر كل عائلة داخل القائمة */
+.family-switcher-btn{
+  display:flex;align-items:center;justify-content:flex-start;
+  width:100%;min-height:var(--h);text-align:right;margin:0;
+  padding:.35rem .8rem;border-radius:.55rem;
+  font-size:.9rem;background:var(--card-bg);
+  border:1px solid color-mix(in oklab,var(--surface-border) 85%,transparent);
+  box-shadow:none;
+  transition:
+    background .16s ease,
+    transform .12s ease,
+    box-shadow .16s ease,
+    border-color .16s ease;
+  white-space:nowrap
+}
+.family-switcher-btn + .family-switcher-btn{margin-top:.35rem}
+.family-switcher-btn:hover{
+  background:color-mix(in oklab,var(--chip-bg) 80%,transparent);
+  transform:translateY(-1px);
+  box-shadow:0 4px 10px rgba(0,0,0,.08)
+}
+.family-switcher-btn.is-active{
+  border-color:var(--arrow-color);
+  background:color-mix(in oklab,var(--accent-soft) 55%,var(--card-bg));
+  box-shadow:0 0 0 1px color-mix(in oklab,var(--arrow-color) 40%,transparent);
+  font-weight:700
+}
+/* تخصيص مظهر العائلة المختارة في النمط الملكي */
+.theme-royal .family-switcher-btn.is-active{
+  border-color:color-mix(in oklab,var(--arrow-color) 75%,var(--card-bg));
+  background:linear-gradient(135deg,
+    color-mix(in oklab,var(--card-bg) 80%,transparent),
+    color-mix(in oklab,var(--arrow-color) 26%,var(--card-bg))
+  );
+  box-shadow:0 0 0 1px color-mix(in oklab,var(--arrow-color) 55%,transparent);
+  color:var(--text-main);
+}
+
+/* تخصيص مظهر العائلة المختارة في النمط الداكن */
+.theme-dark .family-switcher-btn.is-active{
+  border-color:var(--ctl-ring); /* أصفر واضح ومتناسق مع باقي الواجهة */
+  background:color-mix(in oklab,var(--accent-soft) 30%,var(--card-bg));
+  box-shadow:0 0 0 1px color-mix(in oklab,var(--ctl-ring) 55%,transparent);
+  color:var(--text-main);
+}
+
 /* التاريخ والوقت */
 .date-time-display{
   height:var(--h);display:inline-flex;align-items:center;gap:.5rem;
@@ -133,22 +251,26 @@
 
 /* الحركة */
 .top-bar>*{
-  will-change:transform,opacity;animation:topbar-in var(--motion-dur) var(--motion-ease) both
+  will-change:transform,opacity;
+  animation:topbar-in var(--motion-dur) var(--motion-ease) both
 }
-.top-bar>*:nth-child(1){animation-delay:20ms}
+.top-bar>*:nth-child(1){animation-delay:20ms;z-index:99}
 .top-bar>*:nth-child(2){animation-delay:60ms}
 .top-bar>*:nth-child(3){animation-delay:100ms}
 .top-bar>*:nth-child(4){animation-delay:140ms}
-@keyframes topbar-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes topbar-in{
+  from{opacity:0;transform:translateY(-6px)}
+  to{opacity:1;transform:translateY(0)}
+}
 
 #filtersToggle{
   transition:box-shadow var(--motion-dur),transform var(--motion-dur);
   will-change:box-shadow,transform
 }
-#filtersToggle:hover, #activeFamily:hover{
+#filtersToggle:hover,#activeFamily:hover{
   box-shadow:0 6px 18px color-mix(in oklab,var(--text-main) 12%,transparent)
 }
-#filtersToggle:active, #activeFamily:active{
+#filtersToggle:active,#activeFamily:active{
   transform:translateY(1px) scale(.997)
 }
 
@@ -162,7 +284,8 @@
   will-change:transform,opacity
 }
 #advFilters.open{
-  transform:translateY(0) scaleY(1);opacity:1;visibility:visible;pointer-events:auto;
+  transform:translateY(0) scaleY(1);
+  opacity:1;visibility:visible;pointer-events:auto;
   transition-delay:0s,0s,0s
 }
 #advFilters .filters-card{
@@ -175,10 +298,17 @@
 
 /* احترام تقليل الحركة */
 @media (prefers-reduced-motion:reduce){
-  .top-bar>*,.search-box,.suggestions,#filtersToggle,#advFilters,#advFilters .filters-card,.date-time-display{
+  .top-bar>*,
+  .search-box,
+  .suggestions,
+  #filtersToggle,
+  #advFilters,
+  #advFilters .filters-card,
+  .date-time-display{
     transition:none!important;animation:none!important;transform:none!important
   }
 }
+
 
 /* ========== زر فتح اللوحة الجانبية ========== */
 .side-toggle{
