@@ -711,203 +711,236 @@ export function attachHorizontalSortable({
   });
 }
 
+// عارض صور منبثق يدعم التنقّل والحركات والسحب باللمس
 export function createImageViewerOverlay({
-  overlayClass = 'image-viewer-overlay',
-  backdropClass = 'image-viewer-backdrop',
-  dialogClass   = 'image-viewer-dialog',
-  imgClass      = 'image-viewer-img',
-  closeBtnClass = 'image-viewer-close',
-  navClass      = 'image-viewer-nav',
-  arrowPrevClass= 'image-viewer-arrow image-viewer-arrow-prev',
-  arrowNextClass= 'image-viewer-arrow image-viewer-arrow-next',
-  counterClass  = 'image-viewer-counter',
-  // جديد (اختياري): كلاس زر الحفظ
-  saveBtnClass  = 'image-viewer-save'
-} = {}) {
+  overlayClass='image-viewer-overlay',
+  backdropClass='image-viewer-backdrop',
+  dialogClass='image-viewer-dialog',
+  imgClass='image-viewer-img',
+  closeBtnClass='image-viewer-close',
+  navClass='image-viewer-nav',
+  arrowPrevClass='image-viewer-arrow image-viewer-arrow-prev',
+  arrowNextClass='image-viewer-arrow image-viewer-arrow-next',
+  counterClass='image-viewer-counter',
+  saveBtnClass='image-viewer-save'
+}={}){
 
-  // لو العارض موجود مسبقًا ومعه API، نعيده مباشرة
-  let overlay = document.querySelector(`.${overlayClass}`);
-  if (overlay && overlay._sliderApi) return overlay._sliderApi;
+  let overlay=document.querySelector(`.${overlayClass}`);
+  if(overlay&&overlay._sliderApi) return overlay._sliderApi;
 
-  // إنشاء العناصر لأول مرة
-  overlay = document.createElement('div');
-  overlay.className = overlayClass;
+  overlay=document.createElement('div'); overlay.className=overlayClass;
+  const backdrop=document.createElement('div'); backdrop.className=backdropClass;
+  const dialog=document.createElement('div'); dialog.className=dialogClass;
+  const closeBtn=document.createElement('button'); closeBtn.type='button'; closeBtn.className=closeBtnClass; closeBtn.textContent='×';
+  const img=document.createElement('img'); img.className=imgClass; img.alt='معاينة الصورة';
+  const nav=document.createElement('div'); nav.className=navClass;
 
-  const backdrop = document.createElement('div');
-  backdrop.className = backdropClass;
+  const prevBtn=document.createElement('button'); prevBtn.type='button'; prevBtn.className=arrowPrevClass; prevBtn.textContent='›';
+  const counter=document.createElement('div'); counter.className=counterClass;
 
-  const dialog = document.createElement('div');
-  dialog.className = dialogClass;
+  const saveBtn=document.createElement('button');
+  saveBtn.type='button'; saveBtn.className=saveBtnClass;
+  saveBtn.innerHTML='<i class="fa-solid fa-download"></i><span>حفظ الصورة</span>';
 
-  const closeBtn = document.createElement('button');
-  closeBtn.type = 'button';
-  closeBtn.className = closeBtnClass;
-  closeBtn.textContent = '×';
+  const nextBtn=document.createElement('button'); nextBtn.type='button'; nextBtn.className=arrowNextClass; nextBtn.textContent='‹';
 
-  const img = document.createElement('img');
-  img.className = imgClass;
-  img.alt = 'معاينة الصورة';
+  const centerWrap=document.createElement('div');
+  centerWrap.className='image-viewer-center';
+  centerWrap.append(counter,saveBtn);
 
-  const nav = document.createElement('div');
-  nav.className = navClass;
-
-  const prevBtn = document.createElement('button');
-  prevBtn.type = 'button';
-  prevBtn.className = arrowPrevClass;
-  prevBtn.textContent = '›';
-
-  const counter = document.createElement('div');
-  counter.className = counterClass;
-
-  // زر حفظ الصورة (جديد)
-  const saveBtn = document.createElement('button');
-  saveBtn.type = 'button';
-  saveBtn.className = saveBtnClass;
-  saveBtn.innerHTML =
-    '<i class="fa-solid fa-download" aria-hidden="true"></i><span>حفظ الصورة</span>';
-
-  const nextBtn = document.createElement('button');
-  nextBtn.type = 'button';
-  nextBtn.className = arrowNextClass;
-  nextBtn.textContent = '‹';
-
-  // حاوية وسطية للعداد + زر الحفظ
-  const centerWrap = document.createElement('div');
-  centerWrap.className = 'image-viewer-center';
-  centerWrap.append(counter, saveBtn);
-
-  // مع RTL: nextBtn يكون يمين، ثم الوسط، ثم prevBtn يسار
-  nav.append(nextBtn, centerWrap, prevBtn);
-
-  dialog.append(closeBtn, img, nav);
-  overlay.append(backdrop, dialog);
+  nav.append(nextBtn,centerWrap,prevBtn);
+  dialog.append(closeBtn,img,nav);
+  overlay.append(backdrop,dialog);
   document.body.appendChild(overlay);
 
-  // الحالة الداخلية
-  let urls = [];
-  let index = 0;
+  let urls=[],index=0;
 
-  // استخراج كلاسات السهمين (prev/next) بشكل ديناميكي
-  const prevTokens = arrowPrevClass
-    .split(/\s+/)
-    .map(c => c.trim())
-    .filter(c => c && /prev$/i.test(c));
-  const nextTokens = arrowNextClass
-    .split(/\s+/)
-    .map(c => c.trim())
-    .filter(c => c && /next$/i.test(c));
+  const prevTokens=arrowPrevClass.split(/\s+/).filter(c=>/prev$/i.test(c));
+  const nextTokens=arrowNextClass.split(/\s+/).filter(c=>/next$/i.test(c));
 
-  function updateUI() {
-    if (!urls.length) return;
-    img.src = urls[index];
-    counter.textContent = `${index + 1} / ${urls.length}`;
-
-    const single = urls.length <= 1;
-    const atFirst = index <= 0;
-    const atLast = index >= urls.length - 1;
-
-    prevBtn.disabled = single || atFirst;
-    nextBtn.disabled = single || atLast;
-    prevBtn.style.visibility = prevBtn.disabled ? 'hidden' : 'visible';
-    nextBtn.style.visibility = nextBtn.disabled ? 'hidden' : 'visible';
+  // ==========================
+  // 1) تأثير الفتح Zoom-in
+  // ==========================
+  const dialogEl=dialog;
+  function runOpenAnimation(){
+    dialogEl.style.transition='none';
+    dialogEl.style.opacity='0';
+    dialogEl.style.transform='scale(.92) translateY(8px)';
+    requestAnimationFrame(()=>{
+      requestAnimationFrame(()=>{
+        dialogEl.style.transition='opacity .32s ease, transform .32s ease';
+        dialogEl.style.opacity='1';
+        dialogEl.style.transform='scale(1) translateY(0)';
+      });
+    });
   }
 
-  function closeViewer() {
-    overlay.classList.remove('is-open');
+  // ==========================
+  // updateUI الأساسي
+  // ==========================
+  let updateUI=function(){
+    if(!urls.length) return;
+    img.src=urls[index];
+    counter.textContent=`${index+1} / ${urls.length}`;
+    const single=urls.length<=1,
+          atFirst=index<=0,
+          atLast=index>=urls.length-1;
+    prevBtn.disabled=single||atFirst;
+    nextBtn.disabled=single||atLast;
+    prevBtn.style.visibility=prevBtn.disabled?'hidden':'visible';
+    nextBtn.style.visibility=nextBtn.disabled?'hidden':'visible';
+  };
+
+  // ==========================
+  // تأثير انتقال الصور + حركة الاتجاه
+  // ==========================
+  let lastIndex=-1;
+  function animateImageChange(newIndex,direction){
+    img.style.transition='none';
+    img.style.opacity=0;
+    img.style.transform=`translateX(${direction*40}px) scale(.97)`;
+    requestAnimationFrame(()=>{requestAnimationFrame(()=>{
+      img.style.transition='opacity .32s ease, transform .32s ease';
+      img.style.opacity=1;
+      img.style.transform='translateX(0) scale(1)';
+    });});
   }
 
-  function open(list, startIndex = 0) {
-    urls = Array.isArray(list) ? list.filter(Boolean) : [];
-    if (!urls.length) return;
-    index = Math.min(Math.max(startIndex, 0), urls.length - 1);
+  const _updateUI_original=updateUI;
+  updateUI=function(){
+    const old=lastIndex;
+    _updateUI_original();
+    if(old!==-1 && old!==index){
+      const dir=index>old?-1:1;
+      animateImageChange(index,dir);
+    }
+    lastIndex=index;
+  };
+
+  // ==========================
+  // Bounce عند حدود الصور
+  // ==========================
+  function bounceEffect(direction){
+    img.style.transition='transform .25s ease';
+    img.style.transform=`translateX(${direction*22}px)`;
+    setTimeout(()=>{img.style.transform='translateX(0)';},150);
+  }
+
+  function goPrev_original(){index--; updateUI();}
+  function goNext_original(){index++; updateUI();}
+
+  let goPrev=function(){
+    if(index<=0){bounceEffect(1); return;}
+    goPrev_original();
+  };
+
+  let goNext=function(){
+    if(index>=urls.length-1){bounceEffect(-1); return;}
+    goNext_original();
+  };
+
+  // ==========================
+  // فتح العارض
+  // ==========================
+  function open(list,startIndex=0){
+    urls=Array.isArray(list)?list.filter(Boolean):[];
+    if(!urls.length) return;
+    index=Math.min(Math.max(startIndex,0),urls.length-1);
     updateUI();
     overlay.classList.add('is-open');
+    runOpenAnimation();
   }
 
-  // التنقل
-  function goPrev() {
-    if (!urls.length || index <= 0) return;
-    index -= 1;
-    updateUI();
+  // إغلاق مع عكس تأثير الفتح (Zoom-out)
+  function closeViewer(){
+    dialogEl.style.transition='opacity .28s ease, transform .28s ease';
+    dialogEl.style.opacity='0';
+    dialogEl.style.transform='scale(.92) translateY(8px)';
+    setTimeout(()=>{ overlay.classList.remove('is-open'); },180);
   }
 
-  function goNext() {
-    if (!urls.length || index >= urls.length - 1) return;
-    index += 1;
-    updateUI();
+  // ==========================
+  // حفظ الصورة
+  // ==========================
+  function downloadCurrentImage(){
+    if(!urls.length) return;
+    const url=urls[index];
+    if(!url) return;
+    const a=document.createElement('a');
+    a.href=url; a.download=`image-${index+1}`;
+    document.body.appendChild(a); a.click(); a.remove();
   }
 
-  // حفظ الصورة الحالية (جديد)
-  function downloadCurrentImage() {
-    if (!urls.length) return;
-    const url = urls[index];
-    if (!url) return;
-
-    const a = document.createElement('a');
-    a.href = url;
-
-    const filename = `image-${index + 1}`;
-    a.download = filename;
-
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  }
-
-  // أي نقرة داخل شريط التنقل: نحدد الزر ديناميكياً (يدعم القصص/الخط الزمني/السيرة/المصادر)
-  nav.addEventListener('click', (e) => {
-    const btn = e.target.closest('button');
-    if (!btn || btn.disabled) return;
-
-    const isPrev =
-      prevTokens.some(cls => btn.classList.contains(cls)) ||
-      btn.classList.contains('image-viewer-arrow-prev') ||
-      btn.classList.contains('story-image-viewer-arrow-prev') ||
-      btn.classList.contains('timeline-image-viewer-arrow-prev') ||
-      btn.classList.contains('bio-image-viewer-arrow-prev') ||
+  // أحداث التنقل
+  nav.addEventListener('click',e=>{
+    const btn=e.target.closest('button'); if(!btn||btn.disabled) return;
+    const isPrev=prevTokens.some(cls=>btn.classList.contains(cls))||
+      btn.classList.contains('image-viewer-arrow-prev')||
+      btn.classList.contains('story-image-viewer-arrow-prev')||
+      btn.classList.contains('timeline-image-viewer-arrow-prev')||
+      btn.classList.contains('bio-image-viewer-arrow-prev')||
       btn.classList.contains('sources-image-viewer-arrow-prev');
-
-    const isNext =
-      nextTokens.some(cls => btn.classList.contains(cls)) ||
-      btn.classList.contains('image-viewer-arrow-next') ||
-      btn.classList.contains('story-image-viewer-arrow-next') ||
-      btn.classList.contains('timeline-image-viewer-arrow-next') ||
-      btn.classList.contains('bio-image-viewer-arrow-next') ||
+    const isNext=nextTokens.some(cls=>btn.classList.contains(cls))||
+      btn.classList.contains('image-viewer-arrow-next')||
+      btn.classList.contains('story-image-viewer-arrow-next')||
+      btn.classList.contains('timeline-image-viewer-arrow-next')||
+      btn.classList.contains('bio-image-viewer-arrow-next')||
       btn.classList.contains('sources-image-viewer-arrow-next');
-
-    if (!isPrev && !isNext) return;
-
-    e.stopPropagation();
-    if (isPrev) goPrev();
-    else if (isNext) goNext();
+    if(isPrev) goPrev(); else if(isNext) goNext();
   });
 
-  // حدث خاص بزر الحفظ (لا يمر عبر لوجيك الأسهم)
-  saveBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    downloadCurrentImage();
+  saveBtn.addEventListener('click',e=>{e.stopPropagation(); downloadCurrentImage();});
+
+  backdrop.addEventListener('click',closeViewer);
+  closeBtn.addEventListener('click',closeViewer);
+  overlay.addEventListener('click',e=>{if(e.target===overlay) closeViewer();});
+
+  document.addEventListener('keydown',e=>{
+    if(!overlay.classList.contains('is-open')) return;
+    if(e.key==='Escape') closeViewer();
+    else if(e.key==='ArrowLeft'){e.preventDefault(); prevBtn.click();}
+    else if(e.key==='ArrowRight'){e.preventDefault(); nextBtn.click();}
   });
 
-  backdrop.addEventListener('click', closeViewer);
-  closeBtn.addEventListener('click', closeViewer);
-  overlay.addEventListener('click', e => {
-    if (e.target === overlay) closeViewer();
-  });
+  // ==========================
+  // السحب الحيّ drag-follow
+  // ==========================
+  let dragX=0, dragging=false;
 
-  document.addEventListener('keydown', e => {
-    if (!overlay.classList.contains('is-open')) return;
-    if (e.key === 'Escape') {
-      closeViewer();
-    } else if (e.key === 'ArrowLeft') {
-      e.preventDefault();
-      prevBtn.click();
-    } else if (e.key === 'ArrowRight') {
-      e.preventDefault();
-      nextBtn.click();
-    }
-  });
+  function onTouchStart(e){
+    if(!overlay.classList.contains('is-open')) return;
+    const t=e.touches[0];
+    dragging=true; dragX=t.clientX;
+    img.style.transition='none';
+  }
 
-  const api = { open };
-  overlay._sliderApi = api;
+  function onTouchMove(e){
+    if(!dragging) return;
+    const t=e.touches[0];
+    const dx=t.clientX-dragX;
+    img.style.transform=`translateX(${dx}px) scale(.97)`;
+    e.preventDefault();
+  }
+
+  function onTouchEnd(){
+    if(!dragging) return;
+    dragging=false;
+    const dx=parseFloat(img.style.transform.replace(/[^\-0-9.]/g,''))||0;
+    img.style.transition='transform .25s ease';
+    img.style.transform='translateX(0)';
+    if(dx<-60) goNext();
+    else if(dx>60) goPrev();
+  }
+
+  img.addEventListener('touchstart',onTouchStart,{passive:false});
+  img.addEventListener('touchmove',onTouchMove,{passive:false});
+  img.addEventListener('touchend',onTouchEnd);
+
+  dialog.addEventListener('touchstart',onTouchStart,{passive:false});
+  dialog.addEventListener('touchmove',onTouchMove,{passive:false});
+  dialog.addEventListener('touchend',onTouchEnd);
+
+  const api={open};
+  overlay._sliderApi=api;
   return api;
 }
