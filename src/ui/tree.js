@@ -110,7 +110,7 @@ export function drawFamilyTree(families = {}, selectedKey = null, domRefs = {}, 
   </style>
   <div class="no-family-message" role="status" aria-live="polite">
     <div class="title">لا توجد عائلات مرئية حالياً</div>
-    <div>يمكنك <b>إضافة عائلة جديدة</b> أو <b>إظهار العائلات الأساسية المخفية</b> من إعدادات إعادة الضبط.</div>
+    <div>يمكنك <b>إضافة عائلة جديدة</b> أو <b>إظهار العائلات الأساسية المخفية</b> من إعدادات: إعادة تفضيلات الواجهة.</div>
   </div>`;
     }
     return;

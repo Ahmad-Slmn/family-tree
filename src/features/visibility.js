@@ -5,7 +5,7 @@
 // - يقدّم واجهات: إخفاء/إظهار/تبديل/إظهار كل الأساسيات + عدّ المرئيات + إيجاد أول مرئي
 
 import * as Model from '../model/families.js';
-import { setHasHiddenCoreFamilies, setOnResetHiddenCore, showConfirmModal } from '../utils.js';
+import { setHasHiddenCoreFamilies, setOnResetHiddenCore, showConfirmModal, highlight } from '../utils.js';
 
 
 /* =========================
@@ -104,7 +104,7 @@ if (isLastVisible && !opts.force){
     try { Model.setSelectedKey(''); } catch {}
     redrawUI();
     updateCoreHiddenFlag();
-    showInfo('لا توجد عائلات مرئية حالياً. يمكنك إضافة عائلة جديدة أو إظهار العائلات الأساسية من إعدادات إعادة الضبط.');
+showInfo('لا توجد عائلات مرئية حالياً. يمكنك إضافة عائلة جديدة أو إظهار العائلات الأساسية من إعدادات ' + highlight('إعادة تفضيلات الواجهة') + '.');
     try { bus?.emit?.('families:visibility:changed'); } catch {}
     return;
   }
