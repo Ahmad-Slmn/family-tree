@@ -514,7 +514,7 @@ function onSelectFamily(key){
   if(key===currentKey){
     const fam=fams[key]||Model.getFamily?.(key);
     const label=fam?.title||fam?.familyName||fam?.fullRootPersonName||key;
-    showInfo(`العائلة ${highlight(String(label))} هي المختارة حاليًا بالفعل.`);
+    showInfo(`عائلة: ${highlight(String(label))} هي المختارة حاليًا بالفعل.`);
     return;
   }
 
