@@ -6,7 +6,8 @@ import {
 } from '../utils.js';
 
 import * as Model from '../model/families.js';
-import { normalizeNewFamilyForLineage } from '../model/families.js';
+import { normalizeFamilyPipeline } from '../model/families.core.js';
+
 import { ensureIdsForAllFamilies } from './ids.js';
 
 let bus;
@@ -250,24 +251,41 @@ async function doImport(ctx, obj) {
   const { out: rekeyed, map } = rekeyImportedFamilies(obj);
   obj = rekeyed;
 
-  // 2) تطبيع/ترحيل كل عائلة مستوردة
+  // 2) حفظها في النموذج (ستندمج مع الموجود)
   const importedKeys = Object.keys(obj).filter(k => k !== '__meta');
-  importedKeys.forEach(k => {
-    const fam = obj[k];
-    try {
-      if (metaVer != null && metaVer < (Model.SCHEMA_VERSION || 4)) {
-        Model.migrate?.(fam, metaVer, Model.SCHEMA_VERSION || 4);
-      }
-      normalizeNewFamilyForLineage(fam);
-    } catch {}
-  });
-
-  // 3) استيرادها للذاكرة
   Model.importFamilies(obj);
 
-  // 4) ربط الزوجات + IDs + حفظ
-  Model.linkRootPersonWives();
+
+
+  // 4) IDs أولاً، ثم pipeline نهائي على النسخ المستوردة، ثم حفظ
   await ensureIdsForAllFamilies();
+
+  // بعد ضبط المعرفات النهائية، نبني الروابط/التوريث مرة أخرى
+  try {
+    const fams = Model.getFamilies?.() || {};
+    importedKeys.forEach(k => {
+      const fam = fams[k];
+      if (!fam || typeof fam !== 'object') return;
+
+      // العائلات المستوردة تعتبر مخصّصة وليست أساسية
+      fam.__custom = true;
+      fam.__core   = false;
+
+      const fromVer =
+        Number.isFinite(metaVer)           ? metaVer :
+        Number.isFinite(fam.__v)           ? fam.__v :
+        Number.isFinite(fam.schemaVersion) ? fam.schemaVersion :
+        0;
+
+      normalizeFamilyPipeline(fam, {
+        fromVer,
+        markCore: false   // لا نسمّيها core
+      });
+    });
+
+  } catch {}
+
+
   await Model.savePersistedFamilies?.();
 
   // 5) اختيار العائلة المستوردة تلقائيًا (إن وُجدت)
@@ -339,6 +357,7 @@ function bindImportInput(ctx) {
 
     try {
       await importJsonFileObject(ctx, file);
+      ctx?.redrawUI?.();         
       showSuccess('تم الاستيراد بنجاح.');
     } catch (err) {
       handleImportError(err);
@@ -347,6 +366,7 @@ function bindImportInput(ctx) {
     }
   });
 }
+
 
 // هل الجهاز يعمل بلمس فقط (coarse / بدون hover)؟
 function isTouchOnlyMQ() {

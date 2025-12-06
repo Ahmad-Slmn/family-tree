@@ -15,6 +15,40 @@ export function roleGroup(p){
 // قائمة الأدوار التي نسمح بها في الفلتر (متوافقة مع roleGroup)
 export const ROLE_FILTER_VALUES = ['ابن','بنت','الأب','جد','زوجة'];
 
+// تخمين جنس الشخص من الحقول المتاحة (bio.gender / person.gender / role)
+export function inferGender(p){
+  if (!p) return null;
+  const bio = p.bio || {};
+
+  // 1) جنس صريح إن وُجد
+  const rawG = String(bio.gender || p.gender || '').trim();
+  if (rawG === 'ذكر' || /^m(ale)?$/i.test(rawG))  return 'M';
+  if (rawG === 'أنثى' || /^f(emale)?$/i.test(rawG)) return 'F';
+
+  // 2) fallback من الدور الحالي في الشجرة
+  const r = String(p.role || '').trim();
+
+  // أدوار نعتبرها "ذكَر"
+  if (
+    r === 'ابن' ||
+    r === 'الأب' ||
+    r === 'صاحب الشجرة' ||
+    r === 'زوج' ||
+    r.startsWith('الجد')
+  ) return 'M';
+
+  // أدوار نعتبرها "أنثى"
+  if (
+    r === 'بنت' ||
+    r === 'الأم' ||
+    r === 'زوجة' ||
+    r.startsWith('الزوجة') ||
+    r === 'جدة'
+  ) return 'F';
+
+  return null;
+}
+
 // تطبيع دور الجد
 export function normalizeAncestorRole(role, generation){
   const ord = getArabicOrdinal;

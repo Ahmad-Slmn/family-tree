@@ -3,11 +3,16 @@
 import { el, textEl, getArabicOrdinalF } from '../utils.js';
 import { DB } from '../storage/db.js';
 import * as Lineage from '../features/lineage.js';
+import { inferGender } from '../model/roles.js';
 
 // ===== حالة رسم البطاقات/الصور =====
 const RENDERED_IDS = new Set();          // الأشخاص المرسومون
 const _cardById = new Map();             // personId -> DOM node
-
+// NEW: أداة مساعدة لمعرفة هل لهذا الشخص بطاقة مرسومة في الشجرة الحالية
+export function isPersonRendered(id){
+  if (!id) return false;
+  return RENDERED_IDS.has(String(id));
+}
 // ===== كاش صور خفيف (غير Blob) بنمط LRU =====
 const PHOTO_CACHE = new Map();           // id -> { url, isBlob:false }
 let PHOTO_MAX = parseInt(localStorage.getItem('photoMax') || '150', 10);
@@ -410,12 +415,27 @@ export function createCounterBoxForPerson(person){
 
   kids = kids.filter(k => k?._id && ctx.connectedIds.has(String(k._id)));
 
-  const sons = kids.filter(c => String(c?.role||'').trim() === 'ابن');
-  const dau  = kids.filter(c => String(c?.role||'').trim() === 'بنت');
+  const sons = kids.filter(c => inferGender(c) === 'M');
+  const dau  = kids.filter(c => inferGender(c) === 'F');
 
-  if (sons.length) items.push({ label:'الأبناء', value:sons.length });
-  if (dau.length)  items.push({ label:'البنات',  value:dau.length });
-  if (kids.length) items.push({ label:'الإجمالي', value:kids.length });
+  if (sons.length) items.push({ label:'أبناء', value: sons.length });
+  if (dau.length)  items.push({ label:'بنات',  value: dau.length });
+
+  // "الإجمالي" للأبناء يظهر فقط لصاحب الشجرة
+  if (isRoot && kids.length) items.push({ label:'الإجمالي', value: kids.length });
+
+  // NEW: عدّادات الأحفاد (أبناء/بنات/إجمالي) مثل قسم "الأسلاف والأجداد"
+  const gkidsAll = Lineage.resolveGrandchildren(ref, family, ctx) || [];
+  const gkids = gkidsAll.filter(g => g?._id && ctx.connectedIds.has(String(g._id)));
+
+  if (gkids.length){
+    const gSons = gkids.filter(g => inferGender(g) === 'M');
+    const gDau  = gkids.filter(g => inferGender(g) === 'F');
+
+    if (gSons.length) items.push({ label:'أحفاد',  value: gSons.length });
+    if (gDau.length)  items.push({ label:'حفيدات', value: gDau.length });
+  }
+
 
   const sib = Lineage.resolveSiblings(ref, family, ctx) || {};
   const types = sib.types || {};

@@ -113,6 +113,22 @@
 .bio-section[data-section-id="basic"] .bio-field span{
   flex:1 1 auto;
 }
+
+/* تنسيق خفيف لـ span داخل ملخّص النسَب */
+.bio-field--relSummary span{
+  font-size:.9rem;
+  line-height:1.6;
+  padding:.2rem .7rem;
+  border-radius:.75rem;
+  background:color-mix(in oklab,var(--accent-soft, var(--panel-bg)) 24%,var(--panel-bg));
+  color:color-mix(in oklab,var(--title-color) 72%,var(--text-main));
+  border:1px solid color-mix(in oklab,var(--ancestor-border) 80%,transparent);
+  display:inline-flex;
+  align-items:center;
+  gap:.35rem;
+  box-shadow:var(--shadow-soft,0 .06rem .18rem rgba(0,0,0,.05));
+}
+
 .bio-section[data-section-id="basic"] .bio-field .age-dead,
 .bio-section[data-section-id="basic"] .bio-field .age-alive{
   display:inline-block;text-align:center;
@@ -169,6 +185,18 @@
 }
 .bio-field span{flex:1 1 auto;}
 
+/* تنسيق خاص لنص الملاحظة */
+.bio-field--remark span{
+  font-size:.9rem;
+  line-height:1.6;
+  padding:.18rem .6rem;
+  border-radius:.6rem;
+  background:color-mix(in oklab,var(--badge-bg) 90%,#fff);
+  color:color-mix(in oklab,var(--modal-danger) 32%,var(--text-main));
+  border:1px dashed color-mix(in oklab,var(--modal-danger) 65%,transparent);
+  display:inline-block;
+  box-shadow:0 0 0 1px color-mix(in oklab,var(--badge-bg) 70%,transparent);
+}
 /* العمر (حي/متوفى) */
 .age-alive{
   color:color-mix(in oklab,var(--modal-primary) 70%,var(--modal-fg));font-weight:500;
@@ -202,6 +230,19 @@
   transform:translateY(-1px);
 }
 
+/* شريط ملخّص الأحفاد في قسم الأسلاف والأجداد */
+.bio-grandkids-summary{
+  margin:.25rem 0 .4rem;
+  padding:.35rem .65rem;
+  border-radius:.7rem;
+  background:color-mix(in oklab,var(--panel-bg) 90%,#fff);
+  border:1px dashed color-mix(in oklab,var(--surface-border) 85%,transparent);
+  font-size:.9rem;
+  color:var(--title-color);
+  display:inline-flex;
+  align-items:center;
+  gap:.35rem;
+}
 
 /* تقليل الزحمة للإخوة/الأخوات */
 .bio-sublist ul{list-style:none;padding:0;margin:.25rem 0;}

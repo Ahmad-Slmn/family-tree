@@ -3,6 +3,7 @@
 // توريث معلومات النسب (قبيلة/عشيرة/أسماء أسلاف) بشكل ديناميكي
 // بدون التأثير على القيم المخزّنة في الـ bio
 // =======================================
+import { inferGender } from '../model/roles.js';
 
 // قراءة إعدادات النسب من __meta.lineage (اختياري لاحقًا)
 function getLineageMeta(family){
@@ -798,8 +799,10 @@ export function resolveSiblings(person, family, ctx){
     else if (sameFather)         types.paternal.push(s);
     else if (sameMother)         types.maternal.push(s);
 
-    if ((s.role||'').trim() === 'بنت') outSis.push(s);
+     const g = inferGender(s);
+    if (g === 'F') outSis.push(s);
     else outBro.push(s);
+
   }
 
   return { brothers: outBro, sisters: outSis, types };
@@ -896,9 +899,9 @@ export function resolveUnclesAunts(person, family, ctx){
   const fatherSibs = getSibsOf(father);
   const motherSibs = getSibsOf(mother);
 
-  const mapPeople = (arr, wantRole)=> (arr||[])
-    .filter(x=> (x.role||'').trim()===wantRole)
-    .map(x=> ({ name:x.name, _id:x._id }));
+   const mapPeople = (arr, wantGender)=> (arr||[])
+    .filter(x => inferGender(x) === wantGender)
+    .map(x => ({ name:x.name, _id:x._id }));
 
   // fallback يدوي من bio
   const manualSibsOf = (p)=>{
@@ -930,10 +933,11 @@ export function resolveUnclesAunts(person, family, ctx){
     return out;
   };
 
-  const paternalUncles = mergeByNameOrId(mapPeople(fatherSibs,'ابن'), fMan.bro);
-  const paternalAunts  = mergeByNameOrId(mapPeople(fatherSibs,'بنت'), fMan.sis);
-  const maternalUncles = mergeByNameOrId(mapPeople(motherSibs,'ابن'), mMan.bro);
-  const maternalAunts  = mergeByNameOrId(mapPeople(motherSibs,'بنت'), mMan.sis);
+  const paternalUncles = mergeByNameOrId(mapPeople(fatherSibs,'M'), fMan.bro);
+  const paternalAunts  = mergeByNameOrId(mapPeople(fatherSibs,'F'), fMan.sis);
+  const maternalUncles = mergeByNameOrId(mapPeople(motherSibs,'M'), mMan.bro);
+  const maternalAunts  = mergeByNameOrId(mapPeople(motherSibs,'F'), mMan.sis);
+
 
   return { paternalUncles, paternalAunts, maternalUncles, maternalAunts };
 }

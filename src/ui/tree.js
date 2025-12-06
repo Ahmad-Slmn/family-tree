@@ -3,6 +3,10 @@
 
 import { el, textEl, byId, getArabicOrdinal } from '../utils.js';
 import * as Lineage from '../features/lineage.js';
+import { inferGender } from '../model/roles.js';
+
+// NEW: تهيئة العائلة (pipeline) قبل الرسم
+import { normalizeFamilyPipeline } from '../model/families.core.js';
 
 import {
   AR_DIAC,
@@ -89,11 +93,31 @@ export function drawFamilyTree(families = {}, selectedKey = null, domRefs = {}, 
   _lastKey = selectedKey; _lastQuery = q;
 
   const __currentIds = new Set();
-  const fam = families[selectedKey];
-  window.__CURRENT_FAMILY__ = fam;
+let fam = families[selectedKey];
 
-  const lineageCtx = Lineage.buildLineageContext(fam);
-  window.__LINEAGE_CTX__ = lineageCtx;
+// NEW: تشغيل pipeline مرة واحدة بعد الاستيراد/التحميل
+if (fam && !fam.__pipelineReady) {
+  const fromVer =
+    Number.isFinite(fam.__v) ? fam.__v :
+    Number.isFinite(fam.schemaVersion) ? fam.schemaVersion :
+    0;
+
+  normalizeFamilyPipeline(fam, {
+    fromVer,
+    // ثبّت حالة core فقط إذا كانت العائلة موسومة من الأصل
+    markCore: fam.__core === true
+  });
+
+  // علامة داخلية حتى لا يُعاد تشغيل الـ pipeline لهذه العائلة
+  fam.__pipelineReady = true;
+}
+
+
+
+window.__CURRENT_FAMILY__ = fam;
+
+const lineageCtx = Lineage.buildLineageContext(fam);
+window.__LINEAGE_CTX__ = lineageCtx;
 
   if (!fam || fam.hidden){
     const titleEl = (domRefs && domRefs.treeTitle) || byId('treeTitle');
@@ -214,14 +238,85 @@ export function drawFamilyTree(families = {}, selectedKey = null, domRefs = {}, 
   const ancestors = orderAncestors(fam);
   const filteredAncestors = ancestors.filter(p => match(p) && passFilters(p));
 
-  const countChildrenAll = (family) => {
+  const countChildrenForPerson = (person, ctx) => {
     const acc = { sons: 0, daughters: 0, total: 0 };
-    (family.wives || []).forEach(w => (w.children || []).forEach(c => {
-      const r = (c?.role || '').trim();
-      if (r === 'ابن') acc.sons++; else if (r === 'بنت') acc.daughters++;
-    }));
-    acc.total = acc.sons + acc.daughters; return acc;
+    if (!person || !ctx) return acc;
+
+    const pidOwn = String(person._id || '');
+    if (!pidOwn) return acc;
+
+    for (const p of ctx.byId.values()){
+      if (!p?._id) continue;
+      const pid = String(p._id);
+      if (pid === pidOwn) continue;
+
+      const fId = p.fatherId || p.bio?.fatherId || null;
+      const mId = p.motherId || p.bio?.motherId || null;
+
+      const isChild =
+        (fId && String(fId) === pidOwn) ||
+        (mId && String(mId) === pidOwn);
+
+      if (!isChild) continue;
+
+      const g = inferGender(p);
+      if (g === 'M')      acc.sons++;
+      else if (g === 'F') acc.daughters++;
+      else                acc.total++;
+    }
+
+    acc.total += acc.sons + acc.daughters;
+    return acc;
   };
+
+    const splitTextList = (text) => {
+    return String(text || '')
+      .split(/[,\u060C]/u)
+      .map(s => s.trim())
+      .filter(Boolean);
+  };
+
+  function getUnclesAuntsForPerson(person, fam, ctx){
+    if (!person || !fam || !ctx) {
+      return {
+        paternalUncles: [],
+        paternalAunts:  [],
+        maternalUncles: [],
+        maternalAunts:  []
+      };
+    }
+
+    // 1) من سياق النَّسَب (الرسم البياني)
+    const ua = Lineage.resolveUnclesAunts(person, fam, ctx) || {};
+
+    // نأخذ نسخًا قابلة للتعديل
+    let pu = Array.isArray(ua.paternalUncles) ? ua.paternalUncles.slice() : [];
+    let pa = Array.isArray(ua.paternalAunts)  ? ua.paternalAunts.slice()  : [];
+    let mu = Array.isArray(ua.maternalUncles) ? ua.maternalUncles.slice() : [];
+    let ma = Array.isArray(ua.maternalAunts)  ? ua.maternalAunts.slice()  : [];
+
+    // 2) مكملات من الـ bio النصية (تُستخدم فقط إذا الجهة فارغة)
+    const b = person.bio || {};
+
+    const fBro = splitTextList(b.fatherBrothersTxt);
+    const fSis = splitTextList(b.fatherSistersTxt);
+    const mBro = splitTextList(b.motherBrothersTxt);
+    const mSis = splitTextList(b.motherSistersTxt);
+
+    // إن لم يوجد أعمام/عمّات من الرسم البياني نكمّل من النص
+    if (!pu.length && fBro.length) pu = fBro;
+    if (!pa.length && fSis.length) pa = fSis;
+    if (!mu.length && mBro.length) mu = mBro;
+    if (!ma.length && mSis.length) ma = mSis;
+
+    return {
+      paternalUncles: pu,
+      paternalAunts:  pa,
+      maternalUncles: mu,
+      maternalAunts:  ma
+    };
+  }
+
 
   if (!q){
     filteredAncestors.forEach((person, idx) => {
@@ -245,7 +340,8 @@ export function drawFamilyTree(families = {}, selectedKey = null, domRefs = {}, 
           wives:    (fam.wives || []).length
         };
 
-        const allC = countChildrenAll(fam);
+         const allC = countChildrenForPerson(person, lineageCtx);
+
         const merged = [];
 
         if (sib.brothers) merged.push({label:'الإخوة', value:sib.brothers});
@@ -256,7 +352,7 @@ export function drawFamilyTree(families = {}, selectedKey = null, domRefs = {}, 
         if (allC.daughters) merged.push({label:'البنات', value:allC.daughters});
         if (allC.total)     merged.push({label:'الإجمالي', value:allC.total});
 
-        const uaRoot = Lineage.resolveUnclesAunts(person, fam, lineageCtx);
+        const uaRoot = getUnclesAuntsForPerson(person, fam, lineageCtx);
 
         if (uaRoot.paternalUncles?.length)
           merged.push({label:'الأعمام', value:uaRoot.paternalUncles.length});
@@ -423,6 +519,54 @@ if (q){
       );
 
       if (sec){
+        // === عدّ توريث الزوجة مثل صاحب الشجرة ===
+        const wifeCard =
+          sec.querySelector('.member-card.wife-card') ||
+          sec.querySelector('.wife-card.member-card') ||
+          sec.querySelector('.member-card'); // احتياط: أوّل بطاقة في القسم
+
+        if (wifeCard && w && w._id) {
+          // 1) الإخوة والأخوات
+          const sibResolved = Lineage.resolveSiblings(w, fam, lineageCtx) || {};
+          const sib = {
+            brothers: (sibResolved.brothers || []).length || 0,
+            sisters:  (sibResolved.sisters  || []).length || 0
+          };
+
+          // 2) الأبناء المرتبطون بهذه الزوجة
+          const kids = countChildrenForPerson(w, lineageCtx);
+
+          // 3) الأعمام/العمّات/الأخوال/الخالات من جهة الزوجة
+                    const uaWife = getUnclesAuntsForPerson(w, fam, lineageCtx);
+
+
+          const merged = [];
+
+          if (sib.brothers) merged.push({ label: 'الإخوة',  value: sib.brothers });
+          if (sib.sisters)  merged.push({ label: 'الأخوات', value: sib.sisters  });
+
+          if (kids.sons)      merged.push({ label: 'الأبناء',  value: kids.sons });
+          if (kids.daughters) merged.push({ label: 'البنات',   value: kids.daughters });
+          if (kids.total)     merged.push({ label: 'الإجمالي', value: kids.total });
+
+          if (uaWife.paternalUncles?.length)
+            merged.push({ label: 'الأعمام', value: uaWife.paternalUncles.length });
+          if (uaWife.paternalAunts?.length)
+            merged.push({ label: 'العمّات', value: uaWife.paternalAunts.length });
+          if (uaWife.maternalUncles?.length)
+            merged.push({ label: 'الأخوال', value: uaWife.maternalUncles.length });
+          if (uaWife.maternalAunts?.length)
+            merged.push({ label: 'الخالات', value: uaWife.maternalAunts.length });
+
+          const cbWife = createCounterBox(merged);
+          if (cbWife){
+            const old = wifeCard.querySelector('.counter-box');
+            if (old) old.remove();
+            wifeCard.appendChild(cbWife);
+          }
+        }
+        // === نهاية منطق عدّ توريث الزوجة ===
+
         wivesSection.appendChild(sec);
         _drawnTotal += sec.querySelectorAll('.member-card').length;
 
@@ -474,6 +618,7 @@ if (q){
     }
   );
 }
+
 
 // إعادة تصدير الدوال/الثوابت كما كانت من قبل
 export {

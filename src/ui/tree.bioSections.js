@@ -1,11 +1,15 @@
 // tree.bioSections.js — أقسام السيرة داخل تفاصيل الشخص
 
-import { el, textEl, highlight, getArabicOrdinalF } from '../utils.js';
+import { el, textEl, highlight, getArabicOrdinal, getArabicOrdinalF } from '../utils.js';
 import { LABELS } from '../model/families.js';
+import { resolveAncestorsForPerson } from '../model/families.core.js';
 import * as Lineage from '../features/lineage.js';
+import { inferGender } from '../model/roles.js';
 import { createStoriesSection } from '../features/person.stories.js';
 import { createEventsSection } from '../features/person.events.js';
 import { createSourcesSection } from '../features/person.sources.js';
+// NEW: للتحقق من أن الشخص له بطاقة مرسومة في الشجرة
+import { isPersonRendered } from './tree.cards.js';
 /* =========================
    توابع العمر والتواريخ
    ========================= */
@@ -109,6 +113,17 @@ export function formatAgeFromBio(bio){
   const yLabel = _fmtYears(years);
   return yLabel ? prefix + yLabel : null;
 }
+
+// نعتبر بعض الأسماء العامة (الأب/الأم/أب الزوجة/أم الزوجة...) كأنها بلا اسم
+function isVirtualAncestorLike(entry){
+  const nm = (entry && entry.name != null) ? String(entry.name).trim() : '';
+  if (!nm || nm === '-' ) return true;
+  const generic = ['الأب','الأم','أب الزوجة','أم الزوجة'];
+  if (generic.includes(nm)) return true;
+  if (/^جد الزوجة/u.test(nm) || /^جدة الزوجة/u.test(nm)) return true;
+  return false;
+}
+
 
 /* =========================
    عرض حقول bio العامة
@@ -273,6 +288,57 @@ function getBioSectionsOrder(handlers){
   return out;
 }
 
+// نفس منطق tree.js لقراءة الأعمام/العمّات/الأخوال/الخالات مع fallback من حقول الـ bio
+function _splitTextList(text){
+  return String(text || '')
+    .split(/[,\u060C]/u)
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
+function getUnclesAuntsForPerson(person, family, ctx){
+  if (!person || !family || !ctx) {
+    return {
+      paternalUncles: [],
+      paternalAunts:  [],
+      maternalUncles: [],
+      maternalAunts:  []
+    };
+  }
+
+  // 1) من سياق النَّسَب (الرسم البياني)
+  const ua = Lineage.resolveUnclesAunts(person, family, ctx) || {};
+
+  // نأخذ نسخًا قابلة للتعديل
+  let pu = Array.isArray(ua.paternalUncles) ? ua.paternalUncles.slice() : [];
+  let pa = Array.isArray(ua.paternalAunts)  ? ua.paternalAunts.slice()  : [];
+  let mu = Array.isArray(ua.maternalUncles) ? ua.maternalUncles.slice() : [];
+  let ma = Array.isArray(ua.maternalAunts)  ? ua.maternalAunts.slice()  : [];
+
+  // 2) مكملات من الـ bio النصية (تُستخدم فقط إذا الجهة فارغة)
+  const b = person.bio || {};
+
+  const fBro = _splitTextList(b.fatherBrothersTxt);
+  const fSis = _splitTextList(b.fatherSistersTxt);
+  const mBro = _splitTextList(b.motherBrothersTxt);
+  const mSis = _splitTextList(b.motherSistersTxt);
+
+  // إن لم يوجد أعمام/عمّات من الرسم البياني نكمّل من النص
+  if (!pu.length && fBro.length) pu = fBro;
+  if (!pa.length && fSis.length) pa = fSis;
+  if (!mu.length && mBro.length) mu = mBro;
+  if (!ma.length && mSis.length) ma = mSis;
+
+  return {
+    paternalUncles: pu,
+    paternalAunts:  pa,
+    maternalUncles: mu,
+    maternalAunts:  ma
+  };
+}
+
+
+
 /* =========================
    كاشف الأقسام المتاحة
    ========================= */
@@ -292,12 +358,19 @@ function detectSectionPresence(bio, person, family){
   if (!person || !family) return out;
 
   const ctx = window.__LINEAGE_CTX__ || Lineage.buildLineageContext(family);
-  const hasNonEmptyName = p => !!(p && String(p.name || '').trim());
+  const hasNonEmptyName = p => {
+    if (!p) return false;
+    // يدعم الكائنات {name:...} وكذلك النصوص العادية "فلان"
+    const nm = (typeof p === 'object') ? p.name : p;
+    return !!String(nm || '').trim();
+  };
+
 
   if (ctx){
     // العائلة: إخوة/أخوات/أعمام/عمات/أخوال/خالات
     const sib = Lineage.resolveSiblings(person, family, ctx) || {};
-    const ua  = Lineage.resolveUnclesAunts(person, family, ctx) || {};
+        const ua  = getUnclesAuntsForPerson(person, family, ctx);
+
 
     const brosAll = Array.isArray(sib.brothers) ? sib.brothers : [];
     const sisAll  = Array.isArray(sib.sisters)  ? sib.sisters  : [];
@@ -324,12 +397,22 @@ function detectSectionPresence(bio, person, family){
       'maternalGrandfatherClan','motherClan'
     ].some(k => _hasValue(bio[k]));
 
+    // سلسلة الأسلاف الفعلية من شجرة النسب (مهمّة خصوصًا للزوجة)
+    const ancRaw            = resolveAncestorsForPerson(person, family, ctx, { maxDepth: 5 }) || [];
+    const ancNamed          = ancRaw.filter(a => !isVirtualAncestorLike(a));
+    const hasAncestorsChain = ancNamed.length > 0;
+
     const gkidsAll          = Lineage.resolveGrandchildren(person, family, ctx) || [];
     const hasNamedGrandkids = gkidsAll.some(hasNonEmptyName);
 
-    out.hasGrands = !!(hasGrandBio || hasNamedGrandkids);
+    // نعتبر وجود القسم عند أي من:
+    // - بيانات أجداد في الـ bio
+    // - أو سلسلة أسلاف حقيقية من الشجرة
+    // - أو وجود أحفاد
+    out.hasGrands = !!(hasGrandBio || hasAncestorsChain || hasNamedGrandkids);
 
-    // الأبناء والبنات (نفس منطق buildChildrenSection)
+
+    // الأبناء والبنات (نفس منطق buildChildrenSection لكن بالجنس)
     let kids = [];
     if (Array.isArray(person.children) && person.children.length){
       kids = person.children;
@@ -346,10 +429,10 @@ function detectSectionPresence(bio, person, family){
     }
 
     const sons = kids.filter(c =>
-      c && (c.role || '').trim() === 'ابن' && hasNonEmptyName(c)
+      c && hasNonEmptyName(c) && inferGender(c) === 'M'
     );
     const daughters = kids.filter(c =>
-      c && (c.role || '').trim() === 'بنت' && hasNonEmptyName(c)
+      c && hasNonEmptyName(c) && inferGender(c) === 'F'
     );
 
     out.hasChildren = !!(sons.length || daughters.length);
@@ -435,14 +518,21 @@ function createBioSection(id, title, { defaultOpen = true, collapsible = true } 
   return { section: sec, body };
 }
 
-function addBioRow(parent, label, value){
+function addBioRow(parent, label, value, fieldKey = ''){
   if (value == null) return;
   const v = String(value).trim();
   if (!v || v === '-') return;
-  const row = el('div', 'bio-field');
-  row.append(textEl('strong', label + ':'), textEl('span', v));
+
+  const rowClass = fieldKey ? `bio-field bio-field--${fieldKey}` : 'bio-field';
+  const row = el('div', rowClass);
+
+  row.append(
+    textEl('strong', label + ':'),
+    textEl('span', v)
+  );
   parent.appendChild(row);
 }
+
 
 function renderClickableNames(parent, title, arr, handlers, itemRenderer){
   if (!Array.isArray(arr) || !arr.length) return;
@@ -466,7 +556,11 @@ function renderClickableNames(parent, title, arr, handlers, itemRenderer){
     }
 
     const id = x && x._id;
-    if (id && handlers?.onShowDetails){
+
+    // NEW: نجعل الاسم قابلاً للنقر فقط إذا كان لهذا الشخص بطاقة مرسومة في الشجرة
+    const canClick = id && isPersonRendered(id) && handlers?.onShowDetails;
+
+    if (canClick){
       li.classList.add('clickable');
       li.style.cursor = 'pointer';
       li.addEventListener('click', ev => {
@@ -474,6 +568,7 @@ function renderClickableNames(parent, title, arr, handlers, itemRenderer){
         handlers.onShowDetails(id);
       });
     }
+
 
     ul.appendChild(li);
   });
@@ -491,53 +586,99 @@ function buildBasicSection(bio, person, family){
     collapsible: false
   });
 
-  addBioRow(body, LABELS.fullName   || 'الإسم',  bio.fullName || bio.fullname || '');
-  addBioRow(body, LABELS.cognomen   || 'اللقب',  bio.cognomen);
-  addBioRow(body, LABELS.occupation || 'المهنة', bio.occupation);
+  // الاسم / اللقب / المهنة
+  addBioRow(body, LABELS.fullName   || 'الإسم',        bio.fullName || bio.fullname || '', 'fullName');
+  addBioRow(body, LABELS.cognomen   || 'اللقب',        bio.cognomen,   'cognomen');
+  addBioRow(body, LABELS.occupation || 'المهنة',       bio.occupation, 'occupation');
 
-  addBioRow(body, LABELS.fatherName || 'اسم الأب', bio.fatherName);
-  addBioRow(body, LABELS.motherName || 'اسم الأم', bio.motherName);
-  addBioRow(body, LABELS.birthPlace || 'مكان الميلاد', bio.birthPlace);
+  // الأب / الأم / مكان الميلاد
+  addBioRow(body, LABELS.fatherName || 'اسم الأب',     bio.fatherName, 'fatherName');
+  addBioRow(body, LABELS.motherName || 'اسم الأم',     bio.motherName, 'motherName');
+  addBioRow(body, LABELS.birthPlace || 'مكان الميلاد', bio.birthPlace, 'birthPlace');
 
+  // الميلاد
   if (bio.birthDate && bio.birthDate !== '-'){
-    addBioRow(body, LABELS.birthDate || 'تاريخ الميلاد', bio.birthDate);
+    addBioRow(body, LABELS.birthDate || 'تاريخ الميلاد', bio.birthDate, 'birthDate');
   } else if (bio.birthYear && bio.birthYear !== '-'){
-    addBioRow(body, LABELS.birthYear || 'سنة الميلاد', bio.birthYear);
+    addBioRow(body, LABELS.birthYear || 'سنة الميلاد',   bio.birthYear, 'birthYear');
   }
 
+  // الوفاة
   if (bio.deathDate && bio.deathDate !== '-'){
-    addBioRow(body, LABELS.deathDate || 'تاريخ الوفاة', bio.deathDate);
+    addBioRow(body, LABELS.deathDate || 'تاريخ الوفاة', bio.deathDate, 'deathDate');
   } else if (bio.deathYear && bio.deathYear !== '-'){
-    addBioRow(body, LABELS.deathYear || 'سنة الوفاة', bio.deathYear);
+    addBioRow(body, LABELS.deathYear || 'سنة الوفاة',   bio.deathYear, 'deathYear');
   }
 
+  // العمر
   const ageLabel = formatAgeFromBio(bio);
   if (ageLabel){
     const diedNow = !!(
       (bio.deathDate && bio.deathDate !== '-') ||
       (bio.deathYear && bio.deathYear !== '-')
     );
-    const row = el('div', 'bio-field');
+
+    const row = el('div', 'bio-field bio-field--age');
     row.append(textEl('strong', 'العمر:'));
+
     const ageSpan = textEl('span', ageLabel, diedNow ? 'age-dead' : 'age-alive');
     row.append(ageSpan);
     body.appendChild(row);
   }
 
+  // القبيلة / العشيرة / عشيرة الأم
   const ctx = window.__LINEAGE_CTX__ || Lineage.buildLineageContext(family);
   const resolvedTribe = person && family ? Lineage.resolveTribe(person, family, ctx) : (bio.tribe || '');
   const resolvedClan  = person && family ? Lineage.resolveClan(person, family, ctx)  : (bio.clan  || '');
 
-  addBioRow(body, LABELS.tribe      || 'القبيلة',    resolvedTribe);
-  addBioRow(body, LABELS.clan       || 'العشيرة',    resolvedClan);
-  addBioRow(body, LABELS.motherClan || 'عشيرة الأم', bio.motherClan);
-  addBioRow(body, LABELS.remark     || 'ملاحظة',     bio.remark);
+  addBioRow(body, LABELS.tribe      || 'القبيلة',    resolvedTribe,  'tribe');
+  addBioRow(body, LABELS.clan       || 'العشيرة',    resolvedClan,   'clan');
+  addBioRow(body, LABELS.motherClan || 'عشيرة الأم', bio.motherClan, 'motherClan');
+
+  // ملاحظة
+  addBioRow(body, LABELS.remark || 'ملاحظة', bio.remark, 'remark');
+
+  // ملخّص سريع للأسلاف والأحفاد
+  if (person && family && ctx){
+    const gkids = Lineage.resolveGrandchildren(person, family, ctx) || [];
+    const gSons = gkids.filter(x => inferGender(x) === 'M');
+    const gDau  = gkids.filter(x => inferGender(x) === 'F');
+
+    const ancRaw   = resolveAncestorsForPerson(person, family, ctx, { maxDepth: 5 }) || [];
+    const ancChain = ancRaw.filter(a => !isVirtualAncestorLike(a));
+
+    if (gkids.length || ancChain.length){
+      const row = el('div', 'bio-field bio-field--relSummary');
+      row.append(textEl('strong', 'ملخّص نسبي:'));
+
+      const parts = [];
+
+      const gender      = inferGender(person);
+      const basePronoun = (gender === 'F') ? 'لها'  : 'له';
+      const andPronoun  = (gender === 'F') ? 'ولها' : 'وله';
+
+      if (gkids.length){
+        parts.push(
+          `${basePronoun} ${gkids.length} من الأحفاد ` +
+          `(أحفاد: ${gSons.length}، حفيدات: ${gDau.length})`
+        );
+      }
+
+      if (ancChain.length){
+        const prefix = parts.length ? andPronoun : basePronoun;
+        parts.push(`${prefix} سلسلة أسلاف من ${ancChain.length} جيل`);
+      }
+
+      row.append(textEl('span', ' ' + parts.join('، ')));
+      body.appendChild(row);
+    }
+  }
 
   if (!body.querySelector('.bio-field')){
     const r = String(person?.role || '').trim();
     const isAncestorLike = r.startsWith('الجد') || r === 'الأب' || person === family?.father;
     if (isAncestorLike){
-      addBioRow(body, 'ملاحظة', 'لا توجد بيانات سيرة مسجّلة لهذا الشخص حالياً.');
+      addBioRow(body, 'ملاحظة', 'لا توجد بيانات سيرة مسجّلة لهذا الشخص حالياً.', 'remark');
       return section;
     }
     return null;
@@ -571,17 +712,91 @@ function buildGrandsSection(bio, person, family, handlers){
 
   const ctx = (person && family) ? (window.__LINEAGE_CTX__ || Lineage.buildLineageContext(family)) : null;
   if (ctx){
-    const gkids = Lineage.resolveGrandchildren(person, family, ctx);
+    // 1) سلسلة الأسلاف (من سياق النسب)
+    const chainRaw   = resolveAncestorsForPerson(person, family, ctx, { maxDepth: 5 }) || [];
+    const chainNamed = chainRaw.filter(a => !isVirtualAncestorLike(a));
+
+    if (chainNamed.length){
+      // نضيف رتبة لكل سلف (1 = الأقرب لهذا الشخص)
+      const chainWithRank = chainNamed.map((a, idx) => ({
+        ...a,
+        __ancRank: idx + 1
+      }));
+
+
+      // هل الشخص الحالي زوجة؟ (حتى نخفي الأدوار مثل "أب الزوجة" في عرض سيرتها)
+      const personRole   = String(person?.role || '').trim();
+      const isWifePerson = (personRole === 'زوجة' || personRole.startsWith('الزوجة'));
+
+      renderClickableNames(
+        body,
+        `سلسلة الأسلاف (${chainWithRank.length})`,
+        chainWithRank,
+        handlers,
+        (a, nm) => {
+          const frag  = document.createDocumentFragment();
+          const main  = el('div', 'grand-ancestor-name');
+          const meta  = el('div', 'grand-ancestor-meta');
+
+          const name = nm || String(a?.name || '').trim();
+          const rank = Number.isFinite(+a.__ancRank) ? +a.__ancRank : 1;
+          const role = String(a?.role || '').trim();
+
+          main.textContent = name;
+
+          // التسمية النسبيّة لهذا الشخص
+          let label;
+          if (rank === 1){
+            // الأقرب مباشرة = الأب
+            label = 'الأب';
+          } else {
+            // من بعده: الجد الأول، الجد الثاني، ...
+            label = `الجد ${getArabicOrdinal(rank - 1)}`;
+          }
+
+          // هل نعرض الدور بين قوسين؟
+          // - لا نعرضه إذا:
+          //   * كنا في سيرة الزوجة نفسها، وكان الدور مرتبطًا بها (مثل "أب الزوجة" أو "جد الزوجة...")
+          //   * أو كان الدور نفسه "الأب" أو يبدأ بـ "الجد" (لا فائدة من تكراره)
+          const isWifeRole = /زوجة/u.test(role); // يحتوي على "زوجة" (أب الزوجة، جد الزوجة من جهة ...)
+          const shouldShowRole =
+            !!role &&
+            role !== 'الأب' &&
+            !role.startsWith('الجد') &&
+            !(isWifePerson && isWifeRole);
+
+          if (shouldShowRole){
+            meta.textContent = `${label} (${role})`;
+          } else {
+            meta.textContent = label;
+          }
+
+          frag.append(main, meta);
+          return frag;
+        }
+      );
+    }
+
+    // 2) الأحفاد (ملخّص عددي + قائمة قابلة للنقر)
+    const gkids = Lineage.resolveGrandchildren(person, family, ctx) || [];
     if (gkids.length){
-      const gSons = gkids.filter(x => (x.role || '').trim() === 'ابن');
-      const gDau  = gkids.filter(x => (x.role || '').trim() === 'بنت');
+      const gSons = gkids.filter(x => inferGender(x) === 'M');
+      const gDau  = gkids.filter(x => inferGender(x) === 'F');
+
+          // ملخص عددي أعلى القسم
+      const summary = el('div', 'bio-grandkids-summary');
+      summary.textContent =
+        `أحفاد: ${gkids.length} (أحفاد: ${gSons.length}، حفيدات: ${gDau.length})`;
+      body.appendChild(summary);
+
 
       const showedSplit = (gSons.length || gDau.length);
 
       if (gSons.length)
-        renderClickableNames(body, `أحفاد (أبناء) (${gSons.length})`, gSons, handlers);
+        renderClickableNames(body, `أحفاد (${gSons.length})`, gSons, handlers);
+
       if (gDau.length)
-        renderClickableNames(body, `أحفاد (بنات) (${gDau.length})`, gDau, handlers);
+        renderClickableNames(body, `حفيدات (${gDau.length})`, gDau, handlers);
 
       if (!showedSplit){
         renderClickableNames(body, `الأحفاد (${gkids.length})`, gkids, handlers);
@@ -589,9 +804,11 @@ function buildGrandsSection(bio, person, family, handlers){
     }
   }
 
+
   if (!body.children.length) return null;
   return section;
 }
+
 
 /* ===== 3) العائلة: الإخوة/الأعمام/الأخوال ===== */
 function buildFamilySection(bio, person, family, handlers){
@@ -716,7 +933,7 @@ function buildFamilySection(bio, person, family, handlers){
     renderClickableNames(body, `الأخوات (${sisAll.length})`, sisAll, handlers);
   }
 
-  const ua        = Lineage.resolveUnclesAunts(person, family, ctx);
+  const ua        = getUnclesAuntsForPerson(person, family, ctx);
   const patUncles = ua.paternalUncles || [];
   const patAunts  = ua.paternalAunts  || [];
   const matUncles = ua.maternalUncles || [];
@@ -767,17 +984,17 @@ function buildChildrenSection(person, family, handlers){
 
   if (!kids.length) return null;
 
-  const sons      = kids.filter(c => (c?.role || '').trim() === 'ابن');
-  const daughters = kids.filter(c => (c?.role || '').trim() === 'بنت');
+  const sons      = kids.filter(c => inferGender(c) === 'M');
+  const daughters = kids.filter(c => inferGender(c) === 'F');
 
   if (!sons.length && !daughters.length) return null;
 
-  const { section, body } = createBioSection('children', 'الأبناء والبنات', { defaultOpen: true });
+  const { section, body } = createBioSection('children', 'أبناء وبنات', { defaultOpen: true });
 
   if (sons.length)
-    renderClickableNames(body, `الأبناء (${sons.length})`, sons, handlers);
+    renderClickableNames(body, `أبناء (${sons.length})`, sons, handlers);
   if (daughters.length)
-    renderClickableNames(body, `البنات (${daughters.length})`, daughters, handlers);
+    renderClickableNames(body, `بنات (${daughters.length})`, daughters, handlers);
 
   if (!body.children.length) return null;
   return section;
