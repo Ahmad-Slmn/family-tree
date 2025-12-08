@@ -5,6 +5,40 @@ import { DB } from '../storage/db.js';
 import * as Lineage from '../features/lineage.js';
 import { inferGender } from '../model/roles.js';
 
+const WIFE_COLLAPSE_STORAGE_KEY = 'wivesCollapseState';
+
+function _loadWifeCollapseState(){
+  try{
+    const raw = localStorage.getItem(WIFE_COLLAPSE_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return (parsed && typeof parsed === 'object') ? parsed : {};
+  }catch{
+    return {};
+  }
+}
+
+function _saveWifeCollapseState(map){
+  try{
+    localStorage.setItem(WIFE_COLLAPSE_STORAGE_KEY, JSON.stringify(map || {}));
+  }catch{}
+}
+
+function getWifeCollapsed(groupKey, wifeId){
+  if (!groupKey || !wifeId) return false;
+  const all = _loadWifeCollapseState();
+  return !!(all[groupKey] && all[groupKey][wifeId]);
+}
+
+function setWifeCollapsed(groupKey, wifeId, collapsed){
+  if (!groupKey || !wifeId) return;
+  const all = _loadWifeCollapseState();
+  if (!all[groupKey]) all[groupKey] = {};
+  if (collapsed) all[groupKey][wifeId] = true;
+  else delete all[groupKey][wifeId];
+  _saveWifeCollapseState(all);
+}
+
 // ===== حالة رسم البطاقات/الصور =====
 const RENDERED_IDS = new Set();          // الأشخاص المرسومون
 const _cardById = new Map();             // personId -> DOM node
@@ -363,21 +397,89 @@ export function resetCardsState(){
 }
 
 // ===== صناديق العدّادات =====
-function normalizeLabel(l){ if (!l && l!==0) return ''; return String(l).replace(/[:\s]+$/u,'').trim(); }
+function normalizeLabel(l){
+  if (!l && l!==0) return '';
+  return String(l).replace(/[:\s]+$/u,'').trim();
+}
+
+// ترتيب ثابت لعناوين العدّادات
+const COUNTER_RIGHT_ORDER = ['أبناء','بنات','أحفاد','حفيدات','إجمالي','الإجمالي'];
+const COUNTER_LEFT_ORDER  = ['زوجات','إخوة','أخوات','أعمام','عمّات','أخوال','خالات'];
 
 export function createCounterBox(items = []){
-  const box = el('div','counter-box'), left = el('div','counter-left'), right = el('div','counter-right');
+  const box   = el('div','counter-box');
+  const left  = el('div','counter-left');
+  const right = el('div','counter-right');
+
+  const normalized = [];
+
   items.forEach(it => {
-    if (it.value == null || Number(it.value) === 0) return;
-    const raw = normalizeLabel(it.label);
-    const p = el('p','count-item');
-    p.append(textEl('span', raw+':','count-label'), textEl('span', String(it.value),'count-value'));
-    (['الإخوة','الأخوات','الزوجات','الأعمام','العمّات','الأخوال','الخالات'].includes(raw) ? left : right)
-      .appendChild(p);
+    if (!it || it.value == null || Number(it.value) === 0) return;
+
+    const rawLabel = normalizeLabel(it.label);
+    if (!rawLabel) return;
+
+    // مفتاح مبسّط للترتيب (إزالة "ال" في البداية عند الحاجة)
+    let key = rawLabel.replace(/^ال/u,'');
+    if (key === 'إجمالي') key = 'إجمالي';
+
+    // تحديد الجهة (يسار/يمين)
+    const isLeftLabel =
+      COUNTER_LEFT_ORDER.includes(rawLabel) ||
+      COUNTER_LEFT_ORDER.includes(key);
+
+    const side = isLeftLabel ? 'left' : 'right';
+
+    normalized.push({
+      rawLabel,
+      key,
+      value: it.value,
+      side,
+      originalIndex: normalized.length
+    });
   });
+
+  const sortByOrder = (arr, order) => {
+    arr.sort((a,b) => {
+      const ia = order.indexOf(a.key);
+      const ib = order.indexOf(b.key);
+
+      const aHas = ia !== -1;
+      const bHas = ib !== -1;
+
+      // مَن له ترتيب معروف يسبق غير المعروف
+      if (aHas && bHas && ia !== ib) return ia - ib;
+      if (aHas !== bHas) return aHas ? -1 : 1;
+
+      // عند التساوي نرجع للترتيب الأصلي للإدخال
+      return a.originalIndex - b.originalIndex;
+    });
+  };
+
+  const leftItems  = normalized.filter(x => x.side === 'left');
+  const rightItems = normalized.filter(x => x.side === 'right');
+
+  sortByOrder(rightItems, COUNTER_RIGHT_ORDER);
+  sortByOrder(leftItems,  COUNTER_LEFT_ORDER);
+
+  const makeP = (label, value) => {
+    const p = el('p','count-item');
+    p.append(
+      textEl('span', label + ':','count-label'),
+      textEl('span', String(value),'count-value')
+    );
+    return p;
+  };
+
+  rightItems.forEach(it => right.appendChild(makeP(it.rawLabel, it.value)));
+  leftItems.forEach(it  => left.appendChild(makeP(it.rawLabel, it.value)));
+
   if (!left.children.length && !right.children.length) return null;
-  box.append(right,left); return box;
+
+  box.append(right, left);
+  return box;
 }
+
 
 export function createCounterBoxForPerson(person){
   const family = window.__CURRENT_FAMILY__;
@@ -398,7 +500,7 @@ export function createCounterBoxForPerson(person){
     const id = w?._id; 
     return id && ctx.connectedIds.has(String(id));
   });
-  if (wives.length) items.push({ label:'الزوجات', value:wives.length });
+  if (wives.length) items.push({ label:'زوجات', value:wives.length });
 
   let kids = [];
 
@@ -460,13 +562,13 @@ export function createCounterBoxForPerson(person){
   if (!sibAll.length){
     const brosFallback = (sib.brothers||[]).filter(s => s?._id && ctx.connectedIds.has(String(s._id)));
     const sisFallback  = (sib.sisters ||[]).filter(s => s?._id && ctx.connectedIds.has(String(s._id)));
-    if (brosFallback.length) items.push({ label:'الإخوة', value:brosFallback.length });
-    if (sisFallback.length)  items.push({ label:'الأخوات', value:sisFallback.length });
+ if (brosFallback.length) items.push({ label:'إخوة', value:brosFallback.length });
+if (sisFallback.length)  items.push({ label:'أخوات', value:sisFallback.length });
   } else {
     const bros = sibAll.filter(s => String(s.role||'').trim() === 'ابن');
     const sis  = sibAll.filter(s => String(s.role||'').trim() === 'بنت');
-    if (bros.length) items.push({ label:'الإخوة', value:bros.length });
-    if (sis.length)  items.push({ label:'الأخوات', value:sis.length });
+  if (bros.length) items.push({ label:'إخوة', value:bros.length });
+if (sis.length)  items.push({ label:'أخوات', value:sis.length });
   }
 
   const ua = Lineage.resolveUnclesAunts(ref, family, ctx) || {};
@@ -476,12 +578,13 @@ export function createCounterBoxForPerson(person){
   const matUncles = Array.isArray(ua.maternalUncles) ? ua.maternalUncles : [];
   const matAunts  = Array.isArray(ua.maternalAunts)  ? ua.maternalAunts  : [];
 
-  if (patUncles.length) items.push({ label:'الأعمام', value:patUncles.length });
-  if (patAunts.length)  items.push({ label:'العمّات', value:patAunts.length });
-  if (matUncles.length) items.push({ label:'الأخوال', value:matUncles.length });
-  if (matAunts.length)  items.push({ label:'الخالات', value:matAunts.length });
+if (patUncles.length) items.push({ label:'أعمام',  value:patUncles.length });
+if (patAunts.length)  items.push({ label:'عمّات',  value:patAunts.length });
+if (matUncles.length) items.push({ label:'أخوال',  value:matUncles.length });
+if (matAunts.length)  items.push({ label:'خالات', value:matAunts.length });
 
   return items.length ? createCounterBox(items) : null;
+
 }
 
 // ===== موصلات بصرية بسيطة =====
@@ -494,14 +597,56 @@ export function toggleConnectors(root, on){
 
 // ===== مقطع زوجة + أبنائها مع احترام الفلاتر/البحث =====
 export function createWifeSection(wife, handlers, match, passFiltersFn, opts = {}){
-  const sec = el('div','wife-section');
+  const sec  = el('div','wife-section');
+  const body = el('div','wife-section-body');
+
+  // رأس القسم + زر طيّ/فتح
+  const header    = el('div','wife-section-header');
+  const wifeTitle = String(wife?.name || 'زوجة');
+  const title     = textEl('div','', 'wife-section-title');
+  title.dataset.wifeTitle = wifeTitle;
+
+  const toggleBtn = el('button','wife-section-toggle');
+  toggleBtn.type = 'button';
+  toggleBtn.textContent = 'طيّ / فتح';
+
+  // مفتاح التخزين: (مجموعة/عائلة + رقم الزوجة)
+  const groupKey = opts?.collapseGroupKey || null;
+  const wifeId   = wife && wife._id ? String(wife._id) : null;
+  const initiallyCollapsed = getWifeCollapsed(groupKey, wifeId);
+
+  toggleBtn.setAttribute('aria-expanded', initiallyCollapsed ? 'false' : 'true');
+
+  header.append(title, toggleBtn);
+  sec.append(header, body);
+
+  // حالة البداية:
+  // - إذا كانت مطويّة في التخزين → نضيف is-collapsed ونكتب اسم الزوجة في العنوان
+  // - إذا غير مطويّة → نترك الجسم مفتوحًا والعنوان فارغًا
+  if (initiallyCollapsed){
+    body.classList.add('is-collapsed');
+    title.textContent = wifeTitle;
+  } else {
+    title.textContent = '';
+  }
+
+  toggleBtn.addEventListener('click', () => {
+    const collapsed = body.classList.toggle('is-collapsed');
+    toggleBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+
+    // على الشاشة: إذا طُوي القسم نعرض اسم الزوجة، وإذا فُتح نخفي الاسم
+    title.textContent = collapsed ? wifeTitle : '';
+
+    // حفظ الحالة في localStorage
+    setWifeCollapsed(groupKey, wifeId, collapsed);
+  });
 
   const showWifeCard = !opts?.hideNonMatchingParents ? true
     : (passFiltersFn ? passFiltersFn(wife) : true) && (!opts?.hasQuery || (typeof match === 'function' && match(wife)));
   let wifeCard = null;
 
   if (showWifeCard){
-    wifeCard = upsertCard(sec, wife, handlers, 'wife', opts);
+    wifeCard = upsertCard(body, wife, handlers, 'wife', opts);
     const box = createCounterBoxForPerson(wife);
     if (box && !wifeCard.querySelector('.counter-box')) wifeCard.appendChild(box);
   }
@@ -510,16 +655,16 @@ export function createWifeSection(wife, handlers, match, passFiltersFn, opts = {
   (wife.children||[]).forEach(child => {
     if (!match(child) || (passFiltersFn && !passFiltersFn(child))) return;
     const wrap = el('div','relative');
-    const cls = ((child?.role || '').trim() === 'ابن') ? 'son' : 'daughter';
+    const cls  = ((child?.role || '').trim() === 'ابن') ? 'son' : 'daughter';
     const cnode = upsertCard(wrap, child, handlers, cls, opts);
-    const box = createCounterBoxForPerson(child);
+    const box   = createCounterBoxForPerson(child);
     if (box && !cnode.querySelector('.counter-box')) cnode.appendChild(box);
     grid.appendChild(wrap); drawn++;
   });
 
   if (drawn > 0){
     grid.style.marginTop = '2rem';
-    sec.append(grid);
+    body.append(grid);
   } else {
     if (!showWifeCard) return null;
   }

@@ -15,6 +15,20 @@
     overflow:visible !important;
   }
 
+  /* في الطباعة: إلغاء الطيّ → كل الأقسام تُطبع مفتوحة */
+  .wife-section-body,
+  .wife-section-body.is-collapsed{
+    display:block !important;
+    max-height:none !important;
+    overflow:visible !important;
+  }
+
+  /* في الطباعة: إخفاء رأس قسم الزوجة بالكامل (العنوان + زر الطيّ) */
+  .wife-section-header{
+    display:none !important;
+  }
+
+
   /* إخفاء عناصر الواجهة التفاعلية التي لا داعي لها في الورق */
   #app-splash,
   .top-bar,

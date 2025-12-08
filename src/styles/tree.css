@@ -36,6 +36,34 @@
   flex:1 1 16rem;max-width:20rem;height:fit-content
 }
 
+.wife-section-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  width:100%;
+  margin-bottom:.5rem;
+}
+.wife-section-title{
+  font-weight:600;
+  font-size:.95rem;
+  color:var(--title-color);
+}
+.wife-section-toggle{
+  font-size:.8rem;
+  padding:.15rem .6rem;
+  border-radius:999px;
+  border:1px solid var(--surface-border);
+  background:color-mix(in srgb,var(--panel-bg) 92%,#fff);
+  color:var(--text-main);
+  cursor:pointer;
+}
+.wife-section-toggle:hover{
+  filter:brightness(1.05);
+}
+.wife-section-body.is-collapsed{
+  display:none;
+}
+
 .children-grid{display:grid;gap:1.5rem}
 
 /* عدادات */
@@ -123,7 +151,7 @@
   align-items:center;
   justify-content:flex-start;
   gap:.4rem;
-  margin-top:.5rem;
+  margin-top: 1rem;
 }
 
 /* الاسم */
@@ -188,13 +216,36 @@
 }
 .member-card .mini-strip span{opacity:.9;}
 .member-card .mini-strip strong{font-weight:600;}
+/* سطر المسار العائلي في نتائج البحث */
+.member-card .search-lineage{
+  margin-top:.35rem;
+  font-size:.8rem;
+  opacity:.85;
+  direction:rtl;
+}
 
 /* عدادات جانبية على البطاقة */
 .counter-box{
   position:absolute;top:.35rem;inset-inline:.35rem;
   display:flex;justify-content:space-between;align-items:flex-start;
   gap:.75rem;pointer-events:none;
+
 }
+
+/* شارة مصدر المطابقة في نتائج البحث */
+.search-match-badge{
+  position:absolute;
+  bottom:.4rem;
+  inset-inline-start:.6rem;
+  padding:.15rem .6rem;
+  border-radius:999px;
+  font-size:.75rem;
+  font-weight:600;
+  background:var(--badge-bg);
+  color:var(--title-color);
+  box-shadow:0 0 .35rem rgba(0,0,0,.15);
+}
+
 .counter-right,
 .counter-left{position:static;display:flex;flex-direction:column;}
 .counter-right{align-items:flex-start;text-align:start;}

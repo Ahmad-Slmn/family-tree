@@ -213,10 +213,48 @@ const BIO_SECTION_GROUPS = {
 const SUMMARY_ALLOWED_SECTIONS = new Set(['basic', 'achievements', 'hobbies']);
 
 const DEFAULT_BIO_SECTIONS_ORDER = [...BIO_SECTION_KEYS];
-const BIO_SECTIONS_STATE = new Map(); // personKey -> { [sectionId]: boolean }
+
+const BIO_STATE_STORAGE_KEY = 'bioSectionsState_v1';
+let BIO_SECTIONS_STATE = new Map(); // personKey -> { [sectionId]: boolean }
 let CURRENT_BIO_PERSON_KEY = null;
+let _bioStateLoaded = false;
+
+function _loadBioStateFromStorage(){
+  if (_bioStateLoaded) return;
+  _bioStateLoaded = true;
+  try{
+    if (!window || !window.localStorage) return;
+    const raw = window.localStorage.getItem(BIO_STATE_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return;
+    Object.keys(parsed).forEach(personKey => {
+      const rec = parsed[personKey];
+      if (rec && typeof rec === 'object'){
+        BIO_SECTIONS_STATE.set(personKey, rec);
+      }
+    });
+  } catch(e){
+    // نتجاهل أي خطأ (وضع خصوصية أو منع التخزين)
+  }
+}
+
+function _saveBioStateToStorage(){
+  if (!_bioStateLoaded) return;
+  try{
+    if (!window || !window.localStorage) return;
+    const obj = {};
+    BIO_SECTIONS_STATE.forEach((rec, personKey) => {
+      obj[personKey] = rec;
+    });
+    window.localStorage.setItem(BIO_STATE_STORAGE_KEY, JSON.stringify(obj));
+  } catch(e){
+    // نتجاهل أي خطأ
+  }
+}
 
 function getSectionOpenState(personKey, sectionId, fallbackOpen){
+  _loadBioStateFromStorage();
   if (!personKey) return !!fallbackOpen;
   const rec = BIO_SECTIONS_STATE.get(personKey);
   if (!rec || typeof rec[sectionId] !== 'boolean') return !!fallbackOpen;
@@ -224,10 +262,12 @@ function getSectionOpenState(personKey, sectionId, fallbackOpen){
 }
 
 function setSectionOpenState(personKey, sectionId, isOpen){
+  _loadBioStateFromStorage();
   if (!personKey) return;
   const rec = BIO_SECTIONS_STATE.get(personKey) || {};
   rec[sectionId] = !!isOpen;
   BIO_SECTIONS_STATE.set(personKey, rec);
+  _saveBioStateToStorage();
 }
 
 function getBioSectionsOrder(handlers){
@@ -350,9 +390,18 @@ function detectSectionPresence(bio, person, family){
     hasWives:    false,
     hasStories:  false,
     hasTimeline: false,
-    hasSources:  false
-  };
+    hasSources:  false,
 
+    siblingsCount:     0,
+    unclesAuntsCount:  0,
+    familyCount:       0,
+    grandsCount:       0,
+    childrenCount:     0,
+    wivesCount:        0,
+    storiesCount:      0,
+    timelineCount:     0,
+    sourcesCount:      0
+  };
 
   bio = bio || {};
   if (!person || !family) return out;
@@ -360,17 +409,14 @@ function detectSectionPresence(bio, person, family){
   const ctx = window.__LINEAGE_CTX__ || Lineage.buildLineageContext(family);
   const hasNonEmptyName = p => {
     if (!p) return false;
-    // يدعم الكائنات {name:...} وكذلك النصوص العادية "فلان"
     const nm = (typeof p === 'object') ? p.name : p;
     return !!String(nm || '').trim();
   };
 
-
   if (ctx){
-    // العائلة: إخوة/أخوات/أعمام/عمات/أخوال/خالات
+    // العائلة: الإخوة/الأخوات + الأعمام/العمات/الأخوال/الخالات
     const sib = Lineage.resolveSiblings(person, family, ctx) || {};
-        const ua  = getUnclesAuntsForPerson(person, family, ctx);
-
+    const ua  = getUnclesAuntsForPerson(person, family, ctx);
 
     const brosAll = Array.isArray(sib.brothers) ? sib.brothers : [];
     const sisAll  = Array.isArray(sib.sisters)  ? sib.sisters  : [];
@@ -390,14 +436,19 @@ function detectSectionPresence(bio, person, family){
 
     out.hasFamily = !!(hasSiblingsNamed || hasUnclesAuntsNamed);
 
-    // الأسلاف والأجداد + الأحفاد
+    const siblingsCount    = brosAll.length + sisAll.length;
+    const unclesAuntsCount = patUncles.length + patAunts.length + matUncles.length + matAunts.length;
+    out.siblingsCount      = siblingsCount;
+    out.unclesAuntsCount   = unclesAuntsCount;
+    out.familyCount        = siblingsCount + unclesAuntsCount;
+
+    // الأسلاف + الأحفاد
     const hasGrandBio = [
       'paternalGrandfather','paternalGrandmother','paternalGrandmotherClan',
       'maternalGrandfather','maternalGrandmother','maternalGrandmotherClan',
       'maternalGrandfatherClan','motherClan'
     ].some(k => _hasValue(bio[k]));
 
-    // سلسلة الأسلاف الفعلية من شجرة النسب (مهمّة خصوصًا للزوجة)
     const ancRaw            = resolveAncestorsForPerson(person, family, ctx, { maxDepth: 5 }) || [];
     const ancNamed          = ancRaw.filter(a => !isVirtualAncestorLike(a));
     const hasAncestorsChain = ancNamed.length > 0;
@@ -405,14 +456,10 @@ function detectSectionPresence(bio, person, family){
     const gkidsAll          = Lineage.resolveGrandchildren(person, family, ctx) || [];
     const hasNamedGrandkids = gkidsAll.some(hasNonEmptyName);
 
-    // نعتبر وجود القسم عند أي من:
-    // - بيانات أجداد في الـ bio
-    // - أو سلسلة أسلاف حقيقية من الشجرة
-    // - أو وجود أحفاد
-    out.hasGrands = !!(hasGrandBio || hasAncestorsChain || hasNamedGrandkids);
+    out.hasGrands  = !!(hasGrandBio || hasAncestorsChain || hasNamedGrandkids);
+    out.grandsCount = ancNamed.length + gkidsAll.length;
 
-
-    // الأبناء والبنات (نفس منطق buildChildrenSection لكن بالجنس)
+    // الأبناء والبنات
     let kids = [];
     if (Array.isArray(person.children) && person.children.length){
       kids = person.children;
@@ -428,14 +475,11 @@ function detectSectionPresence(bio, person, family){
       }
     }
 
-    const sons = kids.filter(c =>
-      c && hasNonEmptyName(c) && inferGender(c) === 'M'
-    );
-    const daughters = kids.filter(c =>
-      c && hasNonEmptyName(c) && inferGender(c) === 'F'
-    );
+    const sons      = kids.filter(c => c && hasNonEmptyName(c) && inferGender(c) === 'M');
+    const daughters = kids.filter(c => c && hasNonEmptyName(c) && inferGender(c) === 'F');
 
-    out.hasChildren = !!(sons.length || daughters.length);
+    out.hasChildren   = !!(sons.length || daughters.length);
+    out.childrenCount = sons.length + daughters.length;
 
     // الزوجات
     let wives = [];
@@ -448,22 +492,25 @@ function detectSectionPresence(bio, person, family){
     } else if (Array.isArray(person.wives)){
       wives = person.wives;
     }
-
-    out.hasWives = wives.some(hasNonEmptyName);
+    out.hasWives   = wives.some(hasNonEmptyName);
+    out.wivesCount = wives.length;
   }
 
-  // القصص والمذكّرات
+  // القصص
   const stories = Array.isArray(person.stories) ? person.stories
     : (Array.isArray(person.bio?.stories) ? person.bio.stories : []);
-  out.hasStories = stories.length > 0;
+  out.hasStories   = stories.length > 0;
+  out.storiesCount = stories.length;
 
-  // الأحداث (الخط الزمني)
+  // الأحداث
   const events = Array.isArray(person.events) ? person.events : [];
-  out.hasTimeline = events.length > 0;
+  out.hasTimeline   = events.length > 0;
+  out.timelineCount = events.length;
 
-  // المصادر والوثائق
+  // المصادر
   const sources = Array.isArray(person.sources) ? person.sources : [];
-  out.hasSources = sources.length > 0;
+  out.hasSources   = sources.length > 0;
+  out.sourcesCount = sources.length;
 
   return out;
 }
@@ -533,16 +580,19 @@ function addBioRow(parent, label, value, fieldKey = ''){
   parent.appendChild(row);
 }
 
-
 function renderClickableNames(parent, title, arr, handlers, itemRenderer){
   if (!Array.isArray(arr) || !arr.length) return;
+
+  const MAX_VISIBLE            = 10;   // العناصر الظاهرة أولاً
+  const LONG_LIST_THRESHOLD    = 20;   // من هذا العدد نعتبر القائمة "طويلة"
+  const isLong                 = arr.length > LONG_LIST_THRESHOLD;
 
   const sec = el('div', 'bio-sublist');
   if (title) sec.append(textEl('h3', title));
 
   const ul = el('ul');
 
-  arr.forEach(x => {
+  arr.forEach((x, idx) => {
     const nm = (x && x.name) ? String(x.name).trim() : String(x || '').trim();
     if (!nm) return;
 
@@ -556,8 +606,6 @@ function renderClickableNames(parent, title, arr, handlers, itemRenderer){
     }
 
     const id = x && x._id;
-
-    // NEW: نجعل الاسم قابلاً للنقر فقط إذا كان لهذا الشخص بطاقة مرسومة في الشجرة
     const canClick = id && isPersonRendered(id) && handlers?.onShowDetails;
 
     if (canClick){
@@ -569,14 +617,37 @@ function renderClickableNames(parent, title, arr, handlers, itemRenderer){
       });
     }
 
+    // إخفاء الزائد في القوائم الطويلة
+    if (isLong && idx >= MAX_VISIBLE){
+      li.classList.add('bio-li--collapsed');
+      li.hidden = true;
+    }
 
     ul.appendChild(li);
   });
 
-  if (ul.children.length){
-    sec.appendChild(ul);
-    parent.appendChild(sec);
+  if (!ul.children.length) return;
+
+  sec.appendChild(ul);
+
+  if (isLong){
+    let expanded = false;
+    const toggle = el('button', 'bio-list-toggle');
+    toggle.type  = 'button';
+    toggle.textContent = `عرض الكل (${arr.length})`;
+
+    toggle.addEventListener('click', () => {
+      expanded = !expanded;
+      const hiddenLis = ul.querySelectorAll('.bio-li--collapsed');
+      hiddenLis.forEach(li => { li.hidden = !expanded; });
+      toggle.textContent = expanded  ? 'إخفاء الزائد'
+        : `عرض الكل (${arr.length})`;
+    });
+
+    sec.appendChild(toggle);
   }
+
+  parent.appendChild(sec);
 }
 
 /* ===== 1) البيانات الأساسية ===== */
@@ -585,6 +656,68 @@ function buildBasicSection(bio, person, family){
     defaultOpen: true,
     collapsible: false
   });
+
+  bio    = bio    || {};
+  person = person || {};
+  const ctx = (family ? (window.__LINEAGE_CTX__ || Lineage.buildLineageContext(family)) : null);
+
+  // === رأس الشخص: الاسم (قصير) + اللقب + البادجات ===
+  {
+    // الاسم القصير لعرضه في رأس السيرة (عادة نفس الاسم المستخدم في بطاقة الشجرة)
+    const shortName = String(person.name || '').trim();
+
+    // الاسم الكامل يبقى مخصَّصًا لحقل التفاصيل (bio-field--fullName)
+    const fullName  = String(bio.fullName || bio.fullname || '').trim();
+
+    // الاسم الذي سيظهر في رأس السيرة:
+    // - إن وجد shortName نستخدمه
+    // - وإلا نستخدم fullName كاحتياط
+    const displayName = shortName || fullName;
+
+    const cognomen  = (bio.cognomen || '').trim();
+    const roleText  = String(person.role || '').trim();
+    const hasDeath  = !!(
+      (bio.deathDate && bio.deathDate !== '-') ||
+      (bio.deathYear && bio.deathYear !== '-')
+    );
+
+    const gender   = inferGender(person);
+    const isFemale = (gender === 'F');
+
+    if (displayName || cognomen || roleText || bio){
+      const header   = el('div', 'bio-basic-header');
+      const main     = el('div', 'bio-basic-main');
+
+      if (displayName){
+        // يعرض الاسم القصير فقط في رأس السيرة
+        main.appendChild(textEl('div', displayName, 'bio-basic-name'));
+      }
+      if (cognomen){
+        main.appendChild(textEl('div', cognomen, 'bio-basic-cognomen'));
+      }
+      header.appendChild(main);
+
+      const badges = el('div', 'bio-basic-badges');
+
+      if (roleText){
+        badges.appendChild(
+          textEl('span', roleText, 'bio-basic-badge bio-basic-badge--role')
+        );
+      }
+
+      const statusLabel = hasDeath ? (isFemale ? 'متوفّاة' : 'متوفّى')
+        : (isFemale ? 'حيّة' : 'حيّ');
+      const statusCls   = hasDeath ? 'bio-basic-badge--dead' : 'bio-basic-badge--alive';
+
+      badges.appendChild(
+        textEl('span', statusLabel, `bio-basic-badge ${statusCls}`)
+      );
+
+      header.appendChild(badges);
+      body.appendChild(header);
+    }
+  }
+
 
   // الاسم / اللقب / المهنة
   addBioRow(body, LABELS.fullName   || 'الإسم',        bio.fullName || bio.fullname || '', 'fullName');
@@ -610,7 +743,7 @@ function buildBasicSection(bio, person, family){
     addBioRow(body, LABELS.deathYear || 'سنة الوفاة',   bio.deathYear, 'deathYear');
   }
 
-  // العمر
+  // العمر (حي/متوفى)
   const ageLabel = formatAgeFromBio(bio);
   if (ageLabel){
     const diedNow = !!(
@@ -627,19 +760,115 @@ function buildBasicSection(bio, person, family){
   }
 
   // القبيلة / العشيرة / عشيرة الأم
-  const ctx = window.__LINEAGE_CTX__ || Lineage.buildLineageContext(family);
-  const resolvedTribe = person && family ? Lineage.resolveTribe(person, family, ctx) : (bio.tribe || '');
-  const resolvedClan  = person && family ? Lineage.resolveClan(person, family, ctx)  : (bio.clan  || '');
+  const resolvedTribe = (person && family && ctx) ? Lineage.resolveTribe(person, family, ctx)
+    : (bio.tribe || '');
+  const resolvedClan  = (person && family && ctx) ? Lineage.resolveClan(person, family, ctx)
+    : (bio.clan  || '');
 
   addBioRow(body, LABELS.tribe      || 'القبيلة',    resolvedTribe,  'tribe');
   addBioRow(body, LABELS.clan       || 'العشيرة',    resolvedClan,   'clan');
   addBioRow(body, LABELS.motherClan || 'عشيرة الأم', bio.motherClan, 'motherClan');
 
+  // تلخيص الانتماء القبلي نصيًا (مع تذكير/تأنيث الفعل)
+  {
+    const tribeTxt      = String(resolvedTribe || '').trim();
+    const clanTxt       = String(resolvedClan  || '').trim();
+    const motherClanTxt = String(bio.motherClan || '').trim();
+    const parts         = [];
+
+    const gender   = inferGender(person);
+    const isFemale = (gender === 'F');
+    const verbBelongs = isFemale ? 'تنتمي' : 'ينتمي';
+
+    if (tribeTxt){
+      parts.push(`${verbBelongs} إلى قبيلة «${tribeTxt}»`);
+    }
+
+    if (clanTxt){
+      const prefix = parts.length ? 'من عشيرة' : `${verbBelongs} إلى عشيرة`;
+      parts.push(`${prefix} «${clanTxt}»`);
+    }
+
+    if (motherClanTxt){
+      if (parts.length){
+        parts.push(`وعشيرة الأم «${motherClanTxt}»`);
+      } else {
+        parts.push(`${verbBelongs} إلى عشيرة الأم «${motherClanTxt}»`);
+      }
+    }
+
+    if (parts.length){
+      const row = el('div', 'bio-field bio-field--relSummary');
+      row.append(
+        textEl('strong', 'الانتماء القبلي:'),
+        textEl('span', parts.join('، '))
+      );
+      body.appendChild(row);
+    }
+  }
+
   // ملاحظة
   addBioRow(body, LABELS.remark || 'ملاحظة', bio.remark, 'remark');
 
-  // ملخّص سريع للأسلاف والأحفاد
+  // ملخّص عائلي + نسبي + تلميح المصادر
   if (person && family && ctx){
+    // ملخّص عائلي: أبناء/بنات + إخوة/أخوات + زوجات
+    const sibResolved = Lineage.resolveSiblings(person, family, ctx) || {};
+    const brosAll     = Array.isArray(sibResolved.brothers) ? sibResolved.brothers : [];
+    const sisAll      = Array.isArray(sibResolved.sisters)  ? sibResolved.sisters  : [];
+
+    let kids = [];
+    if (Array.isArray(person.children) && person.children.length){
+      kids = person.children;
+    } else if (Array.isArray(person.childrenIds) && person.childrenIds.length){
+      kids = person.childrenIds.map(id => ctx.byId.get(String(id))).filter(Boolean);
+    } else if (family && (person === family.rootPerson || (String(person.role || '').trim() === 'صاحب الشجرة'))){
+      kids = (Array.isArray(family.wives) ? family.wives : [])
+        .flatMap(w => Array.isArray(w.children) ? w.children : []);
+    }
+
+    const sons      = kids.filter(c => inferGender(c) === 'M');
+    const daughters = kids.filter(c => inferGender(c) === 'F');
+
+    let wives = [];
+    const isRootPerson =
+      (person === family.rootPerson) ||
+      (String(person.role || '').trim() === 'صاحب الشجرة');
+    if (isRootPerson){
+      wives = Array.isArray(family.wives) ? family.wives : [];
+    } else if (Array.isArray(person.wives)){
+      wives = person.wives;
+    }
+
+    const partsFamily = [];
+    const totalKids   = sons.length + daughters.length;
+    const totalSib    = brosAll.length + sisAll.length;
+    const wivesCount  = wives.length;
+
+    if (totalKids){
+      partsFamily.push(
+        `عدد الأبناء والبنات: ${totalKids} (أبناء: ${sons.length}، بنات: ${daughters.length})`
+      );
+    }
+    if (totalSib){
+      partsFamily.push(
+        `عدد الإخوة والأخوات: ${totalSib} (إخوة: ${brosAll.length}، أخوات: ${sisAll.length})`
+      );
+    }
+    if (wivesCount){
+      partsFamily.push(`عدد الزوجات: ${wivesCount}`);
+    }
+
+    if (partsFamily.length){
+      const rowFam = el('div', 'bio-field bio-field--relSummary');
+      rowFam.append(
+        textEl('strong', 'ملخّص عائلي:'),
+        textEl('span', partsFamily.join(' — '))
+      );
+      body.appendChild(rowFam);
+    }
+
+    // ملخّص نسبي (أحفاد + سلسلة أسلاف)
     const gkids = Lineage.resolveGrandchildren(person, family, ctx) || [];
     const gSons = gkids.filter(x => inferGender(x) === 'M');
     const gDau  = gkids.filter(x => inferGender(x) === 'F');
@@ -674,6 +903,33 @@ function buildBasicSection(bio, person, family){
     }
   }
 
+  // تلميح المصادر والوثائق داخل الأساسي
+  {
+    const sources = Array.isArray(person.sources) ? person.sources : [];
+    if (sources.length){
+      const row = el('div', 'bio-field bio-field--sourcesHint');
+      row.append(textEl('strong', 'الوثائق:'));
+
+      const span = document.createElement('span');
+      span.textContent = `هناك ${sources.length} وثيقة متعلّقة بهذا الشخص.`;
+
+      const btn = el('button', 'bio-link-btn');
+      btn.type  = 'button';
+      btn.textContent = 'عرض الوثائق';
+      btn.addEventListener('click', ev => {
+        ev.preventDefault();
+        const target = document.querySelector('.bio-section[data-section-id="sources"]');
+        if (target){
+          target.scrollIntoView({ behavior:'smooth', block:'start' });
+        }
+      });
+
+      span.appendChild(btn);
+      row.appendChild(span);
+      body.appendChild(row);
+    }
+  }
+
   if (!body.querySelector('.bio-field')){
     const r = String(person?.role || '').trim();
     const isAncestorLike = r.startsWith('الجد') || r === 'الأب' || person === family?.father;
@@ -685,6 +941,7 @@ function buildBasicSection(bio, person, family){
   }
   return section;
 }
+
 
 /* ===== 2) الأسلاف والأجداد + الأحفاد ===== */
 function buildGrandsSection(bio, person, family, handlers){
@@ -929,8 +1186,8 @@ function buildFamilySection(bio, person, family, handlers){
     if (sis.unknown.length)
       renderClickableNames(body, `أخوات أخريات (${sis.unknown.length})`, sis.unknown, handlers);
   } else {
-    renderClickableNames(body, `الإخوة (${brosAll.length})`, brosAll, handlers);
-    renderClickableNames(body, `الأخوات (${sisAll.length})`, sisAll, handlers);
+    renderClickableNames(body, `إخوة (${brosAll.length})`, brosAll, handlers);
+    renderClickableNames(body, `أخوات (${sisAll.length})`, sisAll, handlers);
   }
 
   const ua        = getUnclesAuntsForPerson(person, family, ctx);
@@ -963,7 +1220,7 @@ function buildWivesSection(person, family, handlers){
 
   if (!wives.length) return null;
 
-  const { section, body } = createBioSection('wives', `الزوجات (${wives.length})`, { defaultOpen: true });
+  const { section, body } = createBioSection('wives', `زوجات (${wives.length})`, { defaultOpen: true });
   renderClickableNames(body, '', wives, handlers);
   if (!body.children.length) return null;
   return section;
@@ -989,7 +1246,7 @@ function buildChildrenSection(person, family, handlers){
 
   if (!sons.length && !daughters.length) return null;
 
-  const { section, body } = createBioSection('children', 'أبناء وبنات', { defaultOpen: true });
+  const { section, body } = createBioSection('children', 'أبناء – بنات', { defaultOpen: true });
 
   if (sons.length)
     renderClickableNames(body, `أبناء (${sons.length})`, sons, handlers);
@@ -1105,6 +1362,79 @@ export function renderBioSections(container, bio, person = null, family = null, 
     hobbies:      () => buildHobbiesSection(bio)
   };
 
+  // شريط الروابط السريعة أعلى السيرة
+  const presence = detectSectionPresence(bio || {}, person || null, family || null);
+  const shortcuts = el('div', 'bio-shortcuts');
+  const currentMode = (handlers && handlers.bioMode) ? handlers.bioMode : 'summary';
+  let activeSectionId = 'basic';
+
+  if (currentMode && currentMode !== 'summary'){
+    const known = ['family','grands','children','wives','stories','sources','timeline'];
+    if (known.includes(currentMode)) activeSectionId = currentMode;
+  }
+
+  const shortcutItems = [
+    { id:'basic',    label:'الأساسي',       count:null,                         hideIf:false },
+    { id:'family',   label:'العائلة',       count:presence.familyCount,         hideIf:!presence.hasFamily },
+    { id:'grands',   label:'الأسلاف',       count:presence.grandsCount,         hideIf:!presence.hasGrands },
+    { id:'children', label:'أبناء – بنات',  count:presence.childrenCount,       hideIf:!presence.hasChildren },
+    { id:'wives',    label:'زوجات',         count:presence.wivesCount,          hideIf:!presence.hasWives },
+    { id:'stories',  label:'القصص',         count:presence.storiesCount,        hideIf:false },
+    { id:'timeline', label:'الأحداث',       count:presence.timelineCount,       hideIf:false },
+    { id:'sources',  label:'الوثائق',       count:presence.sourcesCount,        hideIf:false }
+  ];
+
+
+  const scrollToSection = (id) => {
+    if (!id) return;
+
+    // حالة خاصة: زر "الأساسي" يجب أن يفعّل وضع السيرة المختصرة (summary)
+if (id === 'basic' && handlers && typeof handlers.onBioShortcutClick === 'function'){
+  handlers.onBioShortcutClick('basic'); // بدل 'summary'
+  return;
+}
+
+
+    // نحاول تمرير القسم داخل نفس الحاوية أولاً
+    const sec = container.querySelector(`.bio-section[data-section-id="${id}"]`);
+    if (sec){
+      sec.scrollIntoView({ behavior:'smooth', block:'start', inline:'nearest' });
+      return;
+    }
+
+    // إن لم يكن القسم موجودًا (غير معروض في هذا الوضع)،
+    // نبلّغ الـ handlers ليتولى تغيير وضع السيرة ثم إعادة الرسم والتمرير
+    if (handlers && typeof handlers.onBioShortcutClick === 'function'){
+      handlers.onBioShortcutClick(id);
+    }
+  };
+
+  shortcutItems.forEach(item => {
+    if (item.hideIf) return;
+    const btn = el('button', 'bio-shortcut-btn');
+    btn.type  = 'button';
+    btn.dataset.targetSection = item.id;
+
+    if (item.id === activeSectionId){
+      btn.classList.add('bio-shortcut-btn--active');
+    }
+
+    const labelSpan = textEl('span', item.label, 'bio-shortcut-label');
+    btn.appendChild(labelSpan);
+
+    if (item.count && item.count > 0){
+      const badge = textEl('span', String(item.count), 'bio-shortcut-badge');
+      btn.appendChild(badge);
+    }
+
+    btn.addEventListener('click', () => scrollToSection(item.id));
+    shortcuts.appendChild(btn);
+  });
+
+
+  if (shortcuts.children.length){
+    container.appendChild(shortcuts);
+  }
 
   const order = getBioSectionsOrder(handlers);
   order.forEach(key => {
@@ -1117,21 +1447,48 @@ export function renderBioSections(container, bio, person = null, family = null, 
   if (wrap.children.length) container.appendChild(wrap);
 }
 
+
 /* =========================
    أوضاع السيرة المتاحة
    ========================= */
 export function getAvailableBioModes(bio, person, family){
   const p = detectSectionPresence(bio || {}, person || null, family || null);
-  const modes = [{ value:'summary', label:'السيرة المختصرة' }]; // دائمًا متاح
-  if (p.hasFamily)   modes.push({ value:'family',   label:'العائلة' });
-  if (p.hasGrands)   modes.push({ value:'grands',   label:'الأسلاف والأجداد' });
-  if (p.hasChildren) modes.push({ value:'children', label:'الأبناء والبنات' });
-  if (p.hasWives)    modes.push({ value:'wives',    label:'الزوجات' });
+    const modes = [{ value:'summary', label:'الأساسي' }];
 
-  // نُظهر القصص/الخط الزمني/المصادر دائمًا لإتاحة الإضافة حتى لو لا توجد بيانات بعد
-  modes.push({ value:'stories',  label:'القصص والمذكّرات' });
-  modes.push({ value:'sources',  label:'المصادر والوثائق' });
-  modes.push({ value:'timeline', label:'الخطّ الزمني للأحداث' });
+  if (p.hasFamily){
+    const lbl = p.familyCount ? `العائلة (${p.familyCount})`
+      : 'العائلة';
+    modes.push({ value:'family', label: lbl });
+  }
+
+  if (p.hasGrands){
+    const lbl = p.grandsCount ? `الأسلاف والأجداد (${p.grandsCount})`
+      : 'الأسلاف والأجداد';
+    modes.push({ value:'grands', label: lbl });
+  }
+
+  if (p.hasChildren){
+    const lbl = p.childrenCount ? `أبناء – بنات (${p.childrenCount})`
+      : 'أبناء – بنات';
+    modes.push({ value:'children', label: lbl });
+  }
+
+  if (p.hasWives){
+    const lbl = p.wivesCount  ? `زوجات (${p.wivesCount})`
+      : 'زوجات';
+    modes.push({ value:'wives', label: lbl });
+  }
+
+  const storiesLabel = p.storiesCount ? `القصص والمذكّرات (${p.storiesCount})`
+    : 'القصص والمذكّرات';
+  const sourcesLabel = p.sourcesCount ? `المصادر والوثائق (${p.sourcesCount})`
+    : 'المصادر والوثائق';
+  const timelineLabel = p.timelineCount  ? `الخطّ الزمني للأحداث (${p.timelineCount})`
+    : 'الخطّ الزمني للأحداث';
+
+  modes.push({ value:'stories',  label: storiesLabel });
+  modes.push({ value:'sources',  label: sourcesLabel });
+  modes.push({ value:'timeline', label: timelineLabel });
 
   return modes;
 }

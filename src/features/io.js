@@ -281,10 +281,12 @@ async function doImport(ctx, obj) {
         fromVer,
         markCore: false   // لا نسمّيها core
       });
+
+      // مهم: لا نعيد تشغيل الـ pipeline مرة أخرى في tree.js
+      fam.__pipelineReady = true;
     });
 
   } catch {}
-
 
   await Model.savePersistedFamilies?.();
 

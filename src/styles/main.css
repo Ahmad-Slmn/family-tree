@@ -227,16 +227,19 @@ body {
 ::-webkit-scrollbar-thumb:hover{background:var(--scroll-thumb-hover);opacity:.6}
 
 /* ================== التوست ================== */
+/* الأساس */
 #toastContainer{
-  position:fixed;top:0;left:50%;transform:translateX(-50%);
-  z-index:99999;display:flex;flex-direction:column;gap:.625rem;pointer-events:none
+  position:fixed;top:.75rem;left:50%;transform:translateX(-50%);
+  z-index:99999;display:flex;flex-direction:column;gap:.625rem;
+  pointer-events:none;
 }
 .toast{
   display:flex;align-items:center;justify-content:center;gap:.75rem;
-  min-width:18rem;max-width:25rem;padding:.75rem 1.25rem;border-radius:.625rem;
-  font-weight:500;font-size:.875rem;box-shadow:0 .25rem 1rem rgba(0,0,0,.2);
+  min-width:18rem;max-width:25rem;padding:.75rem 1.25rem;
+  border-radius:.625rem;font-weight:500;font-size:.875rem;
+  box-shadow:0 .25rem 1rem rgba(0,0,0,.2);
   opacity:0;transform:translateY(-2rem);pointer-events:all;
-  animation:slideIn .4s forwards,slideOut .4s 2.6s forwards
+  animation:slideIn .4s forwards,slideOut .4s 2.6s forwards;
 }
 .toast .icon{font-size:1.125rem}
 .toast.success{background:var(--toast-success-bg);color:var(--toast-success-fg)}
@@ -334,7 +337,69 @@ input[type="search"]::-webkit-search-cancel-button{ -webkit-appearance:none; }
 }
 .clear-btn[hidden]{ display: none !important; }
 
-/* تجاوب عام للأزرار/المدخلات على أصغر الشاشات */
+/* 1) ≤ 23.9rem */
 @media (max-width:23.9rem){
   .btn,input,select{font-size:.8rem;padding:.4rem .6rem}
+  #toastContainer{
+    top:.5rem;left:0;right:0;transform:none;
+    padding-inline:.5rem;align-items:stretch;
+  }
+  .toast{
+    min-width:100%;max-width:100%;
+    padding:.6rem .75rem;font-size:.8rem;border-radius:.5rem;
+  }
+}
+
+/* 2) 24–29.9rem */
+@media (min-width:24rem) and (max-width:29.9rem){
+  #toastContainer{
+    top:.6rem;left:50%;transform:translateX(-50%);
+    padding-inline:.75rem;
+  }
+  .toast{
+    min-width:16rem;max-width:20rem;
+    padding:.65rem 1rem;font-size:.825rem;
+  }
+}
+
+/* 3) 30–39.9rem */
+@media (min-width:30rem) and (max-width:39.9rem){
+  #toastContainer{
+    top:.75rem;left:50%;transform:translateX(-50%);
+    padding-inline:1rem;
+  }
+  .toast{
+    min-width:17rem;max-width:22rem;font-size:.85rem;
+  }
+}
+
+/* 4) 40–47.9rem */
+@media (min-width:40rem) and (max-width:47.9rem){
+  #toastContainer{
+    top:.9rem;left:50%;transform:translateX(-50%);
+  }
+  .toast{
+    min-width:18rem;max-width:24rem;
+  }
+}
+
+/* 5) 48–63.9rem */
+@media (min-width:48rem) and (max-width:63.9rem){
+  #toastContainer{
+    top:1rem;left:50%;transform:translateX(-50%);
+  }
+  .toast{
+    min-width:18rem;max-width:25rem;
+  }
+}
+
+/* 6) ≥ 64rem */
+@media (min-width:64rem){
+  #toastContainer{
+    top:1rem;right:1.25rem;left:auto;
+    transform:none;align-items:flex-end;
+  }
+  .toast{
+    min-width:18rem;max-width:26rem;
+  }
 }

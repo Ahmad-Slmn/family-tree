@@ -164,7 +164,7 @@ export function buildFamilyModalSkeleton() {
     </button>
 
     <div class="form-modal-header">
-      <h2 id="familyCreatorTitle">إضافة عائلة جديدة</h2>
+      <h2 id="familyCreatorTitle">إنشاء عائلة جديدة</h2>
     </div>
 
     <form id="addFamilyForm" class="add-family-form" autocomplete="off" novalidate>

@@ -854,16 +854,28 @@ async function onShowDetails(person, opts = {}) {
 
   // 3) دالة إعادة الرسم حسب الوضع الحالي
   // خريطة تربط mode بأهم section نريد التمرير إليه
-const MODE_MAIN_SECTION = {
-  summary:  'basic',
-  family:   'family',
-  grands:   'grands',
-  children: 'children',
-  wives:    'wives',
-  stories:  'stories',
-  timeline: 'timeline',  // قسم الخط الزمني للأحداث
-  sources:  'sources'    // NEW: قسم المصادر والوثائق
-};
+  const MODE_MAIN_SECTION = {
+    summary:  'basic',
+    family:   'family',
+    grands:   'grands',
+    children: 'children',
+    wives:    'wives',
+    stories:  'stories',
+    timeline: 'timeline',  // قسم الخط الزمني للأحداث
+    sources:  'sources'    // NEW: قسم المصادر والوثائق
+  };
+
+  // خريطة عكسية: من sectionId إلى وضع السيرة المناسب
+  const SECTION_TO_MODE = {
+    basic:    'summary',
+    family:   'family',
+    grands:   'grands',
+    children: 'children',
+    wives:    'wives',
+    stories:  'stories',
+    timeline: 'timeline',
+    sources:  'sources'
+  };
 
 
   // دالة تساعد على تمرير modal-content إلى بداية القسم المطلوب
@@ -913,8 +925,44 @@ const MODE_MAIN_SECTION = {
       onDeleteFamily,
       onModalSave,
       // تمرير وضع السيرة الحالي
-      bioMode: mode
+      bioMode: mode,
+      // NEW: رد فعل عند الضغط على أي زر من شريط الروابط السريعة
+      onBioShortcutClick: (sectionId) => {
+        const targetMode = SECTION_TO_MODE[sectionId] || 'summary';
+
+        // 1) إن كان الوضع المطلوب مختلفًا، غيّره وأعد الرسم
+        const needRerender = (mode !== targetMode);
+        if (needRerender){
+          mode = targetMode;
+          if (modeSelect) modeSelect.value = targetMode;
+          rerenderBio({ skipScroll:true });
+        }
+
+        // 2) بعد اكتمال الرسم، مرِّر إلى القسم المطلوب داخل المودال
+        requestAnimationFrame(() => {
+          const container =
+            dom.bioSectionsContainer ||
+            document.getElementById('bioSectionsContainer') ||
+            dom.modalContent ||
+            document.getElementById('modalContent');
+
+          if (!container) return;
+
+          const sec =
+            container.querySelector(`.bio-section[data-section-id="${sectionId}"]`) ||
+            container.querySelector(`.bio-section-${sectionId}`);
+
+          if (sec){
+            sec.scrollIntoView({
+              behavior: 'smooth',
+              block: 'start',
+              inline: 'nearest'
+            });
+          }
+        });
+      }
     });
+
 
     // نؤجل التمرير لآخر فريم بعد اكتمال الرسم
     if (!skipScroll) {
@@ -1227,7 +1275,7 @@ async function bootstrap(){
       }
     });
 
-    // إضافة عائلة جديدة من الشريط
+    // إنشاء عائلة جديدة من الشريط
     byId('addFamilyBtn')?.addEventListener('click', () => {
       closePanel();
       const modal = ModalUI.createFamilyCreatorModal(null,{ onSave:onModalSave });

@@ -1,9 +1,10 @@
 // tree.js — ملف الدخول الرئيسي (orchestrator)
 // يجمع: عرض الشجرة + البحث + البطاقات + أقسام السيرة + أزرار العائلات
 
-import { el, textEl, byId, getArabicOrdinal } from '../utils.js';
+import { el, textEl, byId, getArabicOrdinal, getArabicOrdinalF } from '../utils.js';
 import * as Lineage from '../features/lineage.js';
 import { inferGender } from '../model/roles.js';
+import { ensureIds } from '../model/families.js';
 
 // NEW: تهيئة العائلة (pipeline) قبل الرسم
 import { normalizeFamilyPipeline } from '../model/families.core.js';
@@ -94,6 +95,10 @@ export function drawFamilyTree(families = {}, selectedKey = null, domRefs = {}, 
 
   const __currentIds = new Set();
 let fam = families[selectedKey];
+// تأكد دائمًا من وجود _id للأشخاص الجدد (زوجات/أبناء/أجداد تمت إضافتهم بعد الـ pipeline)
+if (fam) {
+  ensureIds(fam);
+}
 
 // NEW: تشغيل pipeline مرة واحدة بعد الاستيراد/التحميل
 if (fam && !fam.__pipelineReady) {
@@ -134,7 +139,7 @@ window.__LINEAGE_CTX__ = lineageCtx;
   </style>
   <div class="no-family-message" role="status" aria-live="polite">
     <div class="title">لا توجد عائلات مرئية حالياً</div>
-    <div>يمكنك <b>إضافة عائلة جديدة</b> أو <b>إظهار العائلات الأساسية المخفية</b> من إعدادات: إعادة تفضيلات الواجهة.</div>
+    <div>يمكنك <b>إنشاء عائلة جديدة</b> أو <b>إظهار العائلات الأساسية المخفية</b> من إعدادات: إعادة تفضيلات الواجهة.</div>
   </div>`;
     }
     return;
@@ -212,7 +217,7 @@ window.__LINEAGE_CTX__ = lineageCtx;
     wrap.append(motherWrap,res); tools.appendChild(wrap); tree.appendChild(tools);
     toggle=chk; toggle.addEventListener('change',()=>setMotherVisibility(!!toggle.checked));
   }
-
+  
   const showMotherHint = !!q;
 
   const titleEl = (domRefs && domRefs.treeTitle) || byId('treeTitle');
@@ -317,6 +322,54 @@ window.__LINEAGE_CTX__ = lineageCtx;
     };
   }
 
+  // بناء مسار عائلي مختصر لنتائج البحث
+  function buildLineagePathForSearch(person, fam, ctx){
+    if (!person || !fam || !ctx || !person._id) return '';
+
+    const frags = [];
+    const role = String(person.role || '').trim();
+
+    // جزء "الابن/البنت"
+    if (role === 'ابن')  frags.push('الابن');
+    if (role === 'بنت')  frags.push('البنت');
+
+    const pid = String(person._id);
+
+    // جزء "من الزوجة الثانية..."
+    if (Array.isArray(fam.wives) && fam.wives.length){
+      let wifeIndex = -1;
+      fam.wives.forEach((w, idx) => {
+        if (wifeIndex !== -1 || !w) return;
+        const kids = Array.isArray(w.children) ? w.children : [];
+        if (kids.some(c => c && String(c._id || '') === pid)){
+          wifeIndex = idx;
+        }
+      });
+      if (wifeIndex !== -1){
+        const ordF = getArabicOrdinalF(wifeIndex + 1);
+        frags.push(`من الزوجة ${ordF}`);
+      }
+    }
+
+    // جزء "حفيد الجد الثالث" إن وُجد
+    let ancPart = '';
+    if (Array.isArray(fam.ancestors) && fam.ancestors.length){
+      for (const a of fam.ancestors){
+        if (!a) continue;
+        const aRef = (a._id && ctx.byId.get(String(a._id))) || a;
+        const gkidsAll = Lineage.resolveGrandchildren(aRef, fam, ctx) || [];
+        if (gkidsAll.some(g => g && String(g._id || '') === pid)){
+          const ancRole = String(aRef.role || a.role || 'الجد').trim();
+          ancPart = `حفيد ${ancRole}`;
+          break;
+        }
+      }
+    }
+    if (ancPart) frags.push(ancPart);
+
+    if (!frags.length) return '';
+    return '@ ' + frags.join(' – ');
+  }
 
   if (!q){
     filteredAncestors.forEach((person, idx) => {
@@ -344,9 +397,9 @@ window.__LINEAGE_CTX__ = lineageCtx;
 
         const merged = [];
 
-        if (sib.brothers) merged.push({label:'الإخوة', value:sib.brothers});
-        if (sib.sisters)  merged.push({label:'الأخوات', value:sib.sisters});
-        if (sib.wives)    merged.push({label:'الزوجات', value:sib.wives});
+       if (sib.brothers) merged.push({label:'إخوة',  value:sib.brothers});
+if (sib.sisters)  merged.push({label:'أخوات', value:sib.sisters});
+if (sib.wives)    merged.push({label:'زوجات', value:sib.wives});
 
         if (allC.sons)      merged.push({label:'الأبناء', value:allC.sons});
         if (allC.daughters) merged.push({label:'البنات', value:allC.daughters});
@@ -355,15 +408,15 @@ window.__LINEAGE_CTX__ = lineageCtx;
         const uaRoot = getUnclesAuntsForPerson(person, fam, lineageCtx);
 
         if (uaRoot.paternalUncles?.length)
-          merged.push({label:'الأعمام', value:uaRoot.paternalUncles.length});
+          merged.push({label:'أعمام',  value:uaRoot.paternalUncles.length});
         if (uaRoot.paternalAunts?.length)
-          merged.push({label:'العمّات', value:uaRoot.paternalAunts.length});
+          merged.push({label:'عمّات',  value:uaRoot.paternalAunts.length});
         if (uaRoot.maternalUncles?.length)
-          merged.push({label:'الأخوال', value:uaRoot.maternalUncles.length});
+         merged.push({label:'أخوال',  value:uaRoot.maternalUncles.length});
         if (uaRoot.maternalAunts?.length)
-          merged.push({label:'الخالات', value:uaRoot.maternalAunts.length});
+          merged.push({label:'خالات', value:uaRoot.maternalAunts.length});
 
-        const cb = createCounterBox(merged);
+       const cb = createCounterBox(merged);
         if (cb) card.appendChild(cb);
 
       } else {
@@ -433,7 +486,7 @@ if (q){
     const wrapCard = el('div','relative');
     const cls = (p.role === 'ابن') ? 'son' : (p.role === 'بنت' ? 'daughter' : '');
 
-    const cgNorm = normalizeAr(p?.bio?.cognomen || '');
+    const cgNorm       = normalizeAr(p?.bio?.cognomen || '');
     const nameRoleNorm = normalizeAr(`${p?.name||''} ${p?.role||''}`);
     const hitCogOnly =
       tokens.some(t => cgNorm.includes(t)) &&
@@ -452,11 +505,28 @@ if (q){
       }
     );
 
+    // شارة صغيرة توضّح مصدر المطابقة عند كونها من اللقب فقط
+    if (hitCogOnly){
+      const badge = el('div','search-match-badge');
+      badge.textContent = 'مطابقة من: اللقب';
+      card.appendChild(badge);
+    }
+
+    // سطر المسار العائلي أسفل البطاقة
+    const pathText = buildLineagePathForSearch(p, fam, lineageCtx);
+    if (pathText){
+      const pathEl = el('div','search-lineage');
+      pathEl.textContent = pathText;
+      card.appendChild(pathEl);
+    }
+
     const box = createCounterBoxForPerson(p);
     if (box && !card.querySelector('.counter-box')) card.appendChild(box);
+
     grid.appendChild(wrapCard);
     if (p && p._id) __currentIds.add(p._id);
   });
+
 
   wrap.appendChild(grid);
   tree.appendChild(wrap);
@@ -505,7 +575,7 @@ if (q){
     filteredWives,
     1,
     (w) => {
-      const sec = createWifeSection(
+        const sec = createWifeSection(
         w,
         handlers,
         match,
@@ -514,9 +584,11 @@ if (q){
           showMotherHint,
           hideNonMatchingParents: hideParents,
           hasQuery: !!q,
-          readonlyName: !!fam.__core
+          readonlyName: !!fam.__core,
+          collapseGroupKey: selectedKey || fam.key || fam.id || null
         }
       );
+
 
       if (sec){
         // === عدّ توريث الزوجة مثل صاحب الشجرة ===
@@ -542,23 +614,24 @@ if (q){
 
           const merged = [];
 
-          if (sib.brothers) merged.push({ label: 'الإخوة',  value: sib.brothers });
-          if (sib.sisters)  merged.push({ label: 'الأخوات', value: sib.sisters  });
+         if (sib.brothers) merged.push({ label: 'إخوة',  value: sib.brothers });
+if (sib.sisters)  merged.push({ label: 'أخوات', value: sib.sisters  });
 
           if (kids.sons)      merged.push({ label: 'الأبناء',  value: kids.sons });
           if (kids.daughters) merged.push({ label: 'البنات',   value: kids.daughters });
           if (kids.total)     merged.push({ label: 'الإجمالي', value: kids.total });
 
           if (uaWife.paternalUncles?.length)
-            merged.push({ label: 'الأعمام', value: uaWife.paternalUncles.length });
+            merged.push({ label: 'أعمام',  value: uaWife.paternalUncles.length });
           if (uaWife.paternalAunts?.length)
-            merged.push({ label: 'العمّات', value: uaWife.paternalAunts.length });
+            merged.push({ label: 'عمّات',  value: uaWife.paternalAunts.length });
           if (uaWife.maternalUncles?.length)
-            merged.push({ label: 'الأخوال', value: uaWife.maternalUncles.length });
+           merged.push({ label: 'أخوال',  value: uaWife.maternalUncles.length });
           if (uaWife.maternalAunts?.length)
-            merged.push({ label: 'الخالات', value: uaWife.maternalAunts.length });
+           merged.push({ label: 'خالات', value: uaWife.maternalAunts.length });
 
           const cbWife = createCounterBox(merged);
+
           if (cbWife){
             const old = wifeCard.querySelector('.counter-box');
             if (old) old.remove();

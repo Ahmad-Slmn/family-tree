@@ -835,7 +835,7 @@ export function ensureRealParentsForWives(fam){
   if (!fam || !fam.wives || !fam.wives.length) return;
   if (!fam.persons) fam.persons = {};
 
-  for (let i=0;i<fam.wives.length;i++){
+  for (let i = 0; i < fam.wives.length; i++){
     const w = fam.wives[i];
     if (!w || !w._id) continue;
 
@@ -853,9 +853,15 @@ export function ensureRealParentsForWives(fam){
     let wf = null;
     let wm = null;
 
-    if (!w.fatherId && wb.fatherName && wb.fatherName !== '-') {
+    // --- أب الزوجة ---
+    const hasFatherRecord =
+      w.fatherId && fam.persons && fam.persons[w.fatherId];
+
+    if (!hasFatherRecord && wb.fatherName && wb.fatherName !== '-') {
+      // حالة جديدة أو رابط مفقود بعد التصدير/الاستيراد: نبني الأب من الـ bio
+      const fid = w.fatherId || uuid('wf');
       wf = {
-        _id: uuid('wf'),
+        _id: fid,
         name: wb.fatherName,
         role: 'أب الزوجة',
         bio: {
@@ -869,15 +875,20 @@ export function ensureRealParentsForWives(fam){
         fatherId: null,
         motherId: null
       };
-      fam.persons[wf._id] = wf;
-      w.fatherId = wf._id;
-    } else if (w.fatherId && fam.persons[w.fatherId]) {
+      fam.persons[fid] = wf;
+      w.fatherId = fid;
+    } else if (hasFatherRecord) {
       wf = fam.persons[w.fatherId];
     }
 
-    if (!w.motherId && wb.motherName && wb.motherName !== '-') {
+    // --- أم الزوجة ---
+    const hasMotherRecord =
+      w.motherId && fam.persons && fam.persons[w.motherId];
+
+    if (!hasMotherRecord && wb.motherName && wb.motherName !== '-') {
+      const mid = w.motherId || uuid('wm');
       wm = {
-        _id: uuid('wm'),
+        _id: mid,
         name: wb.motherName,
         role: 'أم الزوجة',
         bio: {
@@ -890,12 +901,13 @@ export function ensureRealParentsForWives(fam){
         fatherId: null,
         motherId: null
       };
-      fam.persons[wm._id] = wm;
-      w.motherId = wm._id;
-    } else if (w.motherId && fam.persons[w.motherId]) {
+      fam.persons[mid] = wm;
+      w.motherId = mid;
+    } else if (hasMotherRecord) {
       wm = fam.persons[w.motherId];
     }
 
+    // ربط الزوجين (أب/أم الزوجة) ببعضهما إن وُجدا
     if (wf && wm){
       if (!Array.isArray(wf.spousesIds)) wf.spousesIds = [];
       if (!Array.isArray(wm.spousesIds)) wm.spousesIds = [];
@@ -912,6 +924,7 @@ export function ensureRealParentsForWives(fam){
       if (wm.childrenIds.indexOf(w._id) === -1) wm.childrenIds.push(w._id);
     }
 
+    // بناء سلسلة الأجداد + الأعمام/العمات من جهة الأب
     if (wf){
       ensureWifeSideChain(fam, wf, wb, {
         grandFatherField:  'paternalGrandfather',
@@ -928,6 +941,7 @@ export function ensureRealParentsForWives(fam){
       });
     }
 
+    // بناء سلسلة الأجداد + الأخوال/الخالات من جهة الأم
     if (wm){
       ensureWifeSideChain(fam, wm, wb, {
         grandFatherField:  'maternalGrandfather',
