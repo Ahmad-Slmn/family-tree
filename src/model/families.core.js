@@ -752,6 +752,12 @@ function ensureWifeSideChain(fam, parentPerson, wb, cfg){
   if (!fam || !parentPerson || !wb || !cfg) return;
   if (!fam.persons) fam.persons = {};
 
+  // زوجة هذه السلسلة (إن وُجدت)
+  const wifeId = cfg.wifeId ? String(cfg.wifeId) : null;
+  if (wifeId && !parentPerson._wifeId){
+    parentPerson._wifeId = wifeId;
+  }
+
   let gf = null;
   let gm = null;
 
@@ -765,7 +771,8 @@ function ensureWifeSideChain(fam, parentPerson, wb, cfg){
       fatherId: null,
       motherId: null,
       spousesIds: [],
-      childrenIds: [parentPerson._id]
+      childrenIds: [parentPerson._id],
+      _wifeId: wifeId || null              // ← وسم الجد كقريب لتلك الزوجة
     };
     fam.persons[gf._id] = gf;
     if (!parentPerson.fatherId) parentPerson.fatherId = gf._id;
@@ -781,7 +788,8 @@ function ensureWifeSideChain(fam, parentPerson, wb, cfg){
       fatherId: null,
       motherId: null,
       spousesIds: [],
-      childrenIds: [parentPerson._id]
+      childrenIds: [parentPerson._id],
+      _wifeId: wifeId || null              // ← وسم الجدة
     };
     fam.persons[gm._id] = gm;
     if (!parentPerson.motherId) parentPerson.motherId = gm._id;
@@ -813,7 +821,8 @@ function ensureWifeSideChain(fam, parentPerson, wb, cfg){
       fatherId: gf ? gf._id : null,
       motherId: gm ? gm._id : null,
       spousesIds: [],
-      childrenIds: []
+      childrenIds: [],
+      _wifeId: wifeId || null             // ← وسم العم/الخال بأنه مرتبط بهذه الزوجة
     };
     fam.persons[s._id] = s;
 
@@ -830,6 +839,7 @@ function ensureWifeSideChain(fam, parentPerson, wb, cfg){
   bros.forEach(b => addSibling(b, cfg.uncleMaleRole));
   sis.forEach(s => addSibling(s, cfg.uncleFemaleRole));
 }
+
 
 export function ensureRealParentsForWives(fam){
   if (!fam || !fam.wives || !fam.wives.length) return;
@@ -937,7 +947,8 @@ export function ensureRealParentsForWives(fam){
         uncleFemaleRole:   'عمة الزوجة',
         gfPrefix:          'wpgf',
         gmPrefix:          'wpgm',
-        sibPrefix:         'wpunc'
+        sibPrefix:         'wpunc',
+        wifeId:            w._id  
       });
     }
 
@@ -954,7 +965,8 @@ export function ensureRealParentsForWives(fam){
         uncleFemaleRole:   'خالة الزوجة',
         gfPrefix:          'wmgf',
         gmPrefix:          'wmgm',
-        sibPrefix:         'wmunc'
+        sibPrefix:         'wmunc',
+        wifeId:            w._id 
       });
     }
   }
@@ -1127,32 +1139,123 @@ export function getLineageConfig(fam) {
 
 export function findDuplicatesInFamily(f) {
   if (!f) return [];
+
+  // خريطة: الشخص → المسار داخل العائلة (ancestors[0]... إلخ)
+  const pathByPerson = new WeakMap();
+  try {
+    // نمرّ على جميع الأشخاص مع المسار
+    walkPersonsWithPath(f, (p, path) => {
+      if (p && path) pathByPerson.set(p, path);
+    });
+  } catch {
+    // لو حدث خطأ نتجاهله ولا نكسر التكرارات
+  }
+
+  // نجمع جميع الأشخاص مع إزالة التكرار المنطقي
   const all = [];
+  const seenById   = new Set();
+  const seenByFp   = new Set();
+
   const push = (p) => {
-    if (p) {
-      all.push(p);
-      (p?.children || []).forEach(push);
-      (p?.wives || []).forEach(push);
+    if (!p) return;
+
+    // مفتاح الهوية: أولاً _id، وإن لم يوجد نستخدم بصمة الشخص
+    const id = p._id ? String(p._id) : null;
+    const fp = !id ? personFingerprint(p) : '';
+
+    if (id) {
+      if (seenById.has(id)) return;
+      seenById.add(id);
+    } else if (fp) {
+      if (seenByFp.has(fp)) return;
+      seenByFp.add(fp);
     }
+
+    all.push(p);
+    (p.children || []).forEach(push);
+    (p.wives || []).forEach(push);
   };
 
+  // 1) شجرة الأسلاف + الأب + صاحب الشجرة + الزوجات
   (Array.isArray(f.ancestors) ? f.ancestors : []).forEach(push);
   [f.father, f.rootPerson, ...(f.wives || [])].forEach(push);
 
+  // 2) الأشخاص الموجودون في fam.persons (مثل: الأم الواقعية، أب/أم الزوجة، الأعمام/الأخوال...)
+  if (f.persons && typeof f.persons === 'object') {
+    Object.values(f.persons).forEach(push);
+  }
+
   const map = new Map();
-  all.forEach(p => {
+  for (const p of all) {
     const k = normKey(p);
-    if (!k) return;
+    if (!k) continue;
     if (!map.has(k)) map.set(k, []);
     map.get(k).push(p);
-  });
+  }
 
   const dups = [];
   for (const [, arr] of map) {
     if (arr.length > 1) {
-      dups.push(arr.map(p => ({ _id: p._id, name: p.name || '', role: p.role || '' })));
+      // نحسب نوع التكرار ودرجته لهذه المجموعة كاملة
+      const first      = arr[0] || {};
+      const firstRole  = roleGroupLocal(first);
+      const firstBirth = String(first?.bio?.birthDate || first?.bio?.birthYear || '').trim();
+
+      let allSameRole = true;
+      for (let i = 0; i < arr.length; i++) {
+        if (roleGroupLocal(arr[i]) !== firstRole) {
+          allSameRole = false;
+          break;
+        }
+      }
+
+      let allSameBirth = true;
+      for (let i = 0; i < arr.length; i++) {
+        const b = String(arr[i]?.bio?.birthDate || arr[i]?.bio?.birthYear || '').trim();
+        if (b !== firstBirth) {
+          allSameBirth = false;
+          break;
+        }
+      }
+
+      let dupType;
+      let dupScore;
+
+      if (allSameRole && firstBirth && allSameBirth) {
+        // اسم + صفة + ميلاد متطابقة
+        dupType  = 'اسم + صفة + تاريخ/سنة الميلاد';
+        dupScore = 3;
+      } else if (allSameRole) {
+        // اسم + صفة فقط
+        dupType  = 'اسم + صفة';
+        dupScore = 2;
+      } else {
+        // تجميع بالاسم فقط
+        dupType  = 'اسم فقط';
+        dupScore = 1;
+      }
+
+      const group = [];
+      for (let i = 0; i < arr.length; i++) {
+        const p = arr[i];
+        group.push({
+          _id: p._id,
+          name: p.name || '',
+          role: p.role || '',
+          // المسار الحقيقي المستخرج من العائلة
+          path: pathByPerson.get(p) || '',
+          // ربط اختياري بزوجة معيّنة (إن وُجد)
+          _wifeId: p._wifeId || null,
+          // نوع التكرار ودرجة التطابق
+          dupType,
+          dupScore
+        });
+      }
+      dups.push(group);
+
     }
   }
+
   return dups;
 }
 

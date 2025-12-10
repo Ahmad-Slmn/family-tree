@@ -5,6 +5,9 @@ import { byId } from '../utils.js';
 import * as Model from '../model/families.js';
 import { roleGroup } from '../model/roles.js';
 import * as Lineage from './lineage.js';
+import { getDuplicatesStatusForAllFamilies, getDuplicateSummary } from './duplicates.js';
+
+let _ctx = null;
 
 function hexToRgba(hex, a = 0.18){
   const { r, g, b } = hexToRgb(hex);
@@ -730,12 +733,13 @@ function renderStats(){
     <section class="table-wrap">
       <h4>تفصيل حسب العائلة</h4>
       <div class="table-scroll">
-        <table class="stats-table" id="stTable">
-          <thead><tr>
-            <th>العائلة</th><th>الأشخاص</th><th>أبناء</th><th>بنات</th><th>زوجات</th><th>غير محدد</th>
-          </tr></thead>
-          <tbody></tbody>
-        </table>
+  <table class="stats-table" id="stTable">
+  <thead><tr>
+    <th>العائلة</th><th>الأشخاص</th><th>أبناء</th><th>بنات</th><th>زوجات</th><th>غير محدد</th><th>التكرار</th>
+  </tr></thead>
+  <tbody></tbody>
+</table>
+
       </div>
     </section>
 
@@ -750,9 +754,190 @@ function renderStats(){
     </section>
   `;
 
-  const sAll    = computeStats();             // إجمالي مرة واحدة
+  const sAll     = computeStats();             // إجمالي مرة واحدة
   const selScope = byId('fScope');
   const fams     = Model.getFamilies();
+
+  // === إحصائيات التكرار لجميع العائلات (من وحدة duplicates) ===
+  const dupStatusAll = getDuplicatesStatusForAllFamilies();
+  const dupMap = new Map(dupStatusAll.map(d => [d.famKey, d]));
+
+  const severityOrder = ['none','low','medium','high'];
+  const severityLabel = sev => {
+    if (sev === 'low')    return 'منخفض';
+    if (sev === 'medium') return 'متوسط';
+    if (sev === 'high')   return 'عالٍ';
+    return 'لا يوجد';
+  };
+
+  // تجميع عام: عدد العائلات التي فيها تكرار + أعلى مستوى خطورة
+  // + إجمالي الأشخاص/المتكرّرين ونسبة التكرار التقريبية
+  const totalDupPersonsAll = dupStatusAll.reduce(
+    (sum, d) => sum + (d.totalDuplicatePersons || 0),
+    0
+  );
+  const totalPersonsAll = dupStatusAll.reduce(
+    (sum, d) => sum + (d.totalPersons || 0),
+    0
+  );
+  const dupRatioAll = totalPersonsAll > 0 ? (totalDupPersonsAll / totalPersonsAll)
+    : 0;
+
+  const dupAgg = {
+    familiesWithDup: dupStatusAll.filter(d => d.count > 0).length,
+    worstSeverity: dupStatusAll.reduce(
+      (max, d) =>
+        severityOrder.indexOf(d.severity) > severityOrder.indexOf(max) ? d.severity : max,
+      'none'
+    ),
+    totalPersonsAll,
+    totalDupPersonsAll,
+    dupRatioAll
+  };
+
+// نافذة صغيرة لمراجعة تكرارات عائلة معيّنة
+const openDuplicatesPanelForFamily = famKey => {
+  if (!famKey) return;
+  const fam   = fams[famKey];
+  const label = (fam?.familyName || fam?.title || fam?.rootPerson?.name || famKey || '').trim();
+
+  let summary;
+  try{ summary = getDuplicateSummary(famKey); }catch{ summary = null; }
+
+  let panel = document.getElementById('dupPanel');
+  if (panel) panel.remove();
+
+  panel = document.createElement('div');
+  panel.id = 'dupPanel';
+  panel.className = 'dup-panel';
+
+  const count    = summary?.count || 0;
+  const groups   = Array.isArray(summary?.groups) ? summary.groups : [];
+  const maxGroup = summary?.maxGroupSize || 0;
+  const severity = summary?.severity || 'none';
+  const sevText  = severityLabel(severity);
+
+  if (!count){
+    panel.innerHTML = `
+      <div class="dup-panel-header">
+        <h3>مراجعة التكرارات</h3>
+        <button type="button" class="dup-panel-close close-button" aria-label="إغلاق">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="dup-panel-body">
+        <p class="dup-empty">لا توجد مجموعات تكرار محتملة في هذه العائلة (${label}).</p>
+      </div>
+    `;
+  } else {
+    const totalDupPersons = summary.totalDuplicatePersons || 0;
+    const totalPersons    = summary.totalPersons || 0;
+    const ratioPct        = totalPersons > 0 ? pct(totalDupPersons, totalPersons)
+      : '0.0';
+
+    const strongGroups = summary.strongGroupsCount || 0;
+    const mediumGroups = summary.mediumGroupsCount || 0;
+    const weakGroups   = summary.weakGroupsCount || 0;
+
+    panel.innerHTML = `
+      <div class="dup-panel-header">
+        <h3>مراجعة التكرارات في عائلة: ${label}</h3>
+        <button type="button" class="dup-panel-close close-button" aria-label="إغلاق">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="dup-panel-body">
+        <div class="dup-summary">
+          <span>عدد مجموعات التكرار: <strong>${count}</strong></span>
+          <span>أكبر مجموعة: <strong>${maxGroup}</strong> شخص/أشخاص</span>
+          <span>مستوى الخطورة: <strong>${sevText}</strong></span>
+          <span>أشخاص متكرّرون (تقريبًا): <strong>${totalDupPersons}</strong> من أصل <strong>${totalPersons}</strong></span>
+          <span>نسبة التكرار: <strong>${ratioPct}%</strong></span>
+          <span>توزيع المجموعات: 
+            <strong>قوي: ${strongGroups}</strong> /
+            <strong>متوسط: ${mediumGroups}</strong> /
+            <strong>ضعيف: ${weakGroups}</strong>
+          </span>
+        </div>
+        <div class="dup-groups">
+          ${
+            groups.map((grp, idx) => `
+              <section class="dup-group">
+                <header class="dup-group-header">
+                  <h4>مجموعة ${idx + 1}</h4>
+                  <span class="dup-group-size">${grp.length} شخص/أشخاص</span>
+                </header>
+                <table class="dup-group-table">
+                  <thead>
+                    <tr>
+                      <th>الاسم</th>
+                      <th>الدور</th>
+                      <th>المسار</th>
+                      <th>نوع التكرار</th>
+                      <th>درجة التطابق</th>
+                      <th>سبب الاشتباه</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${
+                      grp.map(p => `
+                        <tr>
+                          <td>${p.name || ''}</td>
+                          <td>${p.role || ''}</td>
+                          <td>${p.path || ''}</td>
+                          <td>${p.dupType || ''}</td>
+                          <td>${p.dupScoreLabel || ''}</td>
+                          <td>${p.reasonLabel || ''}</td>
+                        </tr>
+                      `).join('')
+                    }
+                  </tbody>
+                </table>
+              </section>
+            `).join('')
+          }
+        </div>
+      </div>
+    `;
+  }
+
+  const host =
+    document.querySelector('.statsModal .modal-content') || // ← داخل modal-content مباشرة
+    byId('statsBody') ||
+    byId('statsModal') ||
+    document.body;
+
+host.appendChild(panel);
+
+// إغلاق عند النقر على زر الإغلاق أو خارج جسم اللوحة
+const closeBtn = panel.querySelector('.dup-panel-close');
+
+const handleClose = () => {
+  panel.remove();
+  host.removeEventListener('click', handleOutsideClick);
+};
+
+const handleOutsideClick = (e) => {
+  const target = e.target;
+  if (!(target instanceof HTMLElement)) return;
+
+  // إذا كان النقر داخل اللوحة نفسها → لا تغلق
+  if (panel.contains(target)) return;
+
+  // إذا كان النقر على خلية "التكرار" التي تفتح اللوحة → تجاهل هذا الحدث
+  if (target.closest('.st-dup-cell')) return;
+
+  handleClose();
+};
+
+if (closeBtn) {
+  closeBtn.addEventListener('click', handleClose);
+}
+
+// النقر في أي مكان داخل host (modal-content أو statsBody...) خارج اللوحة يغلقها
+host.addEventListener('click', handleOutsideClick);
+
+};
 
 // تعبئة النطاق: "كل العائلات" + المرئية فقط
 if (selScope){
@@ -778,6 +963,32 @@ if (selScope){
   const selClan   = byId('fClan');
   const tbFam     = byId('stTable').querySelector('tbody');
   const tbClan    = byId('stClans').querySelector('tbody');
+
+  // النقر على خلية "التكرار" يختار العائلة ويفتح نافذة مراجعة التكرارات الصغيرة
+  if (tbFam){
+    tbFam.addEventListener('click', (e) => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+
+      const cell = target.closest('td');
+      const row  = target.closest('tr[data-fam-key]');
+      if (!row || !cell) return;
+      if (!cell.classList.contains('st-dup-cell')) return;
+
+      const famKey = row.getAttribute('data-fam-key') || '';
+      if (!famKey) return;
+
+      // اختيار هذه العائلة في واجهة العائلات (إن وُجد الباص)
+      if (_ctx && _ctx.bus && typeof _ctx.bus.emit === 'function'){
+        _ctx.bus.emit('families:select', { famKey });
+      }
+
+      // فتح نافذة مراجعة التكرارات داخل لوحة الإحصاءات
+      openDuplicatesPanelForFamily(famKey);
+    });
+  }
+
+
   const inpSearch = byId('fSearch');
   const inpMin    = byId('fMin');
   const selSort   = byId('fSort');
@@ -789,23 +1000,31 @@ if (selScope){
     return (scopeVal !== 'all') ? computeStats(scopeVal) : sAll;
   };
 
-  // بطاقات الملخص + شريط أبناء/بنات
-  const renderSummary = (stats)=>{
+  // بطاقات الملخص + شريط أبناء/بنات + ملخص التكرارات
+  const renderSummary = (stats, dupAgg)=>{
     const grid = byId('stGrid');
 
-    // عنوان → أيقونة مناسبة من Font Awesome 7 (fa-solid)
     const items = [
-      ['عدد العائلات',          stats.familiesCount,       'fa-people-roof'],          // عائلات
-      ['جميع الأشخاص',          stats.persons,             'fa-users'],                // أشخاص
-      ['الزوجات',               stats.wives,               'fa-person-dress'],         // زوجات
-      ['الأبناء',               stats.sons,                'fa-person'],               // أبناء
-      ['البنات',                stats.daughters,           'fa-person-dress'],         // بنات
-      ['غير محدد',              stats.unknown,             'fa-user-large-slash'],     // غير محدد
-      ['متوسط الأبناء/عائلة',   stats.avgChildren,         'fa-chart-column'],         // متوسط/إحصاء
-      ['متوسط الأبناء/جذر فعّال', stats.avgChildrenPerRoot,'fa-chart-line'],          // متوسط/منحنى
-      ['توفر الميلاد',          `${pct(stats.persons - stats.missing.birthInfo, stats.persons)}%`, 'fa-cake-candles'],  // ميلاد
-      ['توفر العشيرة',          `${pct(stats.persons - stats.missing.clan, stats.persons)}%`,       'fa-people-group'],  // عشيرة
-      ['توفر الصورة',           `${pct(stats.persons - stats.missing.photoAny, stats.persons)}%`,   'fa-image']          // صورة
+      ['عدد العائلات',            stats.familiesCount,       'fa-people-roof'],
+      ['جميع الأشخاص',            stats.persons,             'fa-users'],
+      ['الزوجات',                 stats.wives,               'fa-person-dress'],
+      ['الأبناء',                 stats.sons,                'fa-person'],
+      ['البنات',                  stats.daughters,           'fa-person-dress'],
+      ['غير محدد',                stats.unknown,             'fa-user-large-slash'],
+      ['متوسط الأبناء/عائلة',     stats.avgChildren,         'fa-chart-column'],
+      ['متوسط الأبناء/جذر فعّال', stats.avgChildrenPerRoot,  'fa-chart-line'],
+      ['توفر الميلاد',            `${pct(stats.persons - stats.missing.birthInfo, stats.persons)}%`, 'fa-cake-candles'],
+      ['توفر العشيرة',            `${pct(stats.persons - stats.missing.clan, stats.persons)}%`,       'fa-people-group'],
+      ['توفر الصورة',             `${pct(stats.persons - stats.missing.photoAny, stats.persons)}%`,   'fa-image'],
+
+      // === بطاقات التكرارات باستخدام الحقول الجديدة ===
+      ['عائلات فيها تكرار',       dupAgg.familiesWithDup,      'fa-clone'],
+      [
+        'نسبة التكرار الإجمالية',
+        `${pct(dupAgg.totalDupPersonsAll, dupAgg.totalPersonsAll)}%`,
+        'fa-percent'
+      ],
+      ['أعلى مستوى تكرار',        severityLabel(dupAgg.worstSeverity), 'fa-triangle-exclamation']
     ];
 
     grid.innerHTML = items.map(([label, value, icon]) => `
@@ -857,9 +1076,53 @@ if (selScope){
     };
     rows.sort(sorters[sort] || sorters.total);
 
-    tbFam.innerHTML = rows.length ? rows.map(f =>
-      `<tr><td>${f.label}</td><td>${f.persons}</td><td>${f.sons}</td><td>${f.daughters}</td><td>${f.wives}</td><td>${f.unknown}</td></tr>`
-    ).join('') : `<tr><td colspan="6" class="empty">لا بيانات</td></tr>`;
+    tbFam.innerHTML = rows.length ? rows.map(f => {
+      const dup = dupMap.get(f.familyKey);
+      if (!dup || !dup.count) {
+        return `
+          <tr data-fam-key="${f.familyKey || ''}">
+            <td>${f.label}</td>
+            <td>${f.persons}</td>
+            <td>${f.sons}</td>
+            <td>${f.daughters}</td>
+            <td>${f.wives}</td>
+            <td>${f.unknown}</td>
+            <td class="st-dup-cell">
+              <div class="st-dup-main">لا يوجد</div>
+            </td>
+          </tr>
+        `;
+      }
+
+      const sev      = dup.severity || 'none';
+      const sevText  = severityLabel(sev);
+      const ratioPct = dup.totalPersons ? pct(dup.totalDuplicatePersons || 0, dup.totalPersons)
+        : '0.0';
+
+      const strongGroups = dup.strongGroupsCount || 0;
+      const mediumGroups = dup.mediumGroupsCount || 0;
+      const weakGroups   = dup.weakGroupsCount || 0;
+      const reviewedMark = dup.isReviewed ? '✓ مُراجَع' : 'غير مُراجَع';
+
+      return `
+        <tr data-fam-key="${f.familyKey || ''}">
+          <td>${f.label}</td>
+          <td>${f.persons}</td>
+          <td>${f.sons}</td>
+          <td>${f.daughters}</td>
+          <td>${f.wives}</td>
+          <td>${f.unknown}</td>
+          <td class="st-dup-cell">
+            <div class="st-dup-main">${sevText}</div>
+            <div class="st-dup-sub">
+              <span>${ratioPct}% من الأشخاص</span>
+              <span>ق/م/ض: ${strongGroups}/${mediumGroups}/${weakGroups}</span>
+              <span>${reviewedMark}</span>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('') : `<tr><td colspan="7" class="empty">لا بيانات</td></tr>`;
 
     // 3) تفاصيل العشائر (تُعاد من العائلات المفلترة فقط)
     const filteredKeys = Array.from(new Set(
@@ -913,8 +1176,8 @@ if (selScope){
   };
 
   // الرسم الأولي
-  renderSummary(getScopedStats());  // البطاقات + الشريط (مرّة واحدة للنطاق الحالي)
-  applyFilters();                   // أول تطبيق للفلاتر
+  renderSummary(getScopedStats(), dupAgg);
+  applyFilters();
 
   // ربط الفلاتر بدالة التحديث
   inpSearch?.addEventListener('input', applyFilters);
@@ -926,7 +1189,7 @@ if (selScope){
 
   // تبديل النطاق
   selScope?.addEventListener('change', ()=>{
-    renderSummary(getScopedStats());
+    renderSummary(getScopedStats(), dupAgg);
     applyFilters();
   });
 
@@ -989,10 +1252,13 @@ function closeStatsModal() {
    8) تهيئة الأزرار والروابط
 ========================= */
 export function init(ctx){
+  _ctx = ctx || null;
+
   byId('statsBtn')?.addEventListener('click', ()=>{
     renderStats();
     byId('statsModal')?.classList.add('show');
   });
+
   byId('closeStats')?.addEventListener('click', closeStatsModal);
   byId('statsModal')?.addEventListener('click', e => { if (e.target.id === 'statsModal') closeStatsModal(); });
 
@@ -1021,5 +1287,3 @@ const refreshScopeOptions = () => {
 
   return { computeStats, renderStats };
 }
-
-

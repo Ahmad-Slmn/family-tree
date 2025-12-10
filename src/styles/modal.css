@@ -571,46 +571,58 @@ display:inline-block;min-inline-size:2ch;padding:.15rem .55rem;border-radius:999
 /* =========================================================
    10) المخطط والجداول
 ========================================================= */
-.chart-wrap{
-  background:linear-gradient(180deg,#ffffff 0%,#fbfdfb 100%);
-  border:1px solid #e5efe5;border-radius:18px;box-shadow:0 6px 18px rgba(16, 94, 16, .06);
-  padding:14px 16px 18px;margin-block-start:.9rem
-}
-.chart-header{
-  background:#eef9ee;color:#115e11;border:1px solid #d7efd7;border-radius:14px;
-  padding:8px 14px;margin:2px 2px 14px;display:flex;align-items:center;justify-content:space-between
-}
+.chart-wrap{background:linear-gradient(180deg,#ffffff 0%,#fbfdfb 100%);border:1px solid #e5efe5;border-radius:18px;box-shadow:0 6px 18px rgba(16,94,16,.06);padding:14px 16px 18px;margin-block-start:.9rem}
+.chart-header{background:#eef9ee;color:#115e11;border:1px solid #d7efd7;border-radius:14px;padding:8px 14px;margin:2px 2px 14px;display:flex;align-items:center;justify-content:space-between;gap:.5rem}
 .chart-header h4{margin:0;font-size:1rem}
 .canvas-resp{display:block;inline-size:100%;block-size:220px;border-radius:12px;background:#fff}
 .canvas-resp.tall{block-size:320px}
 
-.table-wrap{margin-block-start:.9rem;border:.0625rem solid var(--ancestor-border);border-radius:.5rem;background:var(--card-bg);overflow:hidden}
+/* ===== الجداول العامة (مع table-wrap + table-scroll) ===== */
+.table-wrap{margin-block-start:.9rem;border:.0625rem solid var(--ancestor-border);border-radius:.5rem;background:var(--card-bg);overflow:hidden;display:flex;flex-direction:column;max-inline-size:100%}
 .table-wrap>h4{margin:0;padding:.6rem .75rem;border-block-end:.0625rem solid var(--ancestor-border);font-size:1rem;color:var(--text-main)}
-.table-scroll{max-block-size:260px;overflow:auto}
-.stats-table{inline-size:100%;border-collapse:collapse;font-size:.95rem}
+.table-scroll{max-block-size:260px;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.stats-table{inline-size:100%;min-inline-size:36rem;border-collapse:collapse;font-size:.95rem}
 .stats-table thead th{position:sticky;inset-block-start:0;background:var(--ancestor-bg);color:var(--text-main);text-align:right;padding:.5rem;border-block-end:.0625rem solid var(--ancestor-border)}
 .stats-table tbody td{padding:.45rem .5rem;border-block-end:.0625rem solid color-mix(in oklab,var(--modal-fg) 12%,transparent)}
+.stats-table tbody .st-dup-cell{cursor:pointer}
 .stats-table tbody tr:hover{background:color-mix(in oklab,var(--modal-fg) 5%,transparent)}
 .stats-table .empty{text-align:center;opacity:.7}
 
 /* =========================================================
-   11) إدارة الأجداد
+   11) إدارة الأجداد + dup-panel
 ========================================================= */
-.ancestor-row{
-  margin:.5rem 0;border:.0625rem solid var(--ancestor-border);padding:.6rem;border-radius:.375rem;
-  display:flex;flex-direction:column;gap:.4rem;background:var(--ancestor-bg);
-  transition:box-shadow .15s ease,border-color .15s ease,background .15s ease;color:var(--modal-fg)
-}
+.ancestor-row{margin:.5rem 0;border:.0625rem solid var(--ancestor-border);padding:.6rem;border-radius:.375rem;display:flex;flex-direction:column;gap:.4rem;background:var(--ancestor-bg);transition:box-shadow .15s ease,border-color .15s ease,background .15s ease;color:var(--modal-fg)}
 .ancestor-grid{display:flex;align-items:center;gap:.5rem}
 .ancestor-name{flex:1 1 auto;min-inline-size:0;cursor:text}
 .ancestor-grid .remove-ancestor{white-space:nowrap}
-.dirty-dot{display:inline-block;inline-size:.5rem;block-size:.5rem;border-radius:50%;margin-inline-start:.4rem;margin-inline-end: .4rem;opacity:0;transition:.2s}
+.dirty-dot{display:inline-block;inline-size:.5rem;block-size:.5rem;border-radius:50%;margin-inline-start:.4rem;margin-inline-end:.4rem;opacity:0;transition:.2s}
 .dirty-on .dirty-dot{opacity:1}
 .dirty-on.dot-ok .dirty-dot{background:var(--modal-secondary)}
 .dirty-on.dot-pending .dirty-dot{background:color-mix(in oklab,var(--modal-primary) 70%,var(--modal-secondary))}
 .dirty-on.dot-invalid .dirty-dot{background:var(--modal-danger)}
 .ancestors-list.drag-disabled .ancestor-label{cursor:default;opacity:.8}
 
+/* dup-panel داخل modal-content */
+.statsModal .modal-content{position:relative}
+.dup-panel{position:absolute;inset:5%;inline-size:90%;block-size:90%;max-inline-size:100%;background:var(--card-bg,#fff);border:1px solid color-mix(in oklab,var(--surface-border,#d1d5db)75%,transparent);border-radius:.9rem;box-shadow:0 .8rem 2.4rem rgba(0,0,0,.16);display:flex;flex-direction:column;z-index:40;overflow:hidden}
+.dup-panel-header{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.7rem 1rem;background:color-mix(in oklab,var(--panel-bg,#f3f4f6)92%,#fff);border-bottom:1px solid color-mix(in oklab,var(--surface-border,#d1d5db)80%,transparent)}
+.dup-panel-header h3{margin:0;font-size:.98rem;font-weight:600}
+.dup-panel-body{padding:.75rem 1rem 1rem;overflow-y: auto;overflow-x:hidden; }
+.dup-empty{margin:.2rem 0;font-size:.9rem;color:var(--text-muted,#6b7280)}
+.dup-summary{display:flex;flex-wrap:wrap;gap:.4rem .75rem;margin-bottom:.75rem;padding:.5rem .6rem;border-radius:.6rem;background:color-mix(in oklab,var(--panel-bg,#f3f4f6)90%,#fff);font-size:.86rem}
+.dup-summary span strong{font-weight:600}
+.dup-groups{display:flex;flex-direction:column;gap:.75rem}
+.dup-group{padding:.55rem .6rem .65rem;border-radius:.7rem;border:1px solid color-mix(in oklab,var(--surface-border,#d1d5db)80%,transparent);background:color-mix(in oklab,var(--card-bg,#fff)96%,#f9fafb);overflow-x:auto; }
+.dup-group-header{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.45rem;min-inline-size:32rem;}
+.dup-group-header h4{margin:0;font-size:.9rem;font-weight:600}
+.dup-group-size{font-size:.8rem;padding:.1rem .5rem;border-radius:999px;background:rgba(15,118,110,.06);color:rgb(15,118,110)}
+.dup-group-table{width:100%;min-inline-size:32rem;border-collapse:collapse;font-size:.8rem;}
+.dup-group-table th,.dup-group-table td{padding:.25rem .3rem;text-align:center;border-bottom:1px solid color-mix(in oklab,var(--surface-border,#e5e7eb)70%,transparent);white-space:nowrap;}
+.dup-group-table thead th{font-weight:600;background:color-mix(in oklab,var(--panel-bg,#f3f4f6)94%,#fff)}
+.dup-group-table tbody tr:last-child td{border-bottom:none}
+
+/* تحسين وضع dup-panel على الشاشات الصغيرة جداً */
+@media(max-width:40rem){.dup-panel{inset:6% 3%;inline-size:auto;block-size:auto;max-block-size:88%;border-radius:.8rem}}
 
 /* =========================================================
    13) تجاوب
@@ -633,7 +645,36 @@ display:inline-block;min-inline-size:2ch;padding:.15rem .55rem;border-radius:999
   .meta-view .meta-col{
     align-items:flex-start;
   }
-
+  .modal-inner{grid-template-columns:1fr;padding:.6rem;margin-block:1rem}
+  .right-section,.right-col{border:none;padding-inline-start:0}
+  .wives-list{max-block-size:none}
+  .child-view .child-grid{grid-template-columns:1fr auto}
+  .meta-edit-actions{flex-direction:column;align-items:stretch}
+  .meta-view .child-grid,
+  .meta-view .ancestor-grid,
+  .meta-view .father-grid,
+  .meta-view .mother-grid,
+  .meta-view .wife-father-grid,
+  .meta-view .wife-mother-grid{grid-template-columns:minmax(0,1fr)}
+  .meta-view .meta-col{align-items:flex-start}
+  .statsModal{padding:.75rem}
+  .statsModal .modal-body{max-block-size:70vh}
+  .chart-wrap{padding:10px 10px 12px;border-radius:14px}
+  .chart-header{flex-direction:column;align-items:flex-start;gap:.35rem}
+  .chart-header h4{font-size:.9rem}
+  .canvas-resp{block-size:190px}
+  .canvas-resp.tall{block-size:260px}
+  .table-wrap>h4{font-size:.9rem;padding:.5rem .6rem}
+  .table-scroll{max-block-size:200px}
+  .stats-table{font-size:.8rem;min-inline-size:30rem}
+  .stats-table thead th,
+  .stats-table tbody td{padding:.35rem .4rem}
+  .dup-panel{inset:4% 2%;inline-size:auto;block-size:auto;max-block-size:88%;border-radius:.75rem}
+  .dup-panel-body{padding:.6rem .7rem .8rem}
+    .dup-group-table{font-size:.75rem;min-inline-size:26rem}
+  .dup-group-header{
+    min-inline-size:26rem;
+  }
 }
 
 @media (min-width:24rem) and (max-width:29.9rem){
@@ -650,7 +691,19 @@ display:inline-block;min-inline-size:2ch;padding:.15rem .55rem;border-radius:999
   .meta-view .wife-mother-grid{
     grid-template-columns:repeat(2,minmax(0,1fr));
   }
-
+  .modal-inner{grid-template-columns:1fr;padding:.8rem;margin-block:1.5rem}
+  .left-section .left-col{grid-template-columns:1fr}
+  .right-section .right-col{border:none;padding-inline-start:0}
+  .wives-list{max-block-size:none}
+  .meta-view .child-grid,
+  .meta-view .ancestor-grid,
+  .meta-view .father-grid,
+  .meta-view .mother-grid,
+  .meta-view .wife-father-grid,
+  .meta-view .wife-mother-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .table-scroll{max-block-size:220px}
+  .stats-table{font-size:.85rem;min-inline-size:32rem}
+  .dup-panel{inset:6% 4%;inline-size:auto;block-size:auto;max-block-size:88%}
 }
 
 @media (min-width:30rem) and (max-width:39.9rem){
@@ -666,6 +719,19 @@ display:inline-block;min-inline-size:2ch;padding:.15rem .55rem;border-radius:999
   .meta-view .wife-mother-grid{
     grid-template-columns:repeat(2,minmax(0,1fr));
   }
+  
+    .modal-inner{grid-template-columns:1fr;padding:1rem;margin-block:2rem}
+  .right-section,.right-col{border:none;padding-inline-start:0}
+  .wives-list{max-block-size:none}
+  .meta-view .child-grid,
+  .meta-view .ancestor-grid,
+  .meta-view .father-grid,
+  .meta-view .mother-grid,
+  .meta-view .wife-father-grid,
+  .meta-view .wife-mother-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .table-scroll{max-block-size:230px}
+  .stats-table{font-size:.87rem;min-inline-size:34rem}
+  .dup-panel{inset:6% 6%;inline-size:auto;block-size:auto;max-block-size:88%}
 }
 
 @media (min-width:40rem) and (max-width:47.9rem){
@@ -680,7 +746,17 @@ display:inline-block;min-inline-size:2ch;padding:.15rem .55rem;border-radius:999
   .meta-view .wife-mother-grid{
     grid-template-columns:4.5rem repeat(3,minmax(0,1fr));
   }
-
+  .modal-inner{grid-template-columns:1fr;gap:.8rem}
+  .left-section .left-col{grid-template-columns:repeat(2,1fr)}
+  .meta-view .child-grid,
+  .meta-view .ancestor-grid,
+  .meta-view .father-grid,
+  .meta-view .mother-grid,
+  .meta-view .wife-father-grid,
+  .meta-view .wife-mother-grid{grid-template-columns:4.5rem repeat(3,minmax(0,1fr))}
+  .table-scroll{max-block-size:240px}
+  .stats-table{font-size:.9rem;min-inline-size:36rem}
+  .dup-panel{inset:6% 8%;inline-size:auto;block-size:auto;max-block-size:88%}
 }
 
 @media (min-width:48rem) and (max-width:63.9rem){
@@ -695,9 +771,18 @@ display:inline-block;min-inline-size:2ch;padding:.15rem .55rem;border-radius:999
   .meta-view .wife-mother-grid{
     grid-template-columns:4.5rem repeat(3,minmax(0,1fr));
   }
-
+  .modal-inner{grid-template-columns:1fr;gap:1rem}
+  .left-section .left-col{grid-template-columns:repeat(2,1fr)}
+  .meta-view .child-grid,
+  .meta-view .ancestor-grid,
+  .meta-view .father-grid,
+  .meta-view .mother-grid,
+  .meta-view .wife-father-grid,
+  .meta-view .wife-mother-grid{grid-template-columns:4.5rem repeat(3,minmax(0,1fr))}
+  .table-scroll{max-block-size:250px}
+  .stats-table{font-size:.92rem;min-inline-size:36rem}
+  .dup-panel{inset:5%;inline-size:90%;block-size:90%}
 }
-
 
 @media (min-width:64rem){
   .modal-inner{grid-template-columns:1fr 1fr}
@@ -706,4 +791,12 @@ display:inline-block;min-inline-size:2ch;padding:.15rem .55rem;border-radius:999
     border-inline-start:.0625rem solid color-mix(in oklab,var(--modal-fg) 10%,transparent);
     padding-inline-start:1rem;
   }
+  
+    .modal-inner{grid-template-columns:1fr 1fr}
+  .left-section .left-col{grid-template-columns:repeat(2,1fr)}
+  .right-section .right-col{border-inline-start:.0625rem solid color-mix(in oklab,var(--modal-fg) 10%,transparent);padding-inline-start:1rem}
+  .statsModal .modal-body{max-block-size:min(72vh,42rem)}
+  .table-scroll{max-block-size:260px}
+  .stats-table{font-size:.95rem;min-inline-size:38rem}
+  .dup-panel{inset:7%;inline-size:86%;block-size:86%}
 }
