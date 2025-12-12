@@ -188,6 +188,23 @@ const rg = roleGroup(p);
   const perFamilyRoots = [];
   for (const famKey of keys){
     const f = fams[famKey]; if (!f) continue;
+
+    // === NEW: تأكد من تهيئة الـ pipeline لهذه العائلة قبل حساب الإحصاءات ===
+    if (!f.__pipelineReady && typeof Model.normalizeFamilyPipeline === 'function') {
+      const fromVer =
+        Number.isFinite(f.__v) ? f.__v :
+        Number.isFinite(f.schemaVersion) ? f.schemaVersion :
+        0;
+
+      Model.normalizeFamilyPipeline(f, {
+        fromVer,
+        markCore: f.__core === true
+      });
+
+      f.__pipelineReady = true;
+    }
+    // === END NEW ===
+
     const famAcc = makeFamilyAcc(famKey, f);
 
     // سياق النَّسَب لهذه العائلة (يُستخدم في resolveClan)
@@ -213,6 +230,7 @@ const rg = roleGroup(p);
     const rpKids = (rp && Array.isArray(rp.children)) ? rp.children.length : 0;
     perFamilyRoots.push({ famKey, rpKids });
   }
+
 
   // متوسطات
   s.avgChildren = Number(((s.sons + s.daughters) / Math.max(1, s.familiesCount)).toFixed(2));
@@ -859,44 +877,52 @@ const openDuplicatesPanelForFamily = famKey => {
             <strong>ضعيف: ${weakGroups}</strong>
           </span>
         </div>
-        <div class="dup-groups">
+           <div class="dup-groups">
           ${
-            groups.map((grp, idx) => `
-              <section class="dup-group">
-                <header class="dup-group-header">
-                  <h4>مجموعة ${idx + 1}</h4>
-                  <span class="dup-group-size">${grp.length} شخص/أشخاص</span>
-                </header>
-                <table class="dup-group-table">
-                  <thead>
-                    <tr>
-                      <th>الاسم</th>
-                      <th>الدور</th>
-                      <th>المسار</th>
-                      <th>نوع التكرار</th>
-                      <th>درجة التطابق</th>
-                      <th>سبب الاشتباه</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${
-                      grp.map(p => `
-                        <tr>
-                          <td>${p.name || ''}</td>
-                          <td>${p.role || ''}</td>
-                          <td>${p.path || ''}</td>
-                          <td>${p.dupType || ''}</td>
-                          <td>${p.dupScoreLabel || ''}</td>
-                          <td>${p.reasonLabel || ''}</td>
-                        </tr>
-                      `).join('')
-                    }
-                  </tbody>
-                </table>
-              </section>
-            `).join('')
+            groups.map((grp, idx) => {
+              const members = Array.isArray(grp?.members) ? grp.members : [];
+              const size    = members.length;
+              const reason  = grp?.groupReason?.text || '';
+              const sev     = severityLabel(grp?.severity || 'none');
+
+              return `
+                <section class="dup-group">
+                  <header class="dup-group-header">
+                    <h4>مجموعة ${idx + 1}</h4>
+                    <span class="dup-group-size">${size} شخص/أشخاص</span>
+                    <span class="dup-group-severity">الخطورة: ${sev}</span>
+                    ${reason ? `<span class="dup-group-reason">${reason}</span>` : ''}
+                  </header>
+                  <table class="dup-group-table">
+                    <thead>
+                      <tr>
+                        <th>الاسم</th>
+                        <th>الدور</th>
+                        <th>نوع التكرار</th>
+                        <th>درجة التطابق</th>
+                        <th>سبب الاشتباه</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${
+                        members.map(p => `
+                          <tr>
+                            <td>${p.name || ''}</td>
+                            <td>${p.role || ''}</td>
+                            <td>${p.dupType || ''}</td>
+                            <td>${p.dupScoreLabel || ''}</td>
+                            <td>${p.reasonLabel || ''}</td>
+                          </tr>
+                        `).join('')
+                      }
+                    </tbody>
+                  </table>
+                </section>
+              `;
+            }).join('')
           }
         </div>
+
       </div>
     `;
   }

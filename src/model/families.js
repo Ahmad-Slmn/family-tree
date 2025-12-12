@@ -42,6 +42,7 @@ export {
   splitTextList,
   splitTextToNameObjects,
   getLineageConfig,
+  getDuplicatesConfig,
   findDuplicatesInFamily,
   stripPhotosDeep
 } from './families.core.js';

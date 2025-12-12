@@ -704,7 +704,6 @@ export function resolveAncestorsForPerson(person, fam, ctx, { maxDepth = 4 } = {
   return out;
 }
 
-
 export function ensureRealMotherForRoot(fam){
   if (!fam || !fam.rootPerson) return;
 
@@ -716,14 +715,32 @@ export function ensureRealMotherForRoot(fam){
 
   if (!hasMother) return;
 
-  if (rp.motherId && fam.persons && fam.persons[rp.motherId]) return;
+  // إن وُجد الأب: نضمن أن دوره على الأقل "الأب" إن كان فارغًا
+  if (fam.father){
+    const fr = String(fam.father.role || '').trim();
+    if (!fr){
+      fam.father.role = 'الأب';
+    }
+  }
 
+  // لو كان للأم سجلّ موجود مسبقًا في fam.persons استخدمه واضبط له دورًا عامًا فقط إن كان فارغًا
+  if (rp.motherId && fam.persons && fam.persons[rp.motherId]){
+    const momExisting = fam.persons[rp.motherId];
+    const mr = String(momExisting.role || '').trim();
+    if (!mr){
+      momExisting.role = 'الأم';
+    }
+    return;
+  }
+
+  // إنشاء سجلّ جديد لأم صاحب الشجرة بدور عام (يُفهم من السياق لكنها أم لصاحب الشجرة)
   const momBro = splitTextToNameObjects(b.motherBrothersTxt || '');
   const momSis = splitTextToNameObjects(b.motherSistersTxt  || '');
 
   const mom = {
     _id: uuid('m'),
-    name: b.motherName || 'الأم',
+    name: b.motherName || 'أم صاحب الشجرة',
+    // هنا نضع الدور عامًا حتى لا يظهر النص الطويل في بطاقة الشجرة
     role: 'الأم',
     bio: {
       clan: b.motherClan || '',
@@ -748,15 +765,10 @@ export function ensureRealMotherForRoot(fam){
   }
 }
 
+
 function ensureWifeSideChain(fam, parentPerson, wb, cfg){
   if (!fam || !parentPerson || !wb || !cfg) return;
   if (!fam.persons) fam.persons = {};
-
-  // زوجة هذه السلسلة (إن وُجدت)
-  const wifeId = cfg.wifeId ? String(cfg.wifeId) : null;
-  if (wifeId && !parentPerson._wifeId){
-    parentPerson._wifeId = wifeId;
-  }
 
   let gf = null;
   let gm = null;
@@ -771,8 +783,7 @@ function ensureWifeSideChain(fam, parentPerson, wb, cfg){
       fatherId: null,
       motherId: null,
       spousesIds: [],
-      childrenIds: [parentPerson._id],
-      _wifeId: wifeId || null              // ← وسم الجد كقريب لتلك الزوجة
+      childrenIds: [parentPerson._id]
     };
     fam.persons[gf._id] = gf;
     if (!parentPerson.fatherId) parentPerson.fatherId = gf._id;
@@ -788,8 +799,7 @@ function ensureWifeSideChain(fam, parentPerson, wb, cfg){
       fatherId: null,
       motherId: null,
       spousesIds: [],
-      childrenIds: [parentPerson._id],
-      _wifeId: wifeId || null              // ← وسم الجدة
+      childrenIds: [parentPerson._id]
     };
     fam.persons[gm._id] = gm;
     if (!parentPerson.motherId) parentPerson.motherId = gm._id;
@@ -821,8 +831,7 @@ function ensureWifeSideChain(fam, parentPerson, wb, cfg){
       fatherId: gf ? gf._id : null,
       motherId: gm ? gm._id : null,
       spousesIds: [],
-      childrenIds: [],
-      _wifeId: wifeId || null             // ← وسم العم/الخال بأنه مرتبط بهذه الزوجة
+      childrenIds: []
     };
     fam.persons[s._id] = s;
 
@@ -840,14 +849,35 @@ function ensureWifeSideChain(fam, parentPerson, wb, cfg){
   sis.forEach(s => addSibling(s, cfg.uncleFemaleRole));
 }
 
-
 export function ensureRealParentsForWives(fam){
   if (!fam || !fam.wives || !fam.wives.length) return;
   if (!fam.persons) fam.persons = {};
 
+  // عدد الزوجات لتحديد هل نذكر الترتيب أم لا
+  const wifeCount = fam.wives.length;
+
   for (let i = 0; i < fam.wives.length; i++){
     const w = fam.wives[i];
     if (!w || !w._id) continue;
+
+    // ترتيب الزوجة: الأولى / الثانية / ...
+    const ord = getArabicOrdinalF(i + 1); // الأولى، الثانية، ...
+
+    // إن كانت زوجة واحدة فقط → "الزوجة" بلا ترتيب
+    // إن كان هناك أكثر من زوجة → "الزوجة الأولى/الثانية/..."
+    const wifeTitle = (wifeCount > 1) ? `الزوجة ${ord}` : 'الزوجة';
+
+    const fatherRoleLabel       = `أب ${wifeTitle}`;                 // أب الزوجة أو أب الزوجة الأولى
+    const motherRoleLabel       = `أم ${wifeTitle}`;                 // أم الزوجة أو أم الزوجة الأولى
+    const gfFatherSideRole      = `جد ${wifeTitle} من جهة الأب`;    // جد الزوجة (الأولى) من جهة الأب
+    const gmFatherSideRole      = `جدة ${wifeTitle} من جهة الأب`;   // جدة الزوجة (الأولى) من جهة الأب
+    const uncleMaleFatherSide   = `عم ${wifeTitle}`;                 // عم الزوجة (الأولى)
+    const uncleFemaleFatherSide = `عمة ${wifeTitle}`;                // عمة الزوجة (الأولى)
+
+    const gfMotherSideRole      = `جد ${wifeTitle} من جهة الأم`;    // جد الزوجة (الأولى) من جهة الأم
+    const gmMotherSideRole      = `جدة ${wifeTitle} من جهة الأم`;   // جدة الزوجة (الأولى) من جهة الأم
+    const uncleMaleMotherSide   = `خال ${wifeTitle}`;               // خال الزوجة (الأولى)
+    const uncleFemaleMotherSide = `خالة ${wifeTitle}`;              // خالة الزوجة (الأولى)
 
     if (w.fatherId == null) w.fatherId = null;
     if (w.motherId == null) w.motherId = null;
@@ -862,7 +892,6 @@ export function ensureRealParentsForWives(fam){
 
     let wf = null;
     let wm = null;
-
     // --- أب الزوجة ---
     const hasFatherRecord =
       w.fatherId && fam.persons && fam.persons[w.fatherId];
@@ -873,7 +902,7 @@ export function ensureRealParentsForWives(fam){
       wf = {
         _id: fid,
         name: wb.fatherName,
-        role: 'أب الزوجة',
+        role: fatherRoleLabel,
         bio: {
           clan: wb.fatherClan || '',
           tribe: wb.tribe || '',
@@ -889,6 +918,13 @@ export function ensureRealParentsForWives(fam){
       w.fatherId = fid;
     } else if (hasFatherRecord) {
       wf = fam.persons[w.fatherId];
+      // تصحيح السجلات القديمة: "أب الزوجة" → "أب الزوجة الأولى/الثانية..."
+      if (wf) {
+        const r = String(wf.role || '').trim();
+        if (!r || r === 'أب الزوجة' || r === 'أب') {
+          wf.role = fatherRoleLabel;
+        }
+      }
     }
 
     // --- أم الزوجة ---
@@ -900,7 +936,7 @@ export function ensureRealParentsForWives(fam){
       wm = {
         _id: mid,
         name: wb.motherName,
-        role: 'أم الزوجة',
+        role: motherRoleLabel,
         bio: {
           clan: wb.motherClan || '',
           siblingsBrothers: mBro,
@@ -915,6 +951,13 @@ export function ensureRealParentsForWives(fam){
       w.motherId = mid;
     } else if (hasMotherRecord) {
       wm = fam.persons[w.motherId];
+      // تصحيح السجلات القديمة: "أم الزوجة" → "أم الزوجة الأولى/الثانية..."
+      if (wm) {
+        const r = String(wm.role || '').trim();
+        if (!r || r === 'أم الزوجة' || r === 'الأم' || r === 'أم') {
+          wm.role = motherRoleLabel;
+        }
+      }
     }
 
     // ربط الزوجين (أب/أم الزوجة) ببعضهما إن وُجدا
@@ -939,36 +982,36 @@ export function ensureRealParentsForWives(fam){
       ensureWifeSideChain(fam, wf, wb, {
         grandFatherField:  'paternalGrandfather',
         grandMotherField:  'paternalGrandmother',
-        grandFatherRole:   'جد الزوجة من جهة الأب',
-        grandMotherRole:   'جدة الزوجة من جهة الأب',
+        grandFatherRole:   gfFatherSideRole,
+        grandMotherRole:   gmFatherSideRole,
         brothers:          fBro,
         sisters:           fSis,
-        uncleMaleRole:     'عم الزوجة',
-        uncleFemaleRole:   'عمة الزوجة',
+        uncleMaleRole:     uncleMaleFatherSide,
+        uncleFemaleRole:   uncleFemaleFatherSide,
         gfPrefix:          'wpgf',
         gmPrefix:          'wpgm',
-        sibPrefix:         'wpunc',
-        wifeId:            w._id  
+        sibPrefix:         'wpunc'
       });
     }
+
 
     // بناء سلسلة الأجداد + الأخوال/الخالات من جهة الأم
     if (wm){
       ensureWifeSideChain(fam, wm, wb, {
         grandFatherField:  'maternalGrandfather',
         grandMotherField:  'maternalGrandmother',
-        grandFatherRole:   'جد الزوجة من جهة الأم',
-        grandMotherRole:   'جدة الزوجة من جهة الأم',
+        grandFatherRole:   gfMotherSideRole,
+        grandMotherRole:   gmMotherSideRole,
         brothers:          mBro,
         sisters:           mSis,
-        uncleMaleRole:     'خال الزوجة',
-        uncleFemaleRole:   'خالة الزوجة',
+        uncleMaleRole:     uncleMaleMotherSide,
+        uncleFemaleRole:   uncleFemaleMotherSide,
         gfPrefix:          'wmgf',
         gmPrefix:          'wmgm',
-        sibPrefix:         'wmunc',
-        wifeId:            w._id 
+        sibPrefix:         'wmunc'
       });
     }
+
   }
 }
 
@@ -1057,11 +1100,32 @@ function roleGroupLocal(p) {
   return r || '';
 }
 
-export function personFingerprint(p) {
-  const name = String(p?.name || '').trim();
-  const rg = roleGroupLocal(p);
-  const b = String(p?.bio?.birthDate || p?.bio?.birthYear || '').trim();
-  return [name, rg, b].join('|');
+export function personFingerprint(p){
+  if (!p) return '';
+
+  const name = norm(String(p.name || '').trim(), { keepPunct: true });
+  const rg   = roleGroupLocal(p);
+
+  const bio  = p.bio || {};
+  const birth = String(bio.birthDate || bio.birthYear || '').trim();
+  const place = norm(String(bio.birthPlace || '').trim(), { keepPunct: true });
+
+  const father = norm(String(bio.fatherName || '').trim(), { keepPunct: true });
+  const mother = norm(String(bio.motherName || '').trim(), { keepPunct: true });
+
+  const tribe = norm(String(bio.tribe || '').trim(), { keepPunct: true });
+  const clan  = norm(String(bio.clan  || '').trim(), { keepPunct: true });
+
+  return [
+    name,
+    rg,
+    birth || '-',
+    place || '-',
+    father || '-',
+    mother || '-',
+    tribe || '-',
+    clan  || '-'
+  ].join('|');
 }
 
 export function walk(fam, cb, { withPath = false } = {}){
@@ -1136,6 +1200,26 @@ export function getLineageConfig(fam) {
 
   return fam.__meta.lineage;
 }
+
+export function getDuplicatesConfig(fam){
+  const defaults = {
+    fingerprintFields: ['name','role','birth','father','mother','tribe','clan','place'],
+    minScoreToWarn: 2,          // لا نعرض تحذير إلا لو وُجدت مجموعة dupScore >= 2
+    excludeWeakFromStats: false // إن كانت true سيتم استبعاد المجموعات الضعيفة (اسم فقط) من الإحصاءات
+  };
+
+  if (!fam) return { ...defaults };
+
+  if (!fam.__meta) fam.__meta = {};
+  if (!fam.__meta.duplicates){
+    fam.__meta.duplicates = { ...defaults };
+  } else {
+    fam.__meta.duplicates = { ...defaults, ...fam.__meta.duplicates };
+  }
+
+  return fam.__meta.duplicates;
+}
+
 
 export function findDuplicatesInFamily(f) {
   if (!f) return [];
@@ -1235,24 +1319,19 @@ export function findDuplicatesInFamily(f) {
         dupScore = 1;
       }
 
-      const group = [];
+        const group = [];
       for (let i = 0; i < arr.length; i++) {
         const p = arr[i];
         group.push({
           _id: p._id,
           name: p.name || '',
           role: p.role || '',
-          // المسار الحقيقي المستخرج من العائلة
-          path: pathByPerson.get(p) || '',
-          // ربط اختياري بزوجة معيّنة (إن وُجد)
-          _wifeId: p._wifeId || null,
           // نوع التكرار ودرجة التطابق
           dupType,
           dupScore
         });
       }
       dups.push(group);
-
     }
   }
 

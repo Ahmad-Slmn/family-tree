@@ -2,7 +2,7 @@
 
 // الاعتمادات
 import * as Model from '../model/families.js';
-import { showWarning, getArabicOrdinalF } from '../utils.js';
+import { showWarning } from '../utils.js';
 
 // ===== الحالة العامة + الإعدادات =====
 
@@ -18,9 +18,7 @@ const DUP_LS_KEY_IGN   = 'dup_ignored_signatures';
 let _settings = {
   minIntervalMs: 15000,        // اختناق التحذير الافتراضي 15 ثانية
   autoCheckEnabled: false,     // فحص دوري ذكي (اختياري)
-  autoCheckIntervalMs: 60000,  // فترة الفحص الدوري إن فُعِّل
-  // هل تُحتسَب المجموعات الضعيفة (اسم فقط / dupScore=1) داخل الإحصاءات العامة؟
-  includeWeakNameOnlyInStats: true
+  autoCheckIntervalMs: 60000   // فترة الفحص الدوري إن فُعِّل
 };
 
 
@@ -186,224 +184,167 @@ function _dupScoreLabel(score){
   return '';
 }
 
-// إضافة رقم الزوجة داخل النص: "خال الزوجة" -> "خال الزوجة الأولى" مثلاً
-function _appendWifeIndexLabel(base, wifeIndex){
-  const ord = getArabicOrdinalF((wifeIndex || 0) + 1); // الأولى، الثانية...
-  if (base.includes('الزوجة')) {
-    return base.replace('الزوجة', `الزوجة ${ord}`);
-  }
-  return `${base} (${ord})`;
-}
+// اشتقاق دور أوضح بناءً على المسار داخل الشجرة أو شبكة الروابط في العائلة
+function _deriveRoleForDuplicates(origRole, path, fam, personId){
+  const r   = String(origRole || '').trim();
+  const p   = String(path || '');
+  const pid = personId ? String(personId) : '';
 
-// إيجاد الزوجات المرتبطات بشخص معيّن (أب/أم/جد/خال/عم... للزوجة)
-function _findWivesForRelative(person, fam){
-  const res = [];
-  if (!person || !fam) return res;
+  if (!r) return '';
 
-  const pid = person._id ? String(person._id) : null;
-  if (!pid) return res;
+  // =====================================
+  // A) حالات الأب/الأم لصاحب الشجرة (تظهر فقط في نظام التكرار)
+  // =====================================
+  if (fam && fam.rootPerson && pid){
+    const root       = fam.rootPerson;
+    const rootId     = String(root._id || '');
+    const rootFather = root.fatherId ? String(root.fatherId) : null;
+    const rootMother = root.motherId ? String(root.motherId) : null;
 
-  const wives   = Array.isArray(fam.wives) ? fam.wives : [];
-  const persons = fam.persons && typeof fam.persons === 'object' ? fam.persons : {};
-
-  // خريطة: childId -> parents[]
-  const parentsOf = new Map();
-  try{
-    Object.values(persons).forEach(p2 => {
-      if (!p2 || !p2._id) return;
-      const cidList = Array.isArray(p2.childrenIds) ? p2.childrenIds : [];
-      cidList.forEach(cid => {
-        const key = String(cid);
-        if (!parentsOf.has(key)) parentsOf.set(key, []);
-        parentsOf.get(key).push(p2);
-      });
-    });
-  }catch{
-    // نتجاهل أي خطأ هنا
-  }
-
-  for (let i = 0; i < wives.length; i++){
-    const w = wives[i];
-    if (!w || !w._id) continue;
-
-    const wid = String(w._id);
-
-    // 1) أب/أم الزوجة مباشرة
-    if ((w.fatherId && String(w.fatherId) === pid) ||
-        (w.motherId && String(w.motherId) === pid)) {
-      res.push({ wife: w, index: i });
-      continue;
-    }
-
-    // 2) بحث عام في محيط الأب/الأم/الأجداد/الأعمام/الأخوال…
-    const queue   = [];
-    const visited = new Set();
-
-    // نقاط البداية: أب وأم الزوجة (إن وُجدا في persons)
-    const seedIds = [];
-    if (w.fatherId && persons[w.fatherId]) seedIds.push(String(w.fatherId));
-    if (w.motherId && persons[w.motherId]) seedIds.push(String(w.motherId));
-
-    seedIds.forEach(id => {
-      visited.add(id);
-      queue.push(persons[id]);
-    });
-
-    let found = false;
-    let depth = 0;
-
-    // نسمح بعمق أكبر قليلًا ليغطي:
-    // أب/أم → جد/جدة → أخ/أخت (عم/خال) وهكذا
-    const MAX_DEPTH = 4;
-
-    while (queue.length && depth < MAX_DEPTH && !found){
-      const levelSize = queue.length;
-
-      for (let k = 0; k < levelSize; k++){
-        const cur = queue.shift();
-        if (!cur || !cur._id) continue;
-
-        const cid = String(cur._id);
-
-        // لو وصلنا للشخص الهدف: نربطه بهذه الزوجة
-        if (cid === pid){
-          res.push({ wife: w, index: i });
-          found = true;
-          break;
-        }
-
-        // نجمّع الجيران المحتملين (آباء + أبناء + آباء الأبناء)
-        const neighborIds = new Set();
-
-        // (أ) الآباء المباشرون
-        if (cur.fatherId && persons[cur.fatherId]){
-          neighborIds.add(String(cur.fatherId));
-        }
-        if (cur.motherId && persons[cur.motherId]){
-          neighborIds.add(String(cur.motherId));
-        }
-
-        // (ب) الأبناء المباشرون
-        const childrenIds = Array.isArray(cur.childrenIds) ? cur.childrenIds : [];
-        childrenIds.forEach(chid => {
-          if (chid && persons[chid]) neighborIds.add(String(chid));
-        });
-
-        // (ج) الآباء الذين يعدّون هذا الشخص واحدًا من childrenIds (مسار عكسي)
-        const parents = parentsOf.get(cid);
-        if (parents && parents.length){
-          parents.forEach(par => {
-            if (par && par._id) neighborIds.add(String(par._id));
-          });
-        }
-
-        // دفع الجيران الجدد في الطابور
-        neighborIds.forEach(nid => {
-          if (visited.has(nid)) return;
-          visited.add(nid);
-          const np = persons[nid];
-          if (np) queue.push(np);
-        });
-      }
-
-      depth++;
-    }
-  }
-
-  return res;
-}
-
-
-// اشتقاق دور أوضح بناءً على المسار داخل الشجرة + سياق العائلة
-function _deriveRoleForDuplicates(origRole, path, fam, person){
-  const baseRole = String(origRole || '').trim();
-  const p = String(path || '');
-
-  if (!baseRole && !p) return '';
-
-  const isSon  = (baseRole === 'ابن');
-  const isDaug = (baseRole === 'بنت');
-
-  // 1) أدوار "ابن / بنت" داخل الشجرة (أخوة، أبناء، أحفاد...)
-  if (isSon || isDaug){
-    // إخوة / أخوات صاحب الشجرة: أبناء الأب غير صاحب الشجرة
-    if (p.startsWith('father.children[')) {
-      return isSon ? 'أخ صاحب الشجرة' : 'أخت صاحب الشجرة';
-    }
-
-    // أبناء وأحفاد صاحب الشجرة
-    if (p.startsWith('rootPerson.children[')) {
-      const childrenMatches = p.match(/children\[\d+\]/g) || [];
-      const depth = childrenMatches.length; // 1: ابن مباشر، 2: حفيد، 3+: نسل أبعد
-
-      if (depth === 1) {
-        // ابن/بنت مباشر لصاحب الشجرة
-        return isSon ? 'ابن صاحب الشجرة' : 'بنت صاحب الشجرة';
-      }
-
-      if (depth === 2) {
-        // حفيد/حفيدة (ابن/بنت ابن أو بنت)
-        return isSon ? 'حفيد صاحب الشجرة' : 'حفيدة صاحب الشجرة';
-      }
-
-      if (depth >= 3) {
-        // نسل أبعد
-        return isSon ? 'من نسل صاحب الشجرة (ذكر)' : 'من نسل صاحب الشجرة (أنثى)';
-      }
-    }
-  }
-
-  // 2) أدوار "الأب / الأم" و الأقارب المرتبطين بالزوجات أو بصاحب الشجرة
-  if (!fam || !person || !person._id) return '';
-
-  const rid  = String(person._id);
-  const root = fam.rootPerson || null;
-
-  // "الأب" قد يكون: أب صاحب الشجرة، أو أب إحدى الزوجات
-  if (baseRole === 'الأب'){
-    if (root && root.fatherId && String(root.fatherId) === rid){
+    // أب صاحب الشجرة
+    if (rootFather && pid === rootFather && (r === 'الأب' || r === 'أب')){
       return 'أب صاحب الشجرة';
     }
-    const wivesCtx = _findWivesForRelative(person, fam);
-    if (wivesCtx.length){
-      const w = wivesCtx[0];
-      return _appendWifeIndexLabel('أب الزوجة', w.index);
-    }
-  }
 
-  // "الأم" قد تكون: أم صاحب الشجرة، أو أم إحدى الزوجات
-  if (baseRole === 'الأم'){
-    if (root && root.motherId && String(root.motherId) === rid){
+    // أم صاحب الشجرة
+    if (rootMother && pid === rootMother && (r === 'الأم' || r === 'أم')){
       return 'أم صاحب الشجرة';
     }
-    const wivesCtx = _findWivesForRelative(person, fam);
-    if (wivesCtx.length){
-      const w = wivesCtx[0];
-      return _appendWifeIndexLabel('أم الزوجة', w.index);
+  }
+
+  // نهتم فقط بحالات "ابن" / "بنت" لباقي الاشتقاقات
+  const isSon  = (r === 'ابن');
+  const isDaug = (r === 'بنت');
+  if (!isSon && !isDaug) return '';
+
+  // =====================================
+  // 1) إخوة / أخوات صاحب الشجرة (بالمسار)
+  // =====================================
+  // أشخاص تحت father.children[...] (غير rootPerson)
+  if (p && p.startsWith('father.children[')) {
+    return isSon ? 'أخ صاحب الشجرة' : 'أخت صاحب الشجرة';
+  }
+
+  // =====================================
+  // 2) أحفاد صاحب الشجرة من خلال rootPerson
+  // =====================================
+  if (p && p.startsWith('rootPerson.children[')) {
+    // كم مرّة تظهر children[...] في المسار؟
+    const childrenMatches = p.match(/children\[\d+\]/g) || [];
+    const depth = childrenMatches.length; // 1: ابن مباشر، 2: حفيد، 3+: نسل أبعد
+
+    if (depth === 1) {
+      // ابن/بنت مباشر لصاحب الشجرة -> نتركه كما هو
+      return '';
+    }
+
+    if (depth === 2) {
+      // حفيد/حفيدة (ابن/بنت ابن أو بنت)
+      return isSon ? 'حفيد صاحب الشجرة' : 'حفيدة صاحب الشجرة';
+    }
+
+    if (depth >= 3) {
+      // نسل أبعد (ابن حفيد... إلخ)
+      return isSon ? 'من نسل صاحب الشجرة (ذكر)' : 'من نسل صاحب الشجرة (أنثى)';
     }
   }
 
-  // أي دور يحتوي على "الزوجة" (أب/أم/جد/جدة/خال/خالة/عم/عمة الزوجة...)
-  if (baseRole.includes('الزوجة')){
-    // أولوية 1: لو كان الشخص موسومًا مباشرة بزوجة معيّنة (_wifeId)
-    if (person && person._wifeId && fam && Array.isArray(fam.wives)){
-      const wid = String(person._wifeId);
-      const idx = fam.wives.findIndex(w => w && String(w._id) === wid);
-      if (idx >= 0){
-        return _appendWifeIndexLabel(baseRole, idx);
+  // ==================================================
+  // 3) ابن/بنت من زوجة معيّنة لصاحب الشجرة (بالمسار)
+  // ==================================================
+  // مثال المسار: "rootPerson.wives[0].children[2]" أو "wives[1].children[0]"
+  if (fam && Array.isArray(fam.wives) && fam.wives.length > 1 && p) {
+    const m = p.match(/(?:^|\.)(?:rootPerson\.)?wives\[(\d+)\]\.children\[\d+\]/);
+    if (m) {
+      const idx  = parseInt(m[1], 10);
+      const wife = fam.wives[idx];
+      if (wife) {
+        const wifeRole = String(wife.role || '').trim() || `الزوجة ${idx + 1}`;
+        return isSon ? `ابن من ${wifeRole}` : `بنت من ${wifeRole}`;
+      }
+    }
+  }
+
+  // ======================================================
+  // 4) fallback سابق: ابن/بنت من زوجة معيّنة بالاعتماد على motherId
+  // ======================================================
+  if (fam && Array.isArray(fam.wives) && fam.wives.length > 1 && pid) {
+    for (let i = 0; i < fam.wives.length; i++) {
+      const wife = fam.wives[i];
+      if (!wife || !Array.isArray(wife.children)) continue;
+
+      const found = wife.children.some(ch => ch && String(ch._id || '') === pid);
+      if (found) {
+        const wifeRole = String(wife.role || '').trim() || `الزوجة ${i + 1}`;
+        return isSon ? `ابن من ${wifeRole}` : `بنت من ${wifeRole}`;
+      }
+    }
+  }
+
+  // =====================================================
+  // 5) اشتقاقات إضافية من شبكة الروابط داخل fam.persons
+  //    (حتى لو لم يكن للشخص مسار tree واضح)
+  // =====================================================
+  if (fam && fam.persons && pid && fam.persons[pid]) {
+    const self      = fam.persons[pid];
+    const fatherId  = self.fatherId ? String(self.fatherId) : null;
+    const motherId  = self.motherId ? String(self.motherId) : null;
+    const root      = fam.rootPerson || null;
+
+    // 5.1 أخ/أخت صاحب الشجرة بالاعتماد على الأب/الأم (بدون مسار father.children[..])
+    if (root) {
+      const rootId        = String(root._id || '');
+      const rootFatherId  = root.fatherId ? String(root.fatherId) : null;
+      const rootMotherId  = root.motherId ? String(root.motherId) : null;
+
+      const isSiblingOfRoot =
+        pid !== rootId &&
+        (
+          (fatherId && rootFatherId && fatherId === rootFatherId) ||
+          (motherId && rootMotherId && motherId === rootMotherId)
+        );
+
+      if (isSiblingOfRoot) {
+        return isSon ? 'أخ صاحب الشجرة' : 'أخت صاحب الشجرة';
       }
     }
 
-    // أولوية 2: الاستنتاج عن طريق الرسم البياني للعلاقات كما في السابق
-    const wivesCtx = _findWivesForRelative(person, fam);
-    if (wivesCtx.length){
-      const w = wivesCtx[0];
-      return _appendWifeIndexLabel(baseRole, w.index); // "خال الزوجة" -> "خال الزوجة الأولى/الثانية..."
+    // 5.2 أقارب الزوجات: أخ/أخت الزوجة، وابن/بنت الزوجة
+    if (Array.isArray(fam.wives) && fam.wives.length) {
+      for (let i = 0; i < fam.wives.length; i++) {
+        const w = fam.wives[i];
+        if (!w) continue;
+
+        const wifeId        = String(w._id || '');
+        const wifeFatherId  = w.fatherId ? String(w.fatherId) : null;
+        const wifeMotherId  = w.motherId ? String(w.motherId) : null;
+        const wifeRoleLabel = String(w.role || '').trim() || `الزوجة ${i + 1}`;
+
+        // أخ/أخت الزوجة: يشتركون مع الزوجة في الأب أو الأم
+        const isSiblingOfWife =
+          pid !== wifeId &&
+          (
+            (fatherId && wifeFatherId && fatherId === wifeFatherId) ||
+            (motherId && wifeMotherId && motherId === wifeMotherId)
+          );
+
+        if (isSiblingOfWife) {
+          return isSon ? `أخ ${wifeRoleLabel}` : `أخت ${wifeRoleLabel}`;
+        }
+
+        // ابن/بنت الزوجة (من زواج سابق مثلًا)
+        const isChildOfWife =
+          (fatherId && fatherId === wifeId) ||
+          (motherId && motherId === wifeId);
+
+        if (isChildOfWife) {
+          return isSon ? `ابن ${wifeRoleLabel}` : `بنت ${wifeRoleLabel}`;
+        }
+      }
     }
   }
 
-
-  // إن لم نستطع تحسين الدور نرجعه كما هو (يُستخدم fallback في مكان الاستدعاء)
+  // أي حالة أخرى نترك الدور كما هو (ابن/بنت)
   return '';
 }
 
@@ -461,6 +402,74 @@ function _deriveSeverity(maxGroupSize, maxDupScore){
   return 'low';
 }
 
+function _getDupConfigForFam(fam){
+  const defaults = {
+    fingerprintFields: ['name','role','birth','father','mother','tribe','clan','place'],
+    minScoreToWarn: 2,
+    excludeWeakFromStats: false
+  };
+
+  try{
+    if (fam && typeof Model.getDuplicatesConfig === 'function'){
+      return Model.getDuplicatesConfig(fam) || { ...defaults };
+    }
+  }catch(err){
+    _devLog('duplicates: getDuplicatesConfig failed', err);
+  }
+
+  return { ...defaults };
+}
+
+function _buildGroupReason(dupType, dupScore, size){
+  const dupScoreLabel = _dupScoreLabel(dupScore);
+  const parts = [];
+
+  if (dupType) parts.push(dupType);
+  if (dupScoreLabel) parts.push(`تطابق ${dupScoreLabel}`);
+  if (size > 1) parts.push(`في ${size} سجلات`);
+
+  const text = parts.join(' — ') || '';
+
+  return {
+    dupType: dupType || '',
+    dupScoreLabel: dupScoreLabel || '',
+    text
+  };
+}
+
+function _buildMergeHint(members, fam, groupDupScore){
+  const score = Number(groupDupScore) || 0;
+  if (score < 2 || !Array.isArray(members) || !members.length) return null;
+
+  const ids = members.map(m => m && m._id).filter(Boolean);
+  if (!ids.length) return null;
+
+  let primaryId = ids[0];
+
+  if (fam && fam.persons && typeof fam.persons === 'object'){
+    let bestScore = -1;
+    ids.forEach(id => {
+      const p = fam.persons[id];
+      if (!p) return;
+      const children = Array.isArray(p.childrenIds) ? p.childrenIds.length : 0;
+      const spouses  = Array.isArray(p.spousesIds) ? p.spousesIds.length : 0;
+      const links    = children + spouses;
+      if (links > bestScore){
+        bestScore = links;
+        primaryId = id;
+      }
+    });
+  }
+
+  const duplicateIds = ids.filter(id => id !== primaryId);
+  if (!duplicateIds.length) return null;
+
+  return {
+    primaryId,
+    duplicateIds
+  };
+}
+
 
 // ===== واجهة الإعدادات =====
 
@@ -490,6 +499,7 @@ export function configureDuplicates(settings = {}){
 export function getDuplicateSummary(famKey){
   const fams = Model.getFamilies?.();
   const fam  = fams && fams[famKey];
+
   if (!fam) {
     return {
       count: 0,
@@ -505,12 +515,41 @@ export function getDuplicateSummary(famKey){
       weakGroupsCount: 0,
       maxDupScore: 0,
       isReviewed: false,
-      lastCheckedAt: Date.now()
+      lastCheckedAt: Date.now(),
+      minScoreToWarn: 0
     };
   }
 
+  // تهيئة إعدادات التكرار من العائلة
+  const dupCfg = _getDupConfigForFam(fam);
+  const includeWeakInStats = !dupCfg.excludeWeakFromStats;
+  const minScoreToWarn     = Number(dupCfg.minScoreToWarn) || 0;
+
+  // === NEW: تأكد من تهيئة الـ pipeline لهذه العائلة قبل حساب التكرارات ===
+  if (!fam.__pipelineReady && typeof Model.normalizeFamilyPipeline === 'function') {
+    const fromVer =
+      Number.isFinite(fam.__v) ? fam.__v :
+      Number.isFinite(fam.schemaVersion) ? fam.schemaVersion :
+      0;
+
+    Model.normalizeFamilyPipeline(fam, {
+      fromVer,
+      markCore: fam.__core === true
+    });
+
+    fam.__pipelineReady = true;
+  }
+  // === END NEW ===
+
   const groupsRaw = _collectDuplicateGroups(fam);
   const sig       = _signatureForGroups(groupsRaw);
+
+  // كاش على مستوى العائلة لتفادي إعادة الحساب عند ثبات التوقيع
+  fam.__dupCache = fam.__dupCache || {};
+  const cached = fam.__dupCache;
+  if (cached.signature === sig && cached.summary){
+    return { ...cached.summary, signature: sig };
+  }
 
   const totalPersons = _estimateTotalPersons(fam);
 
@@ -522,13 +561,11 @@ export function getDuplicateSummary(famKey){
   let maxDupScore            = 0;
   const groupScores          = [];
 
-  // هيكلة مناسبة للعرض: id، name، role، path (+ نوع التكرار، درجة التطابق، سبب الاشتباه)
   const shaped = groupsRaw.map(arr => {
     const size = arr.length;
     if (size > maxGroupSize) maxGroupSize = size;
     totalDuplicatePersons += size;
 
-    // درجة التطابق لهذه المجموعة (أعلى درجة عبر عناصرها)
     let groupDupScore = 0;
     for (let i = 0; i < arr.length; i++) {
       const orig = arr[i];
@@ -542,37 +579,25 @@ export function getDuplicateSummary(famKey){
     else if (groupDupScore === 2) mediumGroupsCount++;
     else if (groupDupScore === 1) weakGroupsCount++;
 
-    return arr.map(orig => {
-      const _id  = orig?._id ? String(orig._id) : '';
-      const name = String(orig?.name || '');
+    const first       = arr[0] || {};
+    const groupDupType = String(first._dupType || first.dupType || '');
+
+    const members = arr.map(orig => {
+      const _id     = orig?._id ? String(orig._id) : '';
+      const name    = String(orig?.name || '');
       const roleRaw = String(orig?.role || '');
 
       const computedPath =
         _id && typeof Model.findPathByIdInFamily === 'function' ? (Model.findPathByIdInFamily(fam, _id) || '')
           : '';
 
-      // المسار الخام (قد يكون فارغًا للأشخاص المشتقّين خارج الشجرة)
-      const rawPath =
-        computedPath ||
-        orig?.path  ||   // إن كان مولِّد التكرارات يضع path هنا
-        orig?._path ||   // أو حقل داخلي _path
-        '';
-
-      // نحاول اشتقاق وصف أدق للدور بناءً على المسار + سياق العائلة
-      const derivedRole = _deriveRoleForDuplicates(roleRaw, rawPath, fam, orig);
+      const derivedRole = _deriveRoleForDuplicates(roleRaw, computedPath, fam, _id);
       const role        = derivedRole || roleRaw;
 
-      // مسار العرض في الجدول: نص "خارج الشجرة" إن لم يوجد مسار حقيقي
-      const path        = rawPath || 'خارج الشجرة';
-
-      // نوع التكرار: ندعم كلاً من dupType و _dupType
       const dupType  = String(orig?._dupType || orig?.dupType || '');
-
-      // درجة التطابق: ندعم dupScore و _dupScore
       const dupScore = orig?._dupScore ?? orig?.dupScore ?? null;
       const dupScoreLabel = _dupScoreLabel(dupScore);
 
-      // سبب الاشتباه بصياغة جاهزة للواجهة
       let reasonLabel = '';
       if (dupType && dupScoreLabel) {
         reasonLabel = `${dupType} (تطابق ${dupScoreLabel})`;
@@ -580,9 +605,22 @@ export function getDuplicateSummary(famKey){
         reasonLabel = dupType;
       }
 
-      return { _id, name, role, path, dupType, dupScore, dupScoreLabel, reasonLabel };
+      return { _id, name, role, dupType, dupScore, dupScoreLabel, reasonLabel };
     });
 
+    const groupReason = _buildGroupReason(groupDupType, groupDupScore, size);
+    const groupSeverity = _deriveSeverity(size, groupDupScore);
+    const mergeHint = _buildMergeHint(members, fam, groupDupScore);
+
+    return {
+      members,
+      dupType: groupDupType,
+      dupScore: groupDupScore,
+      dupScoreLabel: _dupScoreLabel(groupDupScore),
+      groupReason,
+      severity: groupSeverity,
+      mergeHint
+    };
   });
 
   // فلترة اختيارية للمجموعات الضعيفة في الإحصاءات العامة فقط
@@ -590,14 +628,14 @@ export function getDuplicateSummary(famKey){
   let effectiveMaxGroupSize       = maxGroupSize;
   let effectiveTotalDupPersons    = totalDuplicatePersons;
 
-  if (!_settings.includeWeakNameOnlyInStats) {
+  if (!includeWeakInStats) {
     effectiveCount            = 0;
     effectiveMaxGroupSize     = 0;
     effectiveTotalDupPersons  = 0;
 
     for (let i = 0; i < groupsRaw.length; i++) {
       const score = groupScores[i] || 0;
-      if (score <= 1) continue; // نتجاوز المجموعات التي هي "اسم فقط"
+      if (score <= 1) continue;
 
       const size = groupsRaw[i]?.length || 0;
       effectiveCount++;
@@ -609,13 +647,12 @@ export function getDuplicateSummary(famKey){
   const duplicateRatio =
     totalPersons > 0 ? (effectiveTotalDupPersons / totalPersons) : 0;
 
-  const severity = _deriveSeverity(effectiveMaxGroupSize, maxDupScore);
-  const isReviewed = _isSignatureIgnored(famKey, sig);
+  const severity      = _deriveSeverity(effectiveMaxGroupSize, maxDupScore);
+  const isReviewed    = _isSignatureIgnored(famKey, sig);
   const lastCheckedAt = Date.now();
 
-  return {
+  const summary = {
     count: effectiveCount,
-    signature: sig,
     groups: shaped,
     maxGroupSize: effectiveMaxGroupSize,
     severity,
@@ -627,7 +664,16 @@ export function getDuplicateSummary(famKey){
     weakGroupsCount,
     maxDupScore,
     isReviewed,
-    lastCheckedAt
+    lastCheckedAt,
+    minScoreToWarn
+  };
+
+  fam.__dupCache.signature = sig;
+  fam.__dupCache.summary   = summary;
+
+  return {
+    ...summary,
+    signature: sig
   };
 }
 
@@ -707,7 +753,7 @@ export function warnDuplicatesIfAny(famKey, opts = {}){
   if (!fam) return;
 
   const summary   = opts.summary || getDuplicateSummary(famKey);
-  const { count, signature } = summary;
+  const { count, signature, maxDupScore, minScoreToWarn } = summary;
 
   const prevCount = _dupWarnedCount.get(famKey);
   const prevSig   = _dupSignature.get(famKey);
@@ -724,6 +770,16 @@ export function warnDuplicatesIfAny(famKey, opts = {}){
     return;
   }
 
+  // احترام إعدادات العائلة: عدم التحذير إن كان أقصى dupScore أقل من minScoreToWarn
+  const localMinScoreToWarn =
+    (typeof minScoreToWarn === 'number' && !Number.isNaN(minScoreToWarn))  ? minScoreToWarn
+      : 0;
+
+  if (count > 0 && localMinScoreToWarn > 0 && (maxDupScore || 0) < localMinScoreToWarn){
+    _updateState(famKey, { count, signature, ts: now });
+    return;
+  }
+
   if (count > 0 && changed && !throttled){
     const builderFromCtx = _ctx?.dupMessageBuilder;
     const builderFromCfg = _settings.messageBuilder;
@@ -734,7 +790,6 @@ export function warnDuplicatesIfAny(famKey, opts = {}){
 
     showWarning(msg);
 
-    // ربط اختياري مباشر بلوحة مراجعة التكرارات إن رغب السياق بذلك
     try{
       if (_ctx?.openPanelOnWarn && _ctx?.bus?.emit){
         _ctx.bus.emit('duplicates:openPanel', { famKey, count, signature });
@@ -748,6 +803,7 @@ export function warnDuplicatesIfAny(famKey, opts = {}){
     _updateState(famKey, { count: 0, signature: '' });
   }
 }
+
 
 /**
  * تهيئة اختيارية: نحتفظ بـ ctx ونُسجّل مستمعين للأحداث
