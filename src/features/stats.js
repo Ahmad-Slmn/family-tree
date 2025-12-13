@@ -3,7 +3,7 @@
 
 import { byId } from '../utils.js';
 import * as Model from '../model/families.js';
-import { roleGroup } from '../model/roles.js';
+import { roleGroup, inferGender } from '../model/roles.js';
 import * as Lineage from './lineage.js';
 import { getDuplicatesStatusForAllFamilies, getDuplicateSummary } from './duplicates.js';
 
@@ -20,14 +20,15 @@ function hexToRgba(hex, a = 0.18){
    - يمنع التكرار عبر _id أو بصمة مرنة
    - يبني perFamily و perClan ومؤشرات النواقص
 ========================= */
-function computeStats(onlyFamilyKey = null){
+function computeStats(onlyFamilyKey = null, opts = {}){
+  const {
+    uniqueAcrossFamilies = false,   // toggle: إجمالي فريد عبر جميع العائلات
+    diagnostics = true              // يسجل missingIdsCount + تحذيرات الاتساق
+  } = (opts && typeof opts === 'object') ? opts : {};
+
   const fams    = Model.getFamilies();
   const visible = Object.keys(fams).filter(k => fams[k] && fams[k].hidden !== true);
 
-  // دعم:
-  // - null / undefined  → كل العائلات المرئية
-  // - string            → عائلة واحدة
-  // - Array<string>     → مجموعة عائلات مخصّصة (نستخدمها مع الفلتر)
   let keys;
   if (Array.isArray(onlyFamilyKey) && onlyFamilyKey.length){
     const set = new Set(onlyFamilyKey);
@@ -38,26 +39,123 @@ function computeStats(onlyFamilyKey = null){
     keys = visible;
   }
 
-  const s = {
-    familiesCount: keys.length,
-    persons: 0, sons: 0, daughters: 0, wives: 0, unknown: 0,
-    avgChildren: 0, avgChildrenPerRoot: 0,
-    perFamily: [],
-    perClan: new Map(),
-    missing: { birthInfo:0, clan:0, photoAny:0 }
+const s = {
+  familiesCount: keys.length,
+  persons: 0, sons: 0, daughters: 0, wives: 0, unknown: 0,   // (كما هي) تصنيف كل الأشخاص أثناء traversal
+  rootSons: 0, rootDaughters: 0,                               // ✅ جديد: أبناء/بنات صاحب الشجرة فقط
+  avgChildren: 0, avgChildrenPerRoot: 0,
+  perFamily: [],
+  perClan: new Map(),
+  missing: { birthInfo:0, clan:0, photoAny:0, missingIdsCount:0 },
+  diagnostics: diagnostics ? { invariantsFailed:0, invariantNotes:[] } : null
+};
+
+
+  // مجموعات منع التكرار على مستوى "الكل" (فقط عند uniqueAcrossFamilies = true)
+  const gSeenIds  = uniqueAcrossFamilies ? new Set()     : null;
+  const gSeenObjs = uniqueAcrossFamilies ? new WeakSet() : null;
+
+const makeFamilyAcc = (famKey, fam)=>{
+  const label = (fam?.familyName || fam?.title || fam?.rootPerson?.name || famKey || '').trim();
+  return {
+    familyKey:famKey, label,
+    persons:0, sons:0, daughters:0, wives:0, unknown:0,        // (كما هي) تصنيف جميع الأشخاص
+    rootSons:0, rootDaughters:0                                // ✅ جديد
+  };
+};
+  // اتساق سريع (Invariants)
+  const diagFail = (msg)=>{
+    if (!s.diagnostics) return;
+    s.diagnostics.invariantsFailed += 1;
+    if (s.diagnostics.invariantNotes.length < 60) s.diagnostics.invariantNotes.push(msg);
   };
 
-  // مجموعات منع التكرار
-  const seenIds  = new Set();
-  const seenObjs = new WeakSet();
-  const softSeen = new Set();
+  const checkInvariantsForFamily = (famKey, famAcc, famDiag)=>{
+    // 1) famAcc.persons == sum(categories)
+    const sumCats = (famAcc.sons + famAcc.daughters + famAcc.wives + famAcc.unknown);
+    if (famAcc.persons !== sumCats){
+      diagFail(`[${famKey}] famAcc.persons(${famAcc.persons}) != sumCats(${sumCats})`);
+    }
 
-  // بصمة مرنة لمن لا يملك _id (تقلل العدّ المزدوج) — الآن تستخدم العشيرة المحسوبة
-  const softFingerprint = (p, famKey, ctx)=>{
+    // 2) sons+daughters == count(roleGroup ابن/بنت) (نسجلها أثناء tally)
+    if (famDiag && (famDiag.kidsRolesCount != null)){
+      const sd = famAcc.sons + famAcc.daughters;
+      if (sd !== famDiag.kidsRolesCount){
+        diagFail(`[${famKey}] (sons+daughters=${sd}) != kidsRolesCount(${famDiag.kidsRolesCount})`);
+      }
+    }
+  };
+
+  // تحقق تبادلية روابط الزوجات (اختياري/لين)
+  const checkSpouseReciprocity = (famKey, fam)=>{
+    const rp = fam?.rootPerson;
+    if (!rp) return;
+    const a = Array.isArray(rp.spousesIds) ? rp.spousesIds.map(String) : null;
+    if (!a || !a.length) return;
+
+    // ابحث عن الزوجات (في البنية الحالية غالبًا rp.wives)
+    const wives = Array.isArray(rp.wives) ? rp.wives : (Array.isArray(fam?.wives) ? fam.wives : []);
+    if (!wives.length) return;
+
+    for (const w of wives){
+      const wid = w?._id ? String(w._id) : null;
+      if (!wid) continue;
+      if (!a.includes(wid)){
+        diagFail(`[${famKey}] rootPerson.spousesIds missing wifeId=${wid}`);
+      }
+      const b = Array.isArray(w?.spousesIds) ? w.spousesIds.map(String) : null;
+      if (b && rp?._id){
+        const rpid = String(rp._id);
+        if (!b.includes(rpid)){
+          diagFail(`[${famKey}] wife.spousesIds missing rootId=${rpid} (wifeId=${wid})`);
+        }
+      }
+    }
+  };
+
+// === جمع على مستوى كل عائلة ===
+const perFamilyRoots = [];
+
+const processFamily = (famKey)=>{
+  const f = fams[famKey]; if (!f) return;
+
+  // NEW: تهيئة pipeline + ensureIds بقوة (الهدف: غياب _id حالة نادرة)
+  if ((!f.__pipelineReady) && typeof Model.normalizeFamilyPipeline === 'function') {
+    const fromVer =
+      Number.isFinite(f.__v) ? f.__v :
+      Number.isFinite(f.schemaVersion) ? f.schemaVersion :
+      0;
+
+    Model.normalizeFamilyPipeline(f, { fromVer, markCore: f.__core === true });
+    f.__pipelineReady = true;
+  }
+  if (typeof Model.ensureIds === 'function'){
+    try { Model.ensureIds(f); } catch {}
+  }
+
+  // Sets تُصفَّر لكل عائلة (إحصاء مستقل)
+  const seenIds  = uniqueAcrossFamilies ? gSeenIds  : new Set();
+  const seenObjs = uniqueAcrossFamilies ? gSeenObjs : new WeakSet();
+  const softSeen = new Set(); // يبقى محليًا للعائلة فقط (احتياطي)
+
+  const famAcc = makeFamilyAcc(famKey, f);
+
+  const ctx =
+    (Lineage && typeof Lineage.buildLineageContext === 'function') ? Lineage.buildLineageContext(f)
+      : null;
+  const resolveClanSafe = (p)=>{
     const b = p?.bio || {};
-    const resolvedClan =
-      (ctx && typeof Lineage.resolveClan === 'function') ? (Lineage.resolveClan(p, ctx) || '')
-        : String(b.clan || '');
+    if (Lineage && typeof Lineage.resolveClan === 'function'){
+      const c = Lineage.resolveClan(p, f, ctx);   // ✅ (person, family, ctx)
+      if (c && String(c).trim()) return String(c).trim();
+    }
+    return String(b.clan || '').trim();
+  };
+  
+    // (احتياطي نادر) بصمة مرنة — محلية لهذه العائلة (ترى resolveClanSafe)
+  const softFingerprint = (p)=>{
+    const b = p?.bio || {};
+    const resolvedClan = resolveClanSafe(p);
     return [
       'fp', String(famKey||'').trim(),
       String(p?.name||'').trim(),
@@ -70,172 +168,222 @@ function computeStats(onlyFamilyKey = null){
     ].join('|');
   };
 
-  const alreadyCounted = (p, famKey, ctx)=>{
-    if (!p || typeof p !== 'object') return true;
-    if (p._id){
-      if (seenIds.has(p._id)) return true;
-      seenIds.add(p._id);
-      return false;
-    }
-    if (seenObjs.has(p)) return true;
-    seenObjs.add(p);
-    const fp = softFingerprint(p, famKey, ctx);
-    if (softSeen.has(fp)) return true;
-    softSeen.add(fp);
-    return false;
+const clanKeyNorm = (s)=> normArStats(String(s||'')).replace(/\s+/g,' ').trim();
+
+const bumpClan = (p)=>{
+  const clanRaw = resolveClanSafe(p);          // اسم العشيرة كما هو (موروث عبر resolveClanSafe -> Lineage.resolveClan)
+  if (!clanRaw) return;
+
+  const key = clanKeyNorm(clanRaw);
+  if (!key) return;
+
+  const cur = s.perClan.get(key) || {
+    label: clanRaw.trim(),
+    persons: 0,
+    males: 0,
+    females: 0,
+    unknownGender: 0
   };
 
-  const bumpClan = (p, field, ctx)=>{
-    const b = p?.bio || {};
-    const clan = (() => {
-      if (ctx && typeof Lineage.resolveClan === 'function'){
-        const c = Lineage.resolveClan(p, ctx);
-        if (c && String(c).trim()) return String(c).trim();
-      }
-      return String(b.clan || '').trim();
-    })();
+  cur.persons += 1;
 
-    if (!clan) return;
-    const cur = s.perClan.get(clan) || { persons:0, sons:0, daughters:0 };
-    cur.persons += 1;
-    if (field === 'sons')          cur.sons      += 1;
-    else if (field === 'daughters') cur.daughters += 1;
-    s.perClan.set(clan, cur);
-  };
+  const g = (typeof inferGender === 'function') ? inferGender(p) : null;
+  if (g === 'M') cur.males += 1;
+  else if (g === 'F') cur.females += 1;
+  else cur.unknownGender += 1;
 
-  const bumpMissing = (p, ctx)=>{
+  if (!cur.label) cur.label = clanRaw.trim();
+  s.perClan.set(key, cur);
+};
+
+
+  const bumpMissing = (p)=>{
     const b = p?.bio || {};
     const hasBirthInfo = !!(String(b.birthDate||'').trim() || String(b.birthYear||'').trim());
     if (!hasBirthInfo) s.missing.birthInfo += 1;
 
-    const resolvedClan =
-      (ctx && typeof Lineage.resolveClan === 'function')  ? (Lineage.resolveClan(p, ctx) || '')
-        : String(b.clan || '');
-    if (!String(resolvedClan).trim()) s.missing.clan += 1;
+    if (!resolveClanSafe(p)) s.missing.clan += 1;
 
     const raw = String(b.photoUrl || p?.photoUrl || '').trim();
     if (!raw) s.missing.photoAny += 1;
   };
 
-  const makeFamilyAcc = (famKey, fam)=>{
-    const label = (fam?.familyName || fam?.title || fam?.rootPerson?.name || famKey || '').trim();
-    return { familyKey:famKey, label, persons:0, sons:0, daughters:0, wives:0, unknown:0 };
-  };
 
-  const tally = (p, famKey, famAcc, ctx)=>{
-    if (!p || alreadyCounted(p, famKey, ctx)) return;
+  const famDiag = diagnostics ? { kidsRolesCount:0 } : null;
+
+  const alreadyCounted = (p)=>{
+    if (!p || typeof p !== 'object') return true;
+
+    const pid = p?._id ? String(p._id) : '';
+    if (pid){
+      if (seenIds.has(pid)) return true;
+      seenIds.add(pid);
+      return false;
+    }
+
+    if (diagnostics) s.missing.missingIdsCount += 1;
+
+    if (seenObjs.has(p)) return true;
+    seenObjs.add(p);
+
+    const fp = softFingerprint(p);
+    if (softSeen.has(fp)) return true;
+    softSeen.add(fp);
+    return false;
+  };
+  
+  const countRootKids = (fam)=>{
+  const rp = fam?.rootPerson;
+  if (!rp) return { sons:0, daughters:0, total:0 };
+
+  const ids = new Set();
+  const kids = [];
+
+  // 1) أبناء الجذر المباشرين
+  for (const c of (Array.isArray(rp.children) ? rp.children : [])){
+    const id = c?._id ? String(c._id) : null;
+    if (id && ids.has(id)) continue;
+    if (id) ids.add(id);
+    kids.push(c);
+  }
+
+  // 2) (اختياري لكن مهم) أبناء الزوجات إذا لم تكن متزامنة في rp.children
+  const wives = Array.isArray(rp.wives) ? rp.wives : (Array.isArray(fam?.wives) ? fam.wives : []);
+  for (const w of wives){
+    for (const c of (Array.isArray(w?.children) ? w.children : [])){
+      const id = c?._id ? String(c._id) : null;
+      if (id && ids.has(id)) continue;
+      if (id) ids.add(id);
+      kids.push(c);
+    }
+  }
+
+  let sons = 0, daughters = 0;
+  for (const c of kids){
+    const rg = roleGroup(c);
+    if (rg === 'ابن') sons++;
+    else if (rg === 'بنت') daughters++;
+  }
+  return { sons, daughters, total: kids.length };
+};
+
+
+  const tally = (p)=>{
+    if (!p || alreadyCounted(p)) return;
 
     s.persons += 1;
     famAcc.persons += 1;
-    bumpMissing(p, ctx);
-const rg = roleGroup(p);
+    bumpMissing(p);
 
+    const rg = roleGroup(p);
     if (rg === 'زوجة'){
-      // زوجة → تُحتسب في الزوجات + تُنسب للعشيرة (بدون تمييز أبناء/بنات)
-      s.wives += 1;
-      famAcc.wives += 1;
-      bumpClan(p, undefined, ctx);
+      s.wives += 1; famAcc.wives += 1;
+      bumpClan(p);
     } else if (rg === 'ابن'){
-      // ابن → أبناء + عشيرة (أبناء)
-      s.sons += 1;
-      famAcc.sons += 1;
-      bumpClan(p, 'sons', ctx);
+      s.sons += 1; famAcc.sons += 1;
+      if (famDiag) famDiag.kidsRolesCount += 1;
+      bumpClan(p);
     } else if (rg === 'بنت'){
-      // بنت → بنات + عشيرة (بنات)
-      s.daughters += 1;
-      famAcc.daughters += 1;
-      bumpClan(p, 'daughters', ctx);
+      s.daughters += 1; famAcc.daughters += 1;
+      if (famDiag) famDiag.kidsRolesCount += 1;
+      bumpClan(p);
     } else {
-      // أي دور آخر (جد، رب الأسرة، غير محدد...) → يُحتسب في unknown + تُنسب عشيرته إن وُجدت
-      s.unknown += 1;
-      famAcc.unknown += 1;
-      bumpClan(p, undefined, ctx);
+      s.unknown += 1; famAcc.unknown += 1;
+      bumpClan(p);
     }
-
 
     const wives = Array.isArray(p.wives) ? p.wives : [];
     const kids  = Array.isArray(p.children) ? p.children : [];
 
-    // حذف ازدواج الأطفال بين children وعلى مستوى الزوجات مع استخدام البصمة الجديدة
-    let wifeChildKeySet = null;
-    if (wives.length){
-      wifeChildKeySet = new Set();
-      for (const w of wives){
-        const wkids = Array.isArray(w?.children) ? w.children : [];
-        for (const c of wkids){
-          const key = c?._id ? `id:${c._id}` : `sf:${softFingerprint(c, famKey, ctx)}`;
-          wifeChildKeySet.add(key);
-        }
-      }
-    }
+let wifeChildKeySet = null;
+if (wives.length){
+  wifeChildKeySet = new Set();
 
-    for (const c of kids){
-      if (wifeChildKeySet){
-        const key = c?._id ? `id:${c._id}` : `sf:${softFingerprint(c, famKey, ctx)}`;
-        if (wifeChildKeySet.has(key)) continue;
-      }
-      tally(c, famKey, famAcc, ctx);
+  // تطبيع اسم خفيف (محلي داخل stats.js)
+  const normName = (x)=> String(x||'')
+    .replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]/g,'')
+    .replace(/\u0640/g,'')
+    .replace(/[اأإآ]/g,'ا')
+    .replace(/[يى]/g,'ي')
+    .replace(/[هة]/g,'ه')
+    .replace(/\s+/g,' ')
+    .trim()
+    .toLowerCase();
+
+  const childKey = (c)=>{
+    const cid = c?._id ? String(c._id) : '';
+    if (cid) return `id:${cid}`;
+    // إن لم يوجد id: استخدم البصمة المرنة (أدق من الاسم غالبًا)
+    const fp = softFingerprint(c);
+    if (fp) return `fp:${fp}`;
+    const nm = normName(c?.name || c?.bio?.fullName || c?.bio?.fullname || '');
+    return nm ? `nm:${nm}` : '';
+  };
+
+  for (const w of wives){
+    const wkids = Array.isArray(w?.children) ? w.children : [];
+    for (const c of wkids){
+      const k = childKey(c);
+      if (k) wifeChildKeySet.add(k);
+      else if (diagnostics) s.missing.missingIdsCount += 1;
     }
+  }
+
+  // خزّن الدالة للاستخدام أدناه (ضمن نفس استدعاء tally)
+  tally.__childKey = childKey;
+}
+
+for (const c of kids){
+  if (wifeChildKeySet){
+    const childKey = tally.__childKey;
+    const k = childKey ? childKey(c) : '';
+    if (k && wifeChildKeySet.has(k)) continue;
+  }
+  tally(c);
+}
 
     for (const w of wives){
-      tally(w, famKey, famAcc, ctx);
+      tally(w);
       const wkids = Array.isArray(w?.children) ? w.children : [];
-      for (const c of wkids) tally(c, famKey, famAcc, ctx);
+      for (const c of wkids) tally(c);
     }
   };
 
-  // جمع على مستوى كل عائلة
-  const perFamilyRoots = [];
-  for (const famKey of keys){
-    const f = fams[famKey]; if (!f) continue;
+  const roots = [
+    ...(Array.isArray(f?.ancestors) ? f.ancestors : []),
+    f.father, f.rootPerson
+  ].filter(Boolean);
 
-    // === NEW: تأكد من تهيئة الـ pipeline لهذه العائلة قبل حساب الإحصاءات ===
-    if (!f.__pipelineReady && typeof Model.normalizeFamilyPipeline === 'function') {
-      const fromVer =
-        Number.isFinite(f.__v) ? f.__v :
-        Number.isFinite(f.schemaVersion) ? f.schemaVersion :
-        0;
+  for (const r of roots) tally(r);
+// ✅ أبناء/بنات صاحب الشجرة فقط
+const rk = countRootKids(f);
+famAcc.rootSons      = rk.sons;
+famAcc.rootDaughters = rk.daughters;
+s.rootSons          += rk.sons;
+s.rootDaughters     += rk.daughters;
 
-      Model.normalizeFamilyPipeline(f, {
-        fromVer,
-        markCore: f.__core === true
-      });
+// استخدم هذا للـ averages بدل (s.sons+s.daughters)
+perFamilyRoots.push({ famKey, rpKids: rk.total });
 
-      f.__pipelineReady = true;
-    }
-    // === END NEW ===
-
-    const famAcc = makeFamilyAcc(famKey, f);
-
-    // سياق النَّسَب لهذه العائلة (يُستخدم في resolveClan)
-    const ctx =
-      (Lineage && typeof Lineage.buildLineageContext === 'function') ? Lineage.buildLineageContext(f)
-        : null;
-
-    const roots = [
-      ...(Array.isArray(f?.ancestors) ? f.ancestors : []),
-      f.father, f.rootPerson
-    ].filter(Boolean);
-
-    for (const r of roots) tally(r, famKey, famAcc, ctx);
-
-    // دعم بنية قديمة wives على مستوى العائلة
-    if (!Array.isArray(f?.rootPerson?.wives) && Array.isArray(f?.wives)) {
-      for (const w of f.wives) tally(w, famKey, famAcc, ctx);
-    }
-
-    s.perFamily.push(famAcc);
-
-    const rp     = f?.rootPerson;
-    const rpKids = (rp && Array.isArray(rp.children)) ? rp.children.length : 0;
-    perFamilyRoots.push({ famKey, rpKids });
+  if (!Array.isArray(f?.rootPerson?.wives) && Array.isArray(f?.wives)) {
+    for (const w of f.wives) tally(w);
   }
 
+  if (diagnostics){
+    checkInvariantsForFamily(famKey, famAcc, famDiag);
+    checkSpouseReciprocity(famKey, f);
+  }
 
-  // متوسطات
-  s.avgChildren = Number(((s.sons + s.daughters) / Math.max(1, s.familiesCount)).toFixed(2));
-  const activeRoots = perFamilyRoots.filter(x => x.rpKids > 0).length || 1;
-  s.avgChildrenPerRoot = Number(((s.sons + s.daughters) / activeRoots).toFixed(2));
+ s.perFamily.push(famAcc);
+
+};
+
+for (const famKey of keys) processFamily(famKey);
+
+const rootKidsAll = (s.rootSons + s.rootDaughters);
+s.avgChildren = Number((rootKidsAll / Math.max(1, s.familiesCount)).toFixed(2));
+const activeRoots = perFamilyRoots.filter(x => x.rpKids > 0).length || 1;
+s.avgChildrenPerRoot = Number((rootKidsAll / activeRoots).toFixed(2));
 
   return s;
 }
@@ -456,9 +604,10 @@ function drawStackedFamilies(cv, rows, { sort='total', topN=20 } = {}){
   // تجهيز البيانات + الترتيب
   const data = rows.map(r => ({
     label: r.label,
-    sons: Number(r.sons)||0,
-    daughters: Number(r.daughters)||0,
-    total: (Number(r.sons)||0) + (Number(r.daughters)||0)
+sons: Number(r.rootSons)||0,
+daughters: Number(r.rootDaughters)||0,
+
+total: (Number(r.rootSons)||0) + (Number(r.rootDaughters)||0)
   }));
 
   data.sort((a,b)=>{
@@ -625,12 +774,13 @@ ctx.fillStyle = pal.text; ctx.fillText('أبناء', legendX + box + 6, legendY 
    5) CSV: توليد وتنزيل
 ========================= */
 function toCSV(perFamily){
-  const head = ['العائلة','الأشخاص','الأبناء','البنات','الزوجات','غير محدد'];
+  const head = ['العائلة','الأشخاص','أبناء (صاحب الشجرة)','بنات (صاحب الشجرة)','الزوجات','غير محدد'];
   const rows = perFamily.map(f=>[
-    safeCSV(f.label), f.persons, f.sons, f.daughters, f.wives, f.unknown
+    safeCSV(f.label), f.persons, f.rootSons, f.rootDaughters, f.wives, f.unknown
   ].join(','));
   return head.join(',') + '\n' + rows.join('\n');
 }
+
 function safeCSV(s){
   const v = String(s ?? '');
   return /[",\n]/.test(v) ? `"${v.replace(/"/g,'""')}"` : v;
@@ -764,54 +914,60 @@ function renderStats(){
     <section class="table-wrap">
       <h4>تفاصيل العشائر</h4>
       <div class="table-scroll">
-        <table class="stats-table" id="stClans">
-          <thead><tr><th>العشيرة</th><th>الأشخاص</th><th>أبناء</th><th>بنات</th></tr></thead>
-          <tbody></tbody>
-        </table>
+   <table class="stats-table" id="stClans">
+  <thead><tr><th>العشيرة</th><th>الأشخاص</th><th>الذكور</th><th>الإناث</th><th>غير محدد</th></tr></thead>
+  <tbody></tbody>
+</table>
+
       </div>
     </section>
   `;
 
-  const sAll     = computeStats();             // إجمالي مرة واحدة
-  const selScope = byId('fScope');
-  const fams     = Model.getFamilies();
+let sAll = computeStats(null, { uniqueAcrossFamilies:false, diagnostics:true }); // الافتراضي مستقل لكل عائلة
+const selScope = byId('fScope');
+const fams     = Model.getFamilies();
 
-  // === إحصائيات التكرار لجميع العائلات (من وحدة duplicates) ===
-  const dupStatusAll = getDuplicatesStatusForAllFamilies();
-  const dupMap = new Map(dupStatusAll.map(d => [d.famKey, d]));
+// === إحصائيات التكرار لجميع العائلات (من وحدة duplicates) ===
+let dupStatusAll = getDuplicatesStatusForAllFamilies();
+let dupMap = new Map(dupStatusAll.map(d => [d.famKey, d]));
 
-  const severityOrder = ['none','low','medium','high'];
-  const severityLabel = sev => {
-    if (sev === 'low')    return 'منخفض';
-    if (sev === 'medium') return 'متوسط';
-    if (sev === 'high')   return 'عالٍ';
-    return 'لا يوجد';
-  };
+const severityOrder = ['none','low','medium','high'];
+const severityLabel = sev => {
+  if (sev === 'low')    return 'منخفض';
+  if (sev === 'medium') return 'متوسط';
+  if (sev === 'high')   return 'عالٍ';
+  return 'لا يوجد';
+};
 
-  // تجميع عام: عدد العائلات التي فيها تكرار + أعلى مستوى خطورة
-  // + إجمالي الأشخاص/المتكرّرين ونسبة التكرار التقريبية
-  const totalDupPersonsAll = dupStatusAll.reduce(
-    (sum, d) => sum + (d.totalDuplicatePersons || 0),
-    0
-  );
-  const totalPersonsAll = dupStatusAll.reduce(
-    (sum, d) => sum + (d.totalPersons || 0),
-    0
-  );
-  const dupRatioAll = totalPersonsAll > 0 ? (totalDupPersonsAll / totalPersonsAll)
-    : 0;
+const buildDupAgg = (list)=>{
+  const totalDupPersonsAll = list.reduce((sum, d) => sum + (d.totalDuplicatePersons || 0), 0);
+  const totalPersonsAll    = list.reduce((sum, d) => sum + (d.totalPersons || 0), 0);
+  const dupRatioAll        = totalPersonsAll > 0 ? (totalDupPersonsAll / totalPersonsAll) : 0;
 
-  const dupAgg = {
-    familiesWithDup: dupStatusAll.filter(d => d.count > 0).length,
-    worstSeverity: dupStatusAll.reduce(
-      (max, d) =>
-        severityOrder.indexOf(d.severity) > severityOrder.indexOf(max) ? d.severity : max,
+  return {
+    familiesWithDup: list.filter(d => d.count > 0).length,
+    worstSeverity: list.reduce(
+      (max, d) => severityOrder.indexOf(d.severity) > severityOrder.indexOf(max) ? d.severity : max,
       'none'
     ),
     totalPersonsAll,
     totalDupPersonsAll,
     dupRatioAll
   };
+};
+
+let dupAgg = buildDupAgg(dupStatusAll);
+
+// إعادة حساب موحدة عند تغيّر البيانات أثناء بقاء نافذة الإحصاءات مفتوحة
+const recomputeAll = ()=>{
+  sAll = computeStats(null, { uniqueAcrossFamilies:false, diagnostics:true });
+  dupStatusAll = getDuplicatesStatusForAllFamilies();
+  dupMap = new Map(dupStatusAll.map(d => [d.famKey, d]));
+  dupAgg = buildDupAgg(dupStatusAll);
+
+  renderSummary(getScopedStats(), dupAgg);
+  applyFilters();
+};
 
 // نافذة صغيرة لمراجعة تكرارات عائلة معيّنة
 const openDuplicatesPanelForFamily = famKey => {
@@ -1021,10 +1177,12 @@ if (selScope){
   const selTopN   = byId('fTopN');
   const cvStack   = byId('statsStacked');
 
-  const getScopedStats = ()=>{
-    const scopeVal = selScope?.value || 'all';
-    return (scopeVal !== 'all') ? computeStats(scopeVal) : sAll;
-  };
+const getScopedStats = ()=>{
+  const scopeVal = selScope?.value || 'all';
+  return (scopeVal !== 'all') ? computeStats(scopeVal, { uniqueAcrossFamilies:false, diagnostics:true })
+    : sAll;
+};
+
 
   // بطاقات الملخص + شريط أبناء/بنات + ملخص التكرارات
   const renderSummary = (stats, dupAgg)=>{
@@ -1034,8 +1192,9 @@ if (selScope){
       ['عدد العائلات',            stats.familiesCount,       'fa-people-roof'],
       ['جميع الأشخاص',            stats.persons,             'fa-users'],
       ['الزوجات',                 stats.wives,               'fa-person-dress'],
-      ['الأبناء',                 stats.sons,                'fa-person'],
-      ['البنات',                  stats.daughters,           'fa-person-dress'],
+        ['الأبناء',                 stats.rootSons,            'fa-person'],
+      ['البنات',                  stats.rootDaughters,       'fa-person-dress'],
+
       ['غير محدد',                stats.unknown,             'fa-user-large-slash'],
       ['متوسط الأبناء/عائلة',     stats.avgChildren,         'fa-chart-column'],
       ['متوسط الأبناء/جذر فعّال', stats.avgChildrenPerRoot,  'fa-chart-line'],
@@ -1064,9 +1223,10 @@ if (selScope){
     `).join('');
 
     requestAnimationFrame(()=> drawBars(cvBar, [
-      { label:'أبناء',  value:stats.sons },
-      { label:'بنات',   value:stats.daughters }
+      { label:'أبناء',  value:stats.rootSons },
+      { label:'بنات',   value:stats.rootDaughters }
     ]));
+
   };
 
   // تطبيق الفلاتر + رسم المكدّس + جدول العائلات + تفاصيل العشائر
@@ -1095,12 +1255,12 @@ if (selScope){
     requestAnimationFrame(()=> drawStackedFamilies(cvStack, rows, { sort, topN }));
 
     // 2) جدول "تفصيل حسب العائلة" (يتأثر بالفلتر)
-    const sorters = {
-      total:     (a,b)=> (b.sons + b.daughters) - (a.sons + a.daughters),
-      sons:      (a,b)=> b.sons - a.sons,
-      daughters: (a,b)=> b.daughters - a.daughters
-    };
-    rows.sort(sorters[sort] || sorters.total);
+const sorters = {
+  total:     (a,b)=> ((b.rootSons + b.rootDaughters) - (a.rootSons + a.rootDaughters)),
+  sons:      (a,b)=> (b.rootSons - a.rootSons),
+  daughters: (a,b)=> (b.rootDaughters - a.rootDaughters)
+};
+rows.sort(sorters[sort] || sorters.total);
 
     tbFam.innerHTML = rows.length ? rows.map(f => {
       const dup = dupMap.get(f.familyKey);
@@ -1109,8 +1269,9 @@ if (selScope){
           <tr data-fam-key="${f.familyKey || ''}">
             <td>${f.label}</td>
             <td>${f.persons}</td>
-            <td>${f.sons}</td>
-            <td>${f.daughters}</td>
+          <td>${f.rootSons}</td>
+<td>${f.rootDaughters}</td>
+
             <td>${f.wives}</td>
             <td>${f.unknown}</td>
             <td class="st-dup-cell">
@@ -1134,17 +1295,20 @@ if (selScope){
         <tr data-fam-key="${f.familyKey || ''}">
           <td>${f.label}</td>
           <td>${f.persons}</td>
-          <td>${f.sons}</td>
-          <td>${f.daughters}</td>
+         <td>${f.rootSons}</td>
+<td>${f.rootDaughters}</td>
+
           <td>${f.wives}</td>
           <td>${f.unknown}</td>
           <td class="st-dup-cell">
             <div class="st-dup-main">${sevText}</div>
-            <div class="st-dup-sub">
-              <span>${ratioPct}% من الأشخاص</span>
-              <span>ق/م/ض: ${strongGroups}/${mediumGroups}/${weakGroups}</span>
-              <span>${reviewedMark}</span>
-            </div>
+      <div class="st-dup-sub">
+  <span class="st-dup-pill st-dup-pill--ratio" title="نسبة الأشخاص الذين يظهرون ضمن مجموعات تكرار محتملة في هذه العائلة.">${ratioPct}% من الأشخاص</span>
+  <span class="st-dup-badge st-dup-badge--strong" title="قوي: تشابه مرتفع جدًا (احتمال تكرار كبير).">قوي: ${strongGroups}</span>
+  <span class="st-dup-badge st-dup-badge--medium" title="متوسط: تشابه متوسط (يحتاج مراجعة سريعة).">متوسط: ${mediumGroups}</span>
+  <span class="st-dup-badge st-dup-badge--weak" title="ضعيف: تشابه ضعيف">ضعيف: ${weakGroups}</span>
+  <span class="st-dup-pill st-dup-pill--review" title="هل تم وضع علامة المراجعة للتكرارات في هذه العائلة؟">${reviewedMark}</span>
+</div>
           </td>
         </tr>
       `;
@@ -1161,16 +1325,16 @@ if (selScope){
       clanStats = s;
     } else if (filteredKeys.length){
       // فلتر مفعّل → أعِد حساب الإحصاءات لهذه العائلات فقط
-      clanStats = computeStats(filteredKeys);
+clanStats = computeStats(filteredKeys, { uniqueAcrossFamilies:false, diagnostics:true });
     } else {
       // لا توجد عائلات بعد الفلتر
       clanStats = { perClan: new Map() };
     }
 
     selClan.innerHTML = `<option value="">الكل</option>`;
-    const clansArr = Array.from((clanStats.perClan || new Map()).entries())
-      .map(([clan, v]) => ({ clan, persons: v.persons }))
-      .sort((a,b)=> b.persons - a.persons);
+const clansArr = Array.from((clanStats.perClan || new Map()).entries())
+  .map(([key, v]) => ({ clan: v.label || key, persons: v.persons || 0, key }))
+  .sort((a,b)=> (b.persons - a.persons));
 
     for (const c of clansArr){
       const opt = document.createElement('option');
@@ -1179,13 +1343,34 @@ if (selScope){
       selClan.appendChild(opt);
     }
 
-    const top = clansArr.slice(0, 12);
-    tbClan.innerHTML = top.length ? top.map(c=>{
-      const v = clanStats.perClan.get(c.clan) || { persons:0, sons:0, daughters:0 };
-      return `<tr><td>${c.clan}</td><td>${v.persons}</td><td>${v.sons}</td><td>${v.daughters}</td></tr>`;
-    }).join('') : `<tr><td colspan="4" class="empty">لا بيانات</td></tr>`;
+const top = clansArr.slice(0, 12);
+tbClan.innerHTML = top.length ? top.map(c=>{
+  const v = clanStats.perClan.get(c.key) || { persons:0, males:0, females:0, unknownGender:0 };
+  return `<tr><td>${c.clan}</td><td>${v.persons||0}</td><td>${v.males||0}</td><td>${v.females||0}</td><td>${v.unknownGender||0}</td></tr>`;
+}).join('') : `<tr><td colspan="5" class="empty">لا بيانات</td></tr>`;
+
   };
-  
+    // ===== (4) إعادة الحساب عند تغيّر البيانات (إذا كان لدينا bus) =====
+  const statsModal = byId('statsModal');
+  let offRecompute = null;
+
+  if (_ctx?.bus?.on){
+    const handler = () => {
+      const shown = statsModal?.classList.contains('show');
+      if (!shown) return;
+      recomputeAll();
+    };
+
+    _ctx.bus.on('families:changed', handler);
+    _ctx.bus.on('families:committed', handler);
+    _ctx.bus.on('families:imported', handler);
+
+    offRecompute = () => {
+      try { _ctx.bus.off?.('families:changed', handler); } catch {}
+      try { _ctx.bus.off?.('families:committed', handler); } catch {}
+      try { _ctx.bus.off?.('families:imported', handler); } catch {}
+    };
+  }
     // دالة موحدة لإعادة رسم المخططات حسب النطاق الحالي + الفلاتر الحالية
   const redrawCharts = () => {
     if (!cvBar.isConnected || !cvStack.isConnected) return;
@@ -1193,9 +1378,10 @@ if (selScope){
 
     // ملخص الأبناء/البنات في الشريط العلوي (لا يعتمد على البحث النصي)
     drawBars(cvBar, [
-      { label: 'أبناء', value: statsNow.sons },
-      { label: 'بنات',  value: statsNow.daughters }
+      { label: 'أبناء', value: statsNow.rootSons },
+      { label: 'بنات',  value: statsNow.rootDaughters }
     ]);
+
 
     // المكدّس + جدول العائلات + جدول العشائر وفق الفلاتر الحالية
     applyFilters();
@@ -1249,10 +1435,13 @@ if (selScope){
   // 3) قناة مخصّصة إن كان لديك زر يطلق حدثًا
   window.addEventListener('theme:change', redrawAll);
 
-  // تنظيف عند إغلاق نافذة الإحصاءات
-  const statsModal = byId('statsModal');
-  const detach = () => { try { mo.disconnect(); mql?.removeEventListener?.('change', redrawAll); } catch {} };
-  statsModal?.addEventListener('close', detach, { once: true });
+  
+// تنظيف عند إغلاق نافذة الإحصاءات
+const detach = () => {
+  try { offRecompute?.(); } catch {}
+  try { mo.disconnect(); mql?.removeEventListener?.('change', redrawAll); } catch {}
+};
+statsModal?.addEventListener('close', detach, { once:true });
 
   
   ro.observe(cvBar); ro.observe(cvStack);
@@ -1279,6 +1468,22 @@ function closeStatsModal() {
 ========================= */
 export function init(ctx){
   _ctx = ctx || null;
+// إبطال pipelineReady عند تغيّر البيانات (حتى لا تصبح قديمة)
+const invalidatePipeline = (famKey)=>{
+  if (!famKey) return;
+  const fams = Model.getFamilies();
+  const f = fams?.[famKey];
+  if (!f) return;
+  try { delete f.__pipelineReady; } catch {}
+  try { delete f.__pipelineVersion; } catch {}
+};
+
+ctx?.bus?.on?.('families:committed', (e)=> invalidatePipeline(e?.famKey));
+ctx?.bus?.on?.('families:changed',   (e)=> invalidatePipeline(e?.famKey));
+ctx?.bus?.on?.('families:imported',  ()=> {
+  const fams = Model.getFamilies();
+  for (const k of Object.keys(fams||{})) invalidatePipeline(k);
+});
 
   byId('statsBtn')?.addEventListener('click', ()=>{
     renderStats();
@@ -1288,17 +1493,49 @@ export function init(ctx){
   byId('closeStats')?.addEventListener('click', closeStatsModal);
   byId('statsModal')?.addEventListener('click', e => { if (e.target.id === 'statsModal') closeStatsModal(); });
 
-  // === [إضافة جديدة تبدأ هنا] تحديث قائمة "النطاق" عند تغيّر رؤية العائلات ===
+// === [إضافة جديدة تبدأ هنا] تحديث قائمة "النطاق" عند تغيّر رؤية العائلات ===
 const refreshScopeOptions = () => {
-  const modalShown = byId('statsModal')?.classList.contains('show');
+  const statsModal = byId('statsModal');
+  const modalShown = statsModal?.classList.contains('show');
   if (!modalShown) return;
-  // أبسط وأضمن: أعد بناء كامل نافذة الإحصاءات لتتزامن القوائم والمخططات والجداول مع الرؤية الحالية
-  renderStats();
+
+  const selScope = byId('fScope');
+  if (!selScope) return; // نافذة الإحصاءات غير مبنية/غير مفتوحة
+
+  const fams = Model.getFamilies();
+
+  // تذكّر الاختيار الحالي
+  const prev = selScope.value || 'all';
+
+  // أعد بناء الخيارات: "كل العائلات" + المرئية فقط
+  selScope.innerHTML = '';
+  const optAll = document.createElement('option');
+  optAll.value = 'all';
+  optAll.textContent = 'كل العائلات';
+  selScope.appendChild(optAll);
+
+  for (const key of Object.keys(fams || {})){
+    const f = fams[key];
+    if (f?.hidden === true) continue;
+    const label = (f?.familyName || f?.title || f?.rootPerson?.name || key || '').trim();
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = label || key;
+    selScope.appendChild(opt);
+  }
+
+  // أعِد الاختيار إن كان ما زال موجودًا، وإلا ارجع للكل
+  const stillExists = Array.from(selScope.options).some(o => o.value === prev);
+  selScope.value = stillExists ? prev : 'all';
+
+  // أطلق حدث change لتحديث الملخص/الفلاتر باستخدام الكود الحالي في renderStats()
+  selScope.dispatchEvent(new Event('change'));
 };
+// === [إضافة جديدة تنتهي هنا] ===
 
 
   // استمع لتغيّر الرؤية من نظام visibility أو أي بثّ عام
-  ctx.bus.on('families:visibility:changed', refreshScopeOptions);
+ctx?.bus?.on?.('families:visibility:changed', refreshScopeOptions);
   window.addEventListener('FT_VISIBILITY_REFRESH', refreshScopeOptions);
   // === [إضافة جديدة تنتهي هنا] ===
 
