@@ -3,18 +3,22 @@
 
 import { DB } from './db.js';
 import {
-  SCHEMA_VERSION,
-  normalizeFamilyPipeline,
-  ensureFamilyBios,
-  ensureIds,
-  linkRootPersonWives,
-  buildRealLinks,
-  walkPersonsWithPath,
-  walkPersons,
-  getByPath,
-  personFingerprint,
-  sortedAncestors,
-  ancestorsNames
+    SCHEMA_VERSION,
+    normalizeFamilyPipeline,
+    ensureFamilyBios,
+    ensureIds,
+    linkRootPersonWives,
+    buildRealLinks,
+    walkPersonsWithPath,
+    walkPersons,
+    getByPath,
+    personFingerprint,
+    sortedAncestors,
+    ancestorsNames,
+    LABELS,
+    DEFAULT_BIO,
+    getLineageConfig,
+    findDuplicatesInFamily
 } from '../model/families.core.js';
 
 import { familiesData as seedFamiliesData } from '../model/families.seed.js';
@@ -316,8 +320,3 @@ export function setSelectedKey(k) {
   if (k == null) return;
   localStorage.setItem('selectedFamily', String(k));
 }
-
-// ================================
-// 8) إعادة تصدير بعض الدوال الدومينية عند الحاجة
-// ================================
-export { LABELS, DEFAULT_BIO, getLineageConfig, findDuplicatesInFamily } from '../model/families.core.js';
