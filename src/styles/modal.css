@@ -660,7 +660,7 @@ display:inline-block;min-inline-size:2ch;padding:.15rem .55rem;border-radius:999
 .dup-panel-header h3{margin:0;font-size:.98rem;font-weight:600;color:var(--title-color)}
 .dup-panel-body{padding:.75rem 1rem 1rem;overflow-y:auto;overflow-x:hidden}
 .dup-empty{margin:.2rem 0;font-size:.9rem;color:var(--text-muted,#6b7280)}
-.dup-summary{display:flex;flex-wrap:wrap;gap:.4rem .75rem;margin-bottom:.75rem;padding:.5rem .6rem;border-radius:.6rem;background:color-mix(in oklab,var(--panel-bg,#f3f4f6)90%,#fff);font-size:.86rem}
+.dup-summary{display:flex;flex-wrap:wrap;gap:.4rem .75rem;margin-bottom:.75rem;padding:.5rem .6rem;border-radius:.6rem;background:color-mix(in oklab,var(--panel-bg,#f3f4f6)90%,#fff);font-size:.86rem; overflow-x:auto}
 .dup-summary span{display:inline-flex;align-items:center;gap:.25rem;padding:.18rem .55rem;border-radius:999px;background:color-mix(in oklab,var(--panel-bg,#f3f4f6)88%,#fff);border:1px solid color-mix(in oklab,var(--surface-border,#d1d5db)70%,transparent);color:var(--modal-fg);white-space:nowrap}
 .dup-summary span strong{min-inline-size:2.2ch;padding:.04rem .35rem;border-radius:999px;background:color-mix(in oklab,var(--title-color)16%,transparent);color:var(--title-color);font-weight:700}
 .dup-groups{display:flex;flex-direction:column;gap:.75rem}

@@ -264,6 +264,7 @@ export function createEventsSection(person, handlers = {}){
   let currentTypeFilter = 'all';    // نوع الحدث
   let currentSortMode   = 'oldest'; // الأقدم أولاً (زمنيًا) افتراضياً
   let lastEditedEventId = null;     // آخر حدث في وضع التعديل (مسودة)
+let currentSearchQuery = '';     // بحث بعنوان الحدث فقط
 
 const root   = el('section', 'bio-section bio-section-timeline');
 const header = el('div', 'timeline-header');
@@ -327,8 +328,22 @@ visBtn.innerHTML =
 listBtn.type = visBtn.type = 'button';
 
 viewToggle.append(listBtn, visBtn);
+// ===== بحث بعنوان الحدث فقط =====
+const searchWrap = el('div', 'timeline-search-wrap');
 
-  toolsLeft.append(typeFilterSelect, sortSelect);
+const searchInput = el('input', 'timeline-search-input');
+searchInput.type = 'search';
+searchInput.name = 'timeline-search-input';
+searchInput.placeholder = 'ابحث في عناوين الأحداث…';
+
+searchInput.addEventListener('input', () => {
+  currentSearchQuery = searchInput.value.trim().toLowerCase();
+  renderAll();   // مهم: إعادة الرسم الكامل
+});
+
+searchWrap.append(searchInput);
+
+toolsLeft.append(typeFilterSelect, sortSelect, searchWrap);
   toolsRight.append(viewToggle, addBtn);
   tools.append(toolsLeft, toolsRight);
 
@@ -1206,36 +1221,45 @@ certaintySelect.addEventListener('change', recomputeDirty);
   }
 
 
-  function getFilteredSortedEvents(){
-    let events = sortEvents(person.events || []);
+function getFilteredSortedEvents(){
+  let events = sortEvents(person.events || []);
 
-    // ترتيب العرض
-    if (currentSortMode === 'latest'){
-      events = events.slice().reverse();
-    }
-
-    // فلتر النوع
-    if (currentTypeFilter && currentTypeFilter !== 'all'){
-      events = events.filter(ev => (ev.type || 'custom') === currentTypeFilter);
-    }
-
-    return events;
+  // ترتيب العرض
+  if (currentSortMode === 'latest'){
+    events = events.slice().reverse();
   }
-  
+
+  // فلتر النوع
+  if (currentTypeFilter && currentTypeFilter !== 'all'){
+    events = events.filter(ev => (ev.type || 'custom') === currentTypeFilter);
+  }
+
+  // ===== بحث بعنوان الحدث فقط =====
+  if (currentSearchQuery){
+    events = events.filter(ev =>
+      String(ev.title || '')
+        .toLowerCase()
+        .includes(currentSearchQuery)
+    );
+  }
+
+  return events;
+}
+
 
   function renderList(){
     listWrap.innerHTML = '';
     const allEvents = person.events || [];
     const events = getFilteredSortedEvents();
 
-    if (!events.length){
-      const empty = el('div', 'events-empty');
-      empty.textContent = allEvents.length ? 'لا توجد أحداث مطابقة لخيارات التصفية الحالية.'
-        : 'لا توجد أحداث مسجّلة بعد. ابدأ بإضافة أول حدث (مثل: تاريخ الميلاد) ثم أضف بقية المحطات المهمة.';
+if (!events.length){
+  const empty = el('div', 'events-empty');
+  empty.textContent = allEvents.length ? 'لا توجد أحداث مطابقة للبحث أو التصفية الحالية.'
+    : 'لا توجد أحداث مسجّلة بعد. ابدأ بإضافة أول حدث (مثل: تاريخ الميلاد) ثم أضف بقية المحطات المهمة.';
 
-      listWrap.appendChild(empty);
-      return;
-    }
+  listWrap.appendChild(empty);
+  return;
+}
 
     events.forEach((ev, index) => {
       const card = createEventCard(ev, index);

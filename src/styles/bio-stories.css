@@ -36,6 +36,36 @@
   transform:translateY(-1px)
 }
 
+/* ===== بحث القصص ===== */
+.stories-search-wrap{
+  position:relative;
+  display:flex;
+  align-items:center;
+}
+
+.stories-search-input{
+  padding:.35rem .9rem;
+  border-radius:.7rem;
+  border:1px solid color-mix(in oklab,var(--surface-border)80%,transparent);
+  background:color-mix(in oklab,var(--panel-bg)96%,#fff);
+  font-size:.8rem;
+  color:var(--text-main);
+  width: 100%;
+  transition:border-color .16s, box-shadow .16s, background-color .16s;
+}
+
+.stories-search-input::placeholder{
+  color:color-mix(in oklab,var(--text-muted)90%,var(--text-main));
+}
+
+.stories-search-input:focus-visible{
+  outline:none;
+  border-color:var(--modal-primary);
+  box-shadow:0 0 0 .09rem color-mix(in oklab,var(--modal-primary)40%,transparent);
+  background:var(--card-bg);
+}
+
+
 /* حالة عدم وجود قصص */
 .stories-empty{
   padding:1rem 1.1rem;
@@ -221,7 +251,7 @@
   .stories-tools{flex-direction:column;align-items:stretch;gap:.45rem}
   .stories-tools-left,.stories-tools-right{width:100%;justify-content:space-between}
   .stories-sort,.stories-type-filter{flex:1 1 auto}
-  .stories-add-btn{width:100%}
+  .stories-add-btn, .stories-search-wrap{width:100%}
   .story-card{max-height:72vh}
   .story-head{flex-direction:column;align-items:stretch}
   .story-dates{text-align:start}

@@ -39,6 +39,36 @@
   flex-wrap: wrap
 }
 
+/* ===== بحث الخط الزمني ===== */
+.timeline-search-wrap{
+  position:relative;
+  display:flex;
+  align-items:center;
+}
+
+.timeline-search-input{
+  padding:.35rem .9rem;
+  border-radius:.7rem;
+  border:1px solid color-mix(in oklab,var(--surface-border)80%,transparent);
+  background:color-mix(in oklab,var(--panel-bg)96%,#fff);
+  font-size:.8rem;
+  color:var(--text-main);
+  width: 100%;
+  transition:border-color .16s, box-shadow .16s, background-color .16s;
+}
+
+.timeline-search-input::placeholder{
+  color:var(--text-muted);
+}
+
+.timeline-search-input:focus-visible{
+  outline:none;
+  border-color:var(--modal-primary);
+  box-shadow:0 0 0 .09rem
+    color-mix(in oklab,var(--modal-primary)40%,transparent);
+  background:var(--card-bg);
+}
+
 .timeline-type-filter,
 .timeline-sort{
   min-width:0;
@@ -482,7 +512,7 @@
   .timeline-tools-left,.timeline-tools-right{width:100%;justify-content:space-between}
   .timeline-type-filter,.timeline-sort{flex:1 1 auto}
   .timeline-view-toggle{flex:1 1 auto}
-  .timeline-add-btn{flex:0 0 auto;width:100%}
+  .timeline-add-btn, .timeline-search-wrap{flex:0 0 auto;width:100%}
   .event-head{gap:.45rem}
   .timeline-vertical{padding-inline-start:1.25rem}
   .timeline-marker{inset-inline-start:-1rem}

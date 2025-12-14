@@ -230,6 +230,7 @@ export function createStoriesSection(person, handlers = {}) {
   let currentTypeFilter = 'all';
   let currentTagFilter = '';
   let lastEditedId = null;
+let currentSearchQuery = '';
 
   function emitStoriesToHost() {
     if (!personId || typeof handlers.onUpdateStories !== 'function') return;
@@ -312,6 +313,23 @@ metaEl.textContent =
   addBtn.type = 'button';
 
   toolsLeft.append(typeFilterSelect, sortSelect);
+  // ===== حقل البحث في العناوين =====
+const searchWrap = el('div', 'stories-search-wrap');
+
+const searchInput = el('input', 'stories-search-input');
+searchInput.type = 'search';
+  searchInput.name = 'stories-search-input';
+searchInput.placeholder = 'ابحث في عناوين القصص…';
+searchInput.value = '';
+
+searchInput.addEventListener('input', () => {
+  currentSearchQuery = searchInput.value.trim().toLowerCase();
+  renderList();
+});
+
+searchWrap.append(searchInput);
+toolsLeft.appendChild(searchWrap);
+
   toolsRight.append(addBtn);
   tools.append(toolsLeft, toolsRight);
   header.appendChild(tools);
@@ -404,21 +422,29 @@ updateStoriesCountBadge();
 updateAddButtonLabel();
 rebuildStoryTypeFilterOptions(); // إعادة بناء خيارات الفلتر حسب الأنواع الحالية
 
-    const filteredStories = person.stories.filter(story => {
-      const typeOk =
-        currentTypeFilter === 'all' ||
-        !currentTypeFilter ||
-        (story.type || '') === currentTypeFilter;
-      const tagOk =
-        !currentTagFilter ||
-        (Array.isArray(story.tags) && story.tags.includes(currentTagFilter));
-      return typeOk && tagOk;
-    });
+const filteredStories = person.stories.filter(story => {
+  const typeOk =
+    currentTypeFilter === 'all' ||
+    !currentTypeFilter ||
+    (story.type || '') === currentTypeFilter;
+
+  const tagOk =
+    !currentTagFilter ||
+    (Array.isArray(story.tags) && story.tags.includes(currentTagFilter));
+
+  const searchOk =
+    !currentSearchQuery ||
+    String(story.title || '')
+      .toLowerCase()
+      .includes(currentSearchQuery);
+
+  return typeOk && tagOk && searchOk;
+});
 
     if (!filteredStories.length) {
       const empty = el('div', 'stories-empty');
-   empty.textContent = person.stories.length ? 'لا توجد قصص مطابقة لخيارات التصفية الحالية.'
-  : 'ابدأ بإضافة أول قصة (مثلاً: موقف جميل، أو وصف مختصر لصفات هذا الشخص)، ثم أضف بقية المواقف المهمة.';
+empty.textContent = person.stories.length ? 'لا توجد قصص مطابقة لخيارات التصفية أو البحث الحالي.'
+  : 'ابدأ بإضافة أول قصة (مثلاً: موقف جميل، أو وصف مختصر لصفات هذا الشخص).';
 
       list.appendChild(empty);
       return;
