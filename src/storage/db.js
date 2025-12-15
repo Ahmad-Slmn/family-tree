@@ -21,6 +21,25 @@ let dbp = null; // وعد اتصال واحد فقط
 function _ro(db, store){ return db.transaction(store, 'readonly').objectStore(store); }
 function _rw(db, store){ return db.transaction(store, 'readwrite').objectStore(store); }
 
+function withTx(stores, mode, fn){
+  return open().then((db) => new Promise((res, rej) => {
+    const tx = db.transaction(stores, mode);
+    let out;
+
+    Promise.resolve()
+      .then(() => fn(tx))
+      .then((v) => { out = v; })
+      .catch((e) => {
+        try { tx.abort(); } catch {}
+        rej(e);
+      });
+
+    tx.oncomplete = () => res(out);
+    tx.onerror    = () => rej(tx.error);
+    tx.onabort    = () => rej(tx.error);
+  }));
+}
+
 /* =========================
    فتح/تهيئة قاعدة البيانات + مهاجرات مُنظّمة
 ========================= */
@@ -84,6 +103,10 @@ function open() {
     };
 
     req.onerror = () => rej(req.error);
+    req.onblocked = () => {
+  console.warn('IndexedDB open blocked: close other tabs using the DB');
+};
+
   });
   return dbp;
 }
@@ -500,53 +523,37 @@ async function getSourceImageURL(ref) {
    مخزن العائلات (KV)
 ========================= */
 async function put(key, val) {
-  const db = await open();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(STORE, 'readwrite');
+  return withTx(STORE, 'readwrite', (tx) => {
     tx.objectStore(STORE).put(val, key);
-    tx.oncomplete = res;
-    tx.onerror    = () => rej(tx.error);
-    tx.onabort    = () => rej(tx.error);
   });
 }
 
 async function get(key) {
-  const db = await open();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(STORE, 'readonly');
-    const r = tx.objectStore(STORE).get(key);
-    let out;
-    r.onsuccess = () => { out = r.result; };
-    tx.oncomplete = () => res(out);
-    tx.onerror    = () => rej(tx.error);
-    tx.onabort    = () => rej(tx.error);
+  return withTx(STORE, 'readonly', (tx) => {
+    return new Promise((resolve, reject) => {
+      const r = tx.objectStore(STORE).get(key);
+      r.onsuccess = () => resolve(r.result);
+      r.onerror   = () => reject(r.error);
+    });
   });
 }
 
-// عمليات أساسية إضافية
-async function del(key){
-  const db = await open();
-  return new Promise((res, rej)=>{
-    const tx = db.transaction(STORE,'readwrite');
+async function del(key) {
+  return withTx(STORE, 'readwrite', (tx) => {
     tx.objectStore(STORE).delete(key);
-    tx.oncomplete = res;
-    tx.onerror = () => rej(tx.error);
-    tx.onabort  = () => rej(tx.error);
   });
 }
 
-async function has(key){
-  const db = await open();
-  return new Promise((res, rej)=>{
-    const tx = db.transaction(STORE,'readonly');
-    const r = tx.objectStore(STORE).getKey(key);
-    let ok = false;
-    r.onsuccess = () => { ok = r.result != null; };
-    tx.oncomplete = () => res(ok);
-    tx.onerror = () => rej(tx.error);
-    tx.onabort  = () => rej(tx.error);
+async function has(key) {
+  return withTx(STORE, 'readonly', (tx) => {
+    return new Promise((resolve, reject) => {
+      const r = tx.objectStore(STORE).getKey(key);
+      r.onsuccess = () => resolve(r.result != null);
+      r.onerror   = () => reject(r.error);
+    });
   });
 }
+
 
 async function getAllFamilies(){
   const db = await open();
@@ -571,25 +578,27 @@ async function getAllFamilies(){
 /* =========================
    تشخيصات اختيارية
 ========================= */
-async function count(store) {
+async function storeOp(store, op) {
   const db = await open();
   return new Promise((res, rej) => {
     const tx = db.transaction(store, 'readonly');
-    const r = tx.objectStore(store).count();
-    r.onsuccess = () => res(r.result | 0);
+    const st = tx.objectStore(store);
+    const r = op(st);
+    r.onsuccess = () => res(r.result);
     r.onerror   = () => rej(r.error);
   });
 }
 
-async function keys(store) {
-  const db = await open();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(store, 'readonly');
-    const r = tx.objectStore(store).getAllKeys();
-    r.onsuccess = () => res(r.result || []);
-    r.onerror   = () => rej(r.error);
-  });
+async function count(store) {
+  const n = await storeOp(store, (st) => st.count());
+  return n | 0;
 }
+
+async function keys(store) {
+  const ks = await storeOp(store, (st) => st.getAllKeys());
+  return ks || [];
+}
+
 
 /* =========================
    حذف كامل لقاعدة البيانات

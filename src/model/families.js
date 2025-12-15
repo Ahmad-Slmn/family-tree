@@ -49,8 +49,11 @@ export {
 
 // 2) التخزين + العائلات الحيّة + اختيار العائلة
 export {
-  // مفاتيح التخزين + خريطة العائلات
-  PERSIST_FAMILIES_KEY,
+  // مفاتيح التخزين الجديدة + خريطة العائلات
+  PERSIST_FAMILIES_CUSTOM_KEY,
+  PERSIST_FAMILIES_META_KEY,
+  STORAGE_VERSION,
+
   families,
 
   // وصول عام للعائلات

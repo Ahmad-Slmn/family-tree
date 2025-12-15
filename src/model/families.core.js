@@ -1134,15 +1134,35 @@ export function walk(fam, cb, { withPath = false } = {}){
   const visit = (p, path) => {
     if (!p) return;
     cb(p, path);
-    (p.wives || []).forEach((w, i) => visit(w, withPath ? `${path}.wives[${i}]` : null));
-    (p.children || []).forEach((c, i) => visit(c, withPath ? `${path}.children[${i}]` : null));
+
+    // نزور wives للجميع ما عدا rootPerson لتجنب التكرار مع fam.wives
+    if (path !== 'rootPerson') {
+      (p.wives || []).forEach((w, i) =>
+        visit(w, withPath ? `${path}.wives[${i}]` : null)
+      );
+    }
+
+    (p.children || []).forEach((c, i) =>
+      visit(c, withPath ? `${path}.children[${i}]` : null)
+    );
   };
 
-  (Array.isArray(fam.ancestors) ? fam.ancestors : []).forEach((a,i)=> visit(a, withPath?`ancestors[${i}]`:null));
-  if (fam.father) visit(fam.father, withPath?'father':null);
-  if (fam.rootPerson) visit(fam.rootPerson, withPath?'rootPerson':null);
-  (fam.wives || []).forEach((w,i)=> visit(w, withPath?`wives[${i}]`:null));
+  (Array.isArray(fam.ancestors) ? fam.ancestors : []).forEach((a,i)=>
+    visit(a, withPath ? `ancestors[${i}]` : null)
+  );
+
+  if (fam.father) visit(fam.father, withPath ? 'father' : null);
+
+  // rootPerson: نزوره كشخص، لكن لن نزور wives تحته (بالشرط أعلاه)
+  if (fam.rootPerson) visit(fam.rootPerson, withPath ? 'rootPerson' : null);
+
+  //  المصدر الوحيد لزوجات صاحب الشجرة
+  (fam.wives || []).forEach((w,i)=>
+    visit(w, withPath ? `wives[${i}]` : null)
+  );
 }
+
+
 
 export function walkPersonsWithPath(fam, cb){ walk(fam, cb, { withPath:true }); }
 export function walkPersons(fam, cb){ walk(fam, cb, { withPath:false }); }
@@ -1369,6 +1389,7 @@ export function setChildDefaults(child, fam, wife) {
 }
 
 // ربط wives داخل rootPerson كمرآة مشتقّة من fam.wives
+// ربط wives داخل rootPerson كمؤشر (pointer) لنفس مصفوفة fam.wives (بدون نسخ)
 export function linkRootPersonWives(fam) {
   if (!fam) return;
   if (!Array.isArray(fam.wives)) fam.wives = [];
@@ -1416,10 +1437,12 @@ export function linkRootPersonWives(fam) {
     return ww;
   });
 
+  // أهم تعديل: لا تعمل نسخ جديدة
   if (fam.rootPerson) {
-    fam.rootPerson.wives = fam.wives.map(w => Object.assign({}, w));
+    fam.rootPerson.wives = fam.wives; // pointer لنفس المصفوفة
   }
 }
+
 
 // ================================
 // 13) Pipeline موحَّد للعائلة

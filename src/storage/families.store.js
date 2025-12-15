@@ -23,55 +23,120 @@ import {
 
 import { familiesData as seedFamiliesData } from '../model/families.seed.js';
 
-// ثوابت التخزين
-export const PERSIST_FAMILIES_KEY = 'families';
+// مفاتيح التخزين (فصل custom عن meta)
+export const PERSIST_FAMILIES_CUSTOM_KEY = 'families_custom';
+export const PERSIST_FAMILIES_META_KEY   = 'families_meta';
+
+// نسخة تنسيق التخزين (حتى لو تغيّر شكل meta لاحقاً)
+export const STORAGE_VERSION = 1;
 
 // خريطة العائلات الحيّة في الذاكرة (تبدأ من البذور)
 export const families = seedFamiliesData;
 
 // ================================
+// حفظ مؤجل لتفادي سباق/تداخل عمليات IndexedDB
+// ================================
+let _saveTimer = null;
+let _saveInFlight = Promise.resolve();
+
+function scheduleSavePersistedFamilies(delayMs = 400) {
+  if (_saveTimer) clearTimeout(_saveTimer);
+
+  return new Promise((resolve) => {
+    _saveTimer = setTimeout(() => {
+      // تسلسل (queue) حتى لا تتداخل عمليات put
+      _saveInFlight = _saveInFlight
+        .then(() => savePersistedFamilies())
+        .then(resolve, resolve); // لا تكسر السلسلة حتى لو حصل خطأ
+    }, delayMs);
+  });
+}
+
+// ================================
 // 1) حفظ العائلات المخصّصة + ميتاداتا البذور
 // ================================
 export async function savePersistedFamilies() {
-  try {
-    const out = {};
+  // سنكتب في مخزنين منفصلين:
+  // 1) families_custom: العائلات المخصصة فقط
+  // 2) families_meta: ميتاداتا للبذور (إخفاء + صور) + نسخة تنسيق التخزين
 
-    // العائلات المضافة/المعدّلة فقط
-    Object.entries(families || {}).forEach(([k, f]) => {
-      if (f && f.__custom) {
+  const outCustom = {};
+  const meta = {
+    __storageVer: STORAGE_VERSION,
+    coreHidden: {},
+    corePhotos: {}
+  };
+
+  // (C) حماية ذرّية على مستوى كل عائلة: لا نطيح كل الحفظ لو عائلة فيها مشكلة
+  const entries = Object.entries(families || {});
+
+  for (let i = 0; i < entries.length; i++) {
+    const [k, f] = entries[i];
+
+    // حفظ العائلات المضافة/المعدّلة فقط
+    if (f && f.__custom) {
+      try {
         const copy = { ...f, __v: SCHEMA_VERSION };
-        if (copy.rootPerson) delete copy.rootPerson.wives; // منع المرآة
-        out[k] = copy;
+
+        // منع المرآة + تقليل الحجم (persons مشتق ويمكن إعادة بنائه)
+        if (copy.rootPerson) delete copy.rootPerson.wives;
+        if (copy.persons) delete copy.persons;
+
+        // (B) حذف الحقول المشتقة من الأشخاص لتقليل الحجم
+        try {
+          walkPersons(copy, (p) => {
+            if (!p) return;
+            delete p._normName;
+            delete p._normRole;
+            delete p.childrenIds;
+            delete p.spousesIds;
+          });
+        } catch {
+          // لا نكسر الحفظ لو walker فشل لأي سبب
+        }
+
+        outCustom[k] = copy;
+      } catch (e) {
+        console.warn('savePersistedFamilies: skip bad custom family', k, e);
       }
-    });
+    }
 
     // ميتاداتا للبذور (الإخفاء + الصور)
-    const coreHidden = {};
-    const corePhotos = {};
+    if (f && f.__core) {
+      try {
+        if (f.hidden === true) meta.coreHidden[k] = 1;
 
-    Object.entries(families || {}).forEach(([k, f]) => {
-      if (!f || !f.__core) return;
-      if (f.hidden === true) coreHidden[k] = 1;
+        const patch = {};
+        walkPersonsWithPath(f, (p, path) => {
+          const u = String(p?.bio?.photoUrl || p?.photoUrl || '').trim();
+          if (!u) return;
+          patch[path] = {
+            photoUrl: u,
+            photoVer: p.photoVer || Date.now(),
+            hasOrig: p?.bio?.photoHasOrig ? 1 : 0,
+            rot: p?.bio?.photoRotated ? 1 : 0,
+            crp: p?.bio?.photoCropped ? 1 : 0
+          };
+        });
 
-      const patch = {};
-      walkPersonsWithPath(f, (p, path) => {
-        const u = String(p?.bio?.photoUrl || p?.photoUrl || '').trim();
-        if (!u) return;
-        patch[path] = {
-          photoUrl: u,
-          photoVer: p.photoVer || Date.now(),
-          hasOrig: p?.bio?.photoHasOrig ? 1 : 0,
-          rot: p?.bio?.photoRotated ? 1 : 0,
-          crp: p?.bio?.photoCropped ? 1 : 0
-        };
-      });
-      if (Object.keys(patch).length) corePhotos[k] = patch;
-    });
+        if (Object.keys(patch).length) meta.corePhotos[k] = patch;
+      } catch (e) {
+        console.warn('savePersistedFamilies: skip bad core meta', k, e);
+      }
+    }
+  }
 
-    out.__meta = { coreHidden, corePhotos };
-    await DB.put(PERSIST_FAMILIES_KEY, out);
+  // (C) كتابة فعلية إلى IndexedDB—إذا فشل أحدهما لا يمنع الآخر
+  try {
+    await DB.put(PERSIST_FAMILIES_CUSTOM_KEY, outCustom);
   } catch (e) {
-    console.warn('savePersistedFamilies(idb)', e);
+    console.warn('savePersistedFamilies(custom/idb)', e);
+  }
+
+  try {
+    await DB.put(PERSIST_FAMILIES_META_KEY, meta);
+  } catch (e) {
+    console.warn('savePersistedFamilies(meta/idb)', e);
   }
 }
 
@@ -80,79 +145,74 @@ export async function savePersistedFamilies() {
 // ================================
 export async function loadPersistedFamilies() {
   try {
-    const obj = await DB.get(PERSIST_FAMILIES_KEY);
-    if (!obj) return;
+const obj = (await DB.get(PERSIST_FAMILIES_CUSTOM_KEY)) || {};
+let meta = (await DB.get(PERSIST_FAMILIES_META_KEY)) || null;
 
-    Object.keys(obj).forEach(k => {
-      if (k === '__meta') return;
-      const f = obj[k];
-      if (!f) return;
+// تحقق من نسخة تنسيق التخزين للـ meta (حماية مستقبلية)
+const metaVer = meta && Number.isFinite(+meta.__storageVer) ? +meta.__storageVer : 0;
+if (meta && metaVer !== STORAGE_VERSION) {
+  console.warn(
+    '[families.store] meta storage version mismatch:',
+    { found: metaVer, expected: STORAGE_VERSION },
+    '=> ignore meta to avoid applying incompatible shape'
+  );
+  meta = null; // نتجاهل meta القديمة/غير المتوافقة
+}
 
-      f.__custom = true;
+Object.keys(obj).forEach(k => {
+  const f = obj[k];
+  if (!f) return;
 
-      const ver = Number.isFinite(+f.__v) ? +f.__v : 0;
-      normalizeFamilyPipeline(f, { fromVer: ver, markCore: !!f.__core });
+  f.__custom = true;
 
-      if (f.hidden == null) f.hidden = false;
+  const ver = Number.isFinite(+f.__v) ? +f.__v : 0;
+  normalizeFamilyPipeline(f, { fromVer: ver, markCore: !!f.__core });
 
-      if (f.fullGrandsonName && !f.fullRootPersonName) {
-        f.fullRootPersonName = f.fullGrandsonName;
-        delete f.fullGrandsonName;
-      }
+  if (f.hidden == null) f.hidden = false;
 
-      // اشتقاق familyName إن كانت فارغة
-      if (!f.familyName){
-        f.familyName = f.title ? String(f.title).replace(/^.*?:\s*/u,'').trim()
-          : (f.rootPerson?.name?.split(/\s+/u)[0] || '');
-      }
+  if (f.fullGrandsonName && !f.fullRootPersonName) {
+    f.fullRootPersonName = f.fullGrandsonName;
+    delete f.fullGrandsonName;
+  }
 
-      // اشتقاق fullRootPersonName إن لزم (بدون لمس bio.fullName)
-      if (f.rootPerson && !f.fullRootPersonName){
-        const ancSorted = sortedAncestors(f);
-        const ancNames  = ancestorsNames(ancSorted);
-        const rootName   = String(f.rootPerson.name || '').trim();
-        const fatherName = String(f.father?.name || '').trim();
-        const rootFull = [rootName, fatherName, ...ancNames].filter(Boolean).join(' ').trim();
-        if (rootFull) f.fullRootPersonName = rootFull;
-      }
+  ensureFamilyComputedNames(f);
+  families[k] = f;
+});
 
-      families[k] = f;
-    });
 
     // تطبيق إخفاء البذور
-    const coreHidden = (obj.__meta && obj.__meta.coreHidden) || {};
-    Object.keys(coreHidden).forEach(k => {
-      if (families[k] && families[k].__core) families[k].hidden = true;
-    });
-
+const coreHidden = (meta && meta.coreHidden) || {};
+Object.keys(coreHidden).forEach(k => {
+  if (families[k] && families[k].__core) families[k].hidden = true;
+});
     // ترقيع صور البذور
-    const corePhotos = (obj.__meta && obj.__meta.corePhotos) || {};
-    Object.entries(corePhotos).forEach(([famKey, patchMap]) => {
-      const fam = families[famKey];
-      if (!fam || !fam.__core || !patchMap) return;
+const corePhotos = (meta && meta.corePhotos) || {};
+Object.entries(corePhotos).forEach(([famKey, patchMap]) => {
+  const fam = families[famKey];
+  if (!fam || !fam.__core || !patchMap) return;
 
-      Object.entries(patchMap).forEach(([key, hit]) => {
-        if (!hit) return;
-        const isLegacyKey = key.includes('|');
-        let targetPerson = null;
+  Object.entries(patchMap).forEach(([key, hit]) => {
+    if (!hit) return;
+    const isLegacyKey = key.includes('|');
+    let targetPerson = null;
 
-        if (!isLegacyKey) targetPerson = getByPath(fam, key);
-        if (!targetPerson && isLegacyKey) {
-          walkPersonsWithPath(fam, (cand) => {
-            if (personFingerprint(cand) === key) targetPerson = cand;
-          });
-        }
-        if (!targetPerson) return;
-
-        if (!targetPerson.bio) targetPerson.bio = {};
-        targetPerson.bio.photoUrl = hit.photoUrl;
-        targetPerson.photoUrl = hit.photoUrl;
-        targetPerson.photoVer = hit.photoVer || Date.now();
-        if (hit.hasOrig) targetPerson.bio.photoHasOrig = 1; else delete targetPerson.bio.photoHasOrig;
-        if (hit.rot) targetPerson.bio.photoRotated = 1; else delete targetPerson.bio.photoRotated;
-        if (hit.crp) targetPerson.bio.photoCropped = 1; else delete targetPerson.bio.photoCropped;
+    if (!isLegacyKey) targetPerson = getByPath(fam, key);
+    if (!targetPerson && isLegacyKey) {
+      walkPersonsWithPath(fam, (cand) => {
+        if (personFingerprint(cand) === key) targetPerson = cand;
       });
-    });
+    }
+    if (!targetPerson) return;
+
+    if (!targetPerson.bio) targetPerson.bio = {};
+    targetPerson.bio.photoUrl = hit.photoUrl;
+    targetPerson.photoUrl = hit.photoUrl;
+    targetPerson.photoVer = hit.photoVer || Date.now();
+    if (hit.hasOrig) targetPerson.bio.photoHasOrig = 1; else delete targetPerson.bio.photoHasOrig;
+    if (hit.rot) targetPerson.bio.photoRotated = 1; else delete targetPerson.bio.photoRotated;
+    if (hit.crp) targetPerson.bio.photoCropped = 1; else delete targetPerson.bio.photoCropped;
+  });
+});
 
   } catch (e) {
     console.warn('loadPersistedFamilies(idb)', e);
@@ -189,17 +249,8 @@ export function generateFamilyKey() {
   return `family${max + 1}`;
 }
 
-// ================================
-// 5) commit/save/import/export/delete
-// ================================
-export function commitFamily(key) {
-  const fam = families[key];
+function ensureFamilyComputedNames(fam) {
   if (!fam) return;
-
-  if (!fam.__custom) fam.__custom = true;
-
-  const fromVer = Number.isFinite(+fam.__v) ? +fam.__v : 0;
-  normalizeFamilyPipeline(fam, { fromVer, markCore: !!fam.__core });
 
   const ancSorted = sortedAncestors(fam);
   const ancNames  = ancestorsNames(ancSorted);
@@ -215,9 +266,26 @@ export function commitFamily(key) {
     const rootFull = [rootName, fatherName, ...ancNames].filter(Boolean).join(' ').trim();
     if (rootFull) fam.fullRootPersonName = rootFull;
   }
-
-  savePersistedFamilies();
 }
+
+
+// ================================
+// 5) commit/save/import/export/delete
+// ================================
+export function commitFamily(key) {
+  const fam = families[key];
+  if (!fam) return Promise.resolve();
+
+  if (!fam.__custom) fam.__custom = true;
+
+  const fromVer = Number.isFinite(+fam.__v) ? +fam.__v : 0;
+  normalizeFamilyPipeline(fam, { fromVer, markCore: !!fam.__core });
+
+  ensureFamilyComputedNames(fam);
+
+  return scheduleSavePersistedFamilies();
+}
+
 
 export function saveFamily(key, familyObj) {
   const wasCore = !!(families[key] && families[key].__core);
@@ -234,7 +302,7 @@ export function saveFamily(key, familyObj) {
 
   families[key] = familyObj;
 
-  savePersistedFamilies();
+return scheduleSavePersistedFamilies();
 }
 
 export async function deleteFamily(key) {
@@ -265,7 +333,7 @@ export function importFamilies(obj = {}) {
     all[k] = f;
   });
 
-  savePersistedFamilies();
+return scheduleSavePersistedFamilies();
 }
 
 export function exportFamilies() {
