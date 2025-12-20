@@ -312,8 +312,8 @@ function createMetaEditor({
     dirtyCtl.setBase();
     dirtyCtl.toggle();
 
-    try { markGlobalDirty(); } catch {}
-    onCanceled();
+  onCanceled();
+
   }
 
   function handleSave(){
@@ -343,7 +343,6 @@ function createMetaEditor({
     dirtyCtl.setBase();
     render();
 
-    try { if (typeof checkDirty === 'function') checkDirty(); } catch {}
     try { markGlobalDirty(); } catch {}
 
     onSaved();

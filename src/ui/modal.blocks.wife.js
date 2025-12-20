@@ -5,7 +5,6 @@ import { el, getArabicOrdinalF } from '../utils.js';
 import { makeMetaBlock, computeAgeFromBirthDate, formatListForMeta } from './modal.metaBlock.js';
 
 import { attachYearModeToggle } from './modal.yearToggle.js';
-import { markGlobalDirty } from './modal.skeleton.js';
 import { updateChildrenCount } from './modal.blocks.child.js';
 import { initDirtyIndicators } from './modal.dirtyIndicators.js';
 import {createChildEditItem} from './modal.view.js';
@@ -552,7 +551,6 @@ function setupParentMetaBlock({
       }
 
       try { nameEl.__dirtyToggle?.(); } catch {}
-      try { markGlobalDirty(); } catch {}
     }
 
     [nameEl, ...otherEls].forEach((el) => {

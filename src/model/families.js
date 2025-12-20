@@ -44,7 +44,8 @@ export {
   getLineageConfig,
   getDuplicatesConfig,
   findDuplicatesInFamily,
-  stripPhotosDeep
+  stripPhotosDeep,
+  findPathByIdInFamily
 } from './families.core.js';
 
 // 2) التخزين + العائلات الحيّة + اختيار العائلة

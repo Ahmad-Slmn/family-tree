@@ -3,6 +3,8 @@
 import { showInfo, showSuccess, showConfirmModal, byId, highlight, getArabicOrdinal, getArabicOrdinalF } from '../utils.js';
 import { ModalManager } from './modalManager.js';
 import { generateFamilyKey, getFamily, normalizeNewFamilyForLineage } from '../model/families.js';
+import { GLOBAL_DIRTY_EVENT } from './modal.skeleton.js';
+import { getLogicalDateValue } from './modal.yearToggle.js';
 
 import * as Form from '../features/familyForm.js';
 import { refreshFilterOptionsForCurrentFamily } from '../features/search.js';
@@ -44,6 +46,90 @@ function joinNamesList(arr, fallback = '') {
   return (fallback || '').trim();
 }
 
+// ===== Date API موحّدة: YYYY أو YYYY-MM-DD أو '' =====
+const YEAR_RE = /^\d{4}$/;
+const FULL_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * يضبط قيمة التاريخ على input مع تخزينها في dataset:
+ * - value = 'YYYY' => yearOnly
+ * - value = 'YYYY-MM-DD' => fullDate
+ * - value = '' => تفريغ
+ *
+ * ملاحظة: نحن ما زلنا نغيّر type بشكل مركزي وآمن (بدل التغيير في 5 أماكن).
+ * إذا أردت "عدم تغيير type نهائيًا" سنحتاج تغيير الـ HTML إلى input text أو datepicker مخصص.
+ */
+function setDateValue(input, value){
+  if (!input) return;
+  const v = String(value || '').trim();
+
+  if (!v){
+    input.dataset.yearOnly = '';
+    input.dataset.fullDate = '';
+    input.value = '';
+    // لا نغير type هنا
+    return;
+  }
+
+  if (YEAR_RE.test(v)){
+    input.dataset.yearOnly = v;
+    input.dataset.fullDate = '';
+    input.type = 'text';   // مركزي: سنة فقط => text
+    input.value = v;
+    return;
+  }
+
+  if (FULL_DATE_RE.test(v)){
+    input.dataset.fullDate = v;
+    input.dataset.yearOnly = v.slice(0,4);
+    input.type = 'date';   // مركزي: تاريخ كامل => date
+    input.value = v;
+    return;
+  }
+
+  // fallback: نخزنه كسنة/نص خام بدون كسر
+input.dataset.yearOnly = (/^\d{4}/.test(v) ? v.slice(0,4) : '');
+  input.dataset.fullDate = '';
+  input.type = 'text';
+  input.value = v;
+}
+
+/**
+ * يقرأ القيمة الموحدة للتاريخ:
+ * - يفضّل datasetKey إن كان موجودًا في root.dataset (لمّا يكون عندنا "حالة محفوظة")
+ * - وإلا يقرأ من input.dataset.yearOnly/fullDate
+ * - وإلا من input.value
+ */
+function getDateValue(rootOrInput, inputSelector, datasetKey){
+  // 1) datasetKey على root (إن وُجد)
+  if (datasetKey && rootOrInput?.dataset){
+    const ds = String(rootOrInput.dataset[datasetKey] || '').trim();
+    if (ds) return ds;
+  }
+
+  // 2) تحديد input
+  const input = inputSelector ? rootOrInput?.querySelector?.(inputSelector)
+    : rootOrInput;
+
+  if (!input) return '';
+
+  // أهم سطر: قراءة منطقية للـ year-toggle
+  if (input.matches?.('input[data-year-toggle="1"]')){
+    return getLogicalDateValue(input);
+  }
+
+  return String(input.value || '').trim();
+}
+
+
+/**
+ * تحويل bio (birthYear/birthDate أو deathYear/deathDate) إلى قيمة موحدة
+ */
+function getBioDateValue(bio, base){
+  const { year, dateVal } = getYearAndDate(bio, base);
+  return (dateVal || year || '').trim();
+}
+
 // قراءة year/date من كائن bio لكلمة أساس مثل "birth" أو "death"
 function getYearAndDate(bio, base){
   const yearKey = base + 'Year';
@@ -53,70 +139,71 @@ function getYearAndDate(bio, base){
   return { year, dateVal };
 }
 
-// تطبيق year/date على input مع دعم dataset.yearOnly/fullDate
-function applyYearDateToInput(input, year, dateVal){
-  if (!input) return;
-  const y = (year || '').trim();
-  const d = (dateVal || '').trim();
+// ===== Wife Meta Maps (تعريف واحد) =====
+const WIFE_FATHER_MAP = {
+  wifeFatherName:         { sel: '.wife-father',              from: s => s.fatherName },
+  wifeFatherCognomen:     { sel: '.wife-father-cognomen',     from: s => s.fatherCognomen },
+  wifeFatherBirthDate:    { sel: '.wife-father-birthDate',    from: s => s.fatherBirthDate },
+  wifeFatherDeathDate:    { sel: '.wife-father-deathDate',    from: s => s.fatherDeathDate },
+  wifeFatherBirthPlace:   { sel: '.wife-father-birthPlace',   from: s => s.fatherBirthPlace },
+  wifeFatherOccupation:   { sel: '.wife-father-occupation',   from: s => s.fatherOccupation },
+  wifeFatherRemark:       { sel: '.wife-father-remark',       from: s => s.fatherRemark },
+  wifeFatherClan:         { sel: '.wife-father-clan',         from: s => s.fatherClan },
+  wifeFatherBrothers:     { sel: '.wife-father-brothers',     from: s => s.fatherBrothersTxt },
+  wifeFatherSisters:      { sel: '.wife-father-sisters',      from: s => s.fatherSistersTxt },
+  wifeFatherAchievements: { sel: '.wife-father-achievements', from: s => joinTextList(s.fatherAchievements, s.fatherAchievementsTxt) },
+  wifeFatherHobbies:      { sel: '.wife-father-hobbies',      from: s => joinTextList(s.fatherHobbies,      s.fatherHobbiesTxt) }
+};
 
-  if (y && !d){
-    // سنة فقط
-    input.dataset.yearOnly = y;
-    input.dataset.fullDate = '';
-    input.value = y;
-    input.type  = 'text';
-  } else {
-    const v = d || '';
-    input.dataset.fullDate = v;
-    input.dataset.yearOnly = v ? v.slice(0, 4) : (y || '');
-    input.value = v;
-    if (v) input.type = 'date';
-  }
-}
+const WIFE_MOTHER_MAP = {
+  wifeMotherName:         { sel: '.wife-mother',              from: s => s.motherName },
+  wifeMotherCognomen:     { sel: '.wife-mother-cognomen',     from: s => s.motherCognomen },
+  wifeMotherBirthDate:    { sel: '.wife-mother-birthDate',    from: s => s.motherBirthDate },
+  wifeMotherDeathDate:    { sel: '.wife-mother-deathDate',    from: s => s.motherDeathDate },
+  wifeMotherBirthPlace:   { sel: '.wife-mother-birthPlace',   from: s => s.motherBirthPlace },
+  wifeMotherOccupation:   { sel: '.wife-mother-occupation',   from: s => s.motherOccupation },
+  wifeMotherRemark:       { sel: '.wife-mother-remark',       from: s => s.motherRemark },
+  wifeMotherClan:         { sel: '.wife-mother-clan',         from: s => s.motherClan },
+  wifeMotherBrothers:     { sel: '.wife-mother-brothers',     from: s => s.motherBrothersTxt },
+  wifeMotherSisters:      { sel: '.wife-mother-sisters',      from: s => s.motherSistersTxt },
+  wifeMotherAchievements: { sel: '.wife-mother-achievements', from: s => joinTextList(s.motherAchievements, s.motherAchievementsTxt) },
+  wifeMotherHobbies:      { sel: '.wife-mother-hobbies',      from: s => joinTextList(s.motherHobbies,      s.motherHobbiesTxt) }
+};
 
-// قراءة تاريخ/سنة من input + dataset (لـ snapshot) مع تفضيل dataset
-function readDateFromInputWithDataset(root, sel, datasetKey){
-  const ds = (root.dataset?.[datasetKey] || '').trim();
-  if (ds) return ds;
-
-  const inp = root.querySelector(sel);
-  if (!inp) return '';
-
-  const y = (inp.dataset.yearOnly || '').trim();
-  const d = (inp.dataset.fullDate || '').trim();
-  if (y && !d) return y;
-  if (d) return d;
-  return (inp.value || '').trim();
-}
-
-// ضبط dataset من كائن source حسب خريطة
-function fillDatasetFromSource(dataset, source, map){
-  Object.entries(map).forEach(([dsKey, getter])=>{
-    dataset[dsKey] = (getter(source) || '').trim();
+function mapSourceToDataset(dataset, source, mapDef){
+  Object.entries(mapDef).forEach(([dsKey, def])=>{
+    dataset[dsKey] = String(def.from?.(source) || '').trim();
   });
 }
 
-// نقل dataset → حقول داخل root حسب خريطة
-function fillInputsFromDataset(root, dataset, map){
-  Object.entries(map).forEach(([sel, dsKey])=>{
-    const el = root.querySelector(sel);
-    if (el) el.value = (dataset[dsKey] || '').trim();
+function mapDatasetToInputs(root, dataset, mapDef){
+  Object.entries(mapDef).forEach(([dsKey, def])=>{
+    const el = root.querySelector(def.sel);
+    if (el) el.value = String(dataset[dsKey] || '').trim();
   });
 }
 
-// نقل الحقول → dataset داخل root حسب خريطة
-function fillDatasetFromInputs(root, dataset, map){
-  Object.entries(map).forEach(([sel, dsKey])=>{
-    const el = root.querySelector(sel);
-    dataset[dsKey] = (el && el.value ? el.value : '').trim();
+function mapInputsToDataset(root, dataset, mapDef){
+  Object.entries(mapDef).forEach(([dsKey, def])=>{
+    const el = root.querySelector(def.sel);
+    dataset[dsKey] = String(el?.value || '').trim();
   });
 }
-
 
 
 export function wireFamilyModal({ modal, initialData, editKey, onSave, onCancel }){
   /* ========= 0) تركيز أولي + تهيئة مؤشرات الاتساخ ========= */
   const openerEl = document.activeElement;
+// ===== عنوان المودال ديناميكي: إنشاء vs تعديل =====
+const titleEl = modal.querySelector('#familyCreatorTitle');
+if (titleEl) {
+  const isEdit = !!(editKey || initialData);
+  const f = initialData || (editKey ? getFamily(editKey) : null);
+  const t = (f?.title || '').trim();
+
+  titleEl.textContent = isEdit ? (t ? `تعديل عائلة: ${t}` : 'تعديل العائلة')
+    : 'إنشاء عائلة جديدة';
+}
 
   // تركيز أول حقل مهم (required)، ثم العنوان، ثم أول عنصر قابل للتركيز
   function focusFirst(){
@@ -146,6 +233,10 @@ export function wireFamilyModal({ modal, initialData, editKey, onSave, onCancel 
   const addWifeBtn  = modal.querySelector('#addWifeBtn');
   const formEl      = modal.querySelector('#addFamilyForm');
     const closeBtn   = modal.querySelector('#closeAddFamily');
+  formEl.addEventListener(GLOBAL_DIRTY_EVENT, () => {
+  markDirty();
+});
+
 const fatherMount = formEl.querySelector('#fatherBlockMount');
 const fatherBlock = createFatherBlock(); fatherMount.appendChild(fatherBlock);
 
@@ -160,6 +251,8 @@ const motherBlock = createMotherBlock(); motherMount.appendChild(motherBlock);
     const el = formEl.querySelector(sel);
     if (el) el.value = v || '';
   };
+  
+  
 
   // ====== وسم الحقول غير الصالحة وإزالتها عند التعديل ======
   function clearInvalid(el){
@@ -204,6 +297,37 @@ const motherBlock = createMotherBlock(); motherMount.appendChild(motherBlock);
     if (!hasVal) t.setAttribute('aria-invalid','true'); else t.removeAttribute('aria-invalid');
     t.__dirtyToggle?.();
   }
+  
+function validateYearOnlyLive(input){
+  if (!input?.matches?.('input[data-year-toggle="1"]')) return true;
+
+  // نتحقق فقط عندما يكون في وضع السنة فقط
+  if (input.type !== 'text') return true;
+
+  const v = (input.value || '').trim();
+
+  // الفاضي مسموح
+  if (!v){
+    input.classList.remove('is-invalid');
+    input.removeAttribute('aria-invalid');
+    input.__dirtyToggle?.();
+    return true;
+  }
+
+  const ok = /^\d{4}$/.test(v);
+
+  if (!ok){
+    input.classList.add('is-invalid');
+    input.setAttribute('aria-invalid','true');
+  } else {
+    input.classList.remove('is-invalid');
+    input.removeAttribute('aria-invalid');
+  }
+
+  input.__dirtyToggle?.();
+  return ok;
+}
+
 
   // مراقبة عامة للحقل المطلوب + تنظيف فوري لأي خطأ
   formEl.addEventListener('input',  (e)=>{ validateRequiredLive(e.target); clearInvalid(e.target); }, true);
@@ -256,7 +380,7 @@ const motherBlock = createMotherBlock(); motherMount.appendChild(motherBlock);
         const { fromIdx, toIdx } = fromTo(evt, ancList);
         const nm = (evt.item.querySelector('.ancestor-name')?.value || '').trim();
         if (fromIdx === toIdx) return notifyNoChange({ scope:'ancestor', name:nm, index:toIdx });
-        renumberAncestorLabels(true); updateAddAncestorBtnText(); checkDirty();
+renumberAncestorLabels(true); updateAddAncestorBtnText(); markDirty();
         notifyMove({ scope:'ancestor', name:nm, from:fromIdx, to:toIdx, ordIndex:fromIdx });
       }
     });
@@ -306,8 +430,9 @@ const motherBlock = createMotherBlock(); motherMount.appendChild(motherBlock);
         if (title){ ensureDirtyDot(title); title.classList.add('dirty-on','dot-pending'); title.classList.remove('dot-ok','dot-invalid'); }
       });
 
-      refreshChildrenOrderDirty(list);
-      checkDirty();
+   refreshChildrenOrderDirty(list);
+markDirty();
+
       notifyMove({ scope:'child', name, role, from:fromIdx, to:toIdx });
     };
 
@@ -324,9 +449,63 @@ const motherBlock = createMotherBlock(); motherMount.appendChild(motherBlock);
     });
   }
 
-  /* ========= 4) حالة الاتساخ ========= */
-  let committedAncestorsRawKey = '';
-  let initialFormSnapshot = null;
+/* ========= 4) حالة الاتساخ ========= */
+let committedAncestorsRawKey = '';
+let initialFormSnapshot = null;
+
+// Dirty optimization
+let dirtyFlag = false;
+let dirtyScheduled = false;
+
+function applyDirtyUI(){
+  labelSpan.textContent = dirtyFlag ? 'حفظ التعديلات' : 'حفظ العائلة';
+  submitBtn.classList.toggle('save-dirty', dirtyFlag);
+}
+
+function scheduleDirtyUI(){
+  if (dirtyScheduled) return;
+  dirtyScheduled = true;
+  requestAnimationFrame(()=>{
+    dirtyScheduled = false;
+    applyDirtyUI();
+  });
+}
+
+function markDirty(){
+  dirtyFlag = true;
+  scheduleDirtyUI();
+  scheduleIdleAccurateDirtyCheck();
+}
+
+function clearDirty(){
+  dirtyFlag = false;
+  scheduleDirtyUI();
+    if (dirtyIdleTimer) { clearTimeout(dirtyIdleTimer); dirtyIdleTimer = null; }
+
+}
+  
+let dirtyIdleTimer = null;
+
+function scheduleIdleAccurateDirtyCheck(){
+  if (dirtyIdleTimer) clearTimeout(dirtyIdleTimer);
+
+  // لا تعمل فحص دقيق إذا أصلاً ما في dirty
+  if (!dirtyFlag) return;
+
+  // انتظر المستخدم يهدأ
+  dirtyIdleTimer = setTimeout(() => {
+    dirtyIdleTimer = null;
+
+    // فحص دقيق (ثقيل) مرة واحدة بعد الهدوء
+    const reallyDirty = isFormDirtyAccurate();
+
+    // إذا رجع لنفس الحالة الأصلية: رجّع الزر
+    if (!reallyDirty){
+      dirtyFlag = false;
+      scheduleDirtyUI();
+    }
+  }, 800); // 600–1200ms حسب إحساسك
+}
 
   const renumberAncestorLabels = (markOrderDirty = false)=>{
     ancList.querySelectorAll('.ancestor-row').forEach((row,i)=>{
@@ -374,24 +553,6 @@ const motherBlock = createMotherBlock(); motherMount.appendChild(motherBlock);
       modal.dataset.editKey = editKey || '';
 
       // يسار
-         // تهيئة حقل تاريخ/سنة فقط مع دعم data-year-only و data-full-date
-      const setDateOrYearInput = (el, dateVal, yearVal) => {
-        if (!el) return;
-        const y = (yearVal || '').trim();
-        const d = (dateVal || '').trim() && dateVal !== '-' ? dateVal.trim() : '';
-
-        if (y && !d){
-          // سنة فقط
-          el.dataset.yearOnly = y;
-          el.dataset.fullDate = '';
-          el.value = y; // قد تفرَّغ في type="date" لكن attachYearModeToggle سيعتمد على dataset
-        } else {
-          // تاريخ كامل (مع حفظ السنة داخليًا)
-          el.dataset.fullDate = d;
-          el.dataset.yearOnly = d ? d.slice(0,4) : (y || '');
-          el.value = d;
-        }
-      };
 
 
          set('#newFamilyTitle')(f.title);
@@ -408,8 +569,8 @@ const motherBlock = createMotherBlock(); motherMount.appendChild(motherBlock);
       const rootBirthEl = formEl.querySelector('#newRootPersonBirthDate');
       const rootDeathEl = formEl.querySelector('#newRootPersonDeathDate');
 
-      setDateOrYearInput(rootBirthEl, rootBirthDateVal, rootBirthYear);
-      setDateOrYearInput(rootDeathEl, rootDeathDateVal, rootDeathYear);
+setDateValue(rootBirthEl, rootBirthDateVal || rootBirthYear);
+setDateValue(rootDeathEl, rootDeathDateVal || rootDeathYear);
 
       set('#newRootPersonBirthPlace')(rbio.birthPlace);
 
@@ -456,9 +617,8 @@ const motherBlock = createMotherBlock(); motherMount.appendChild(motherBlock);
 
   setMb('.mother-name',         mb.dataset.motherName);
   setMb('.mother-clan',         mb.dataset.motherClan);
-  setMb('.mother-cognomen',     mb.dataset.motherCognomen);
-  setMb('.mother-birthDate',    mb.dataset.motherBirthDate);
-  setMb('.mother-deathDate',    mb.dataset.motherDeathDate);
+setDateValue(mb.querySelector('.mother-birthDate'), mb.dataset.motherBirthDate);
+setDateValue(mb.querySelector('.mother-deathDate'), mb.dataset.motherDeathDate);
   setMb('.mother-birthPlace',   mb.dataset.motherBirthPlace);
   setMb('.mother-occupation',   mb.dataset.motherOccupation);
   setMb('.mother-remark',       mb.dataset.motherRemark);
@@ -531,18 +691,8 @@ const motherBlock = createMotherBlock(); motherMount.appendChild(motherBlock);
         const deathInput = fb.querySelector('.father-deathDate');
 
         // تهيئة yearOnly/fullDate على مستوى الحقل
-        setDateOrYearInput(birthInput, fatherBirthDateVal, fatherBirthYear);
-        setDateOrYearInput(deathInput, fatherDeathDateVal, fatherDeathYear);
-
-        // ⬅️ مهم: في حالة "سنة فقط" اجعل الحقل نصّيًا حتى لا يمسح المتصفح القيمة
-        if (!fatherBirthDateVal && fatherBirthYear && birthInput) {
-          birthInput.type  = 'text';
-          birthInput.value = fatherBirthYear;
-        }
-        if (!fatherDeathDateVal && fatherDeathYear && deathInput) {
-          deathInput.type  = 'text';
-          deathInput.value = fatherDeathYear;
-        }
+      setDateValue(birthInput, fatherBirthDateVal || fatherBirthYear);
+setDateValue(deathInput, fatherDeathDateVal || fatherDeathYear);
 
         setFb('.father-birthPlace', fb.dataset.fatherBirthPlace);
         setFb('.father-occupation', fb.dataset.fatherOccupation);
@@ -570,18 +720,8 @@ const motherBlock = createMotherBlock(); motherMount.appendChild(motherBlock);
 
         if (ancNameEl) ancNameEl.value = a?.name || '';
 
-        setDateOrYearInput(ancBirthEl, ancBirthDateVal, ancBirthYear);
-        setDateOrYearInput(ancDeathEl, ancDeathDateVal, ancDeathYear);
-
-        // ⬅️ في حالة "سنة فقط" غيِّر نوع الحقل مؤقتًا إلى نص حتى تُحفَظ السنة بشكل صحيح
-        if (ancBirthEl && !ancBirthDateVal && ancBirthYear){
-          ancBirthEl.type  = 'text';
-          ancBirthEl.value = ancBirthYear;
-        }
-        if (ancDeathEl && !ancDeathDateVal && ancDeathYear){
-          ancDeathEl.type  = 'text';
-          ancDeathEl.value = ancDeathYear;
-        }
+     setDateValue(ancBirthEl, ancBirthDateVal || ancBirthYear);
+setDateValue(ancDeathEl, ancDeathDateVal || ancDeathYear);
 
         r.querySelector('.ancestor-birthPlace').value = ab.birthPlace || '';
         r.querySelector('.ancestor-occupation').value = ab.occupation || '';
@@ -635,70 +775,13 @@ wivesList.innerHTML = '';
 
   // 1) تخزين ميتا أب/أم الزوجة في dataset (الحالة "المثبتة")
   // أب الزوجة
-  fillDatasetFromSource(block.dataset, wb, {
-    wifeFatherName:         s => s.fatherName,
-    wifeFatherCognomen:     s => s.fatherCognomen,
-    wifeFatherBirthDate:    s => s.fatherBirthDate,
-    wifeFatherDeathDate:    s => s.fatherDeathDate,
-    wifeFatherBirthPlace:   s => s.fatherBirthPlace,
-    wifeFatherOccupation:   s => s.fatherOccupation,
-    wifeFatherRemark:       s => s.fatherRemark,
-    wifeFatherClan:         s => s.fatherClan,
-    wifeFatherBrothers:     s => s.fatherBrothersTxt,
-    wifeFatherSisters:      s => s.fatherSistersTxt,
-    wifeFatherAchievements: s => joinTextList(s.fatherAchievements, s.fatherAchievementsTxt),
-    wifeFatherHobbies:      s => joinTextList(s.fatherHobbies,      s.fatherHobbiesTxt)
-  });
-
-  // أم الزوجة
-  fillDatasetFromSource(block.dataset, wb, {
-    wifeMotherName:         s => s.motherName,
-    wifeMotherCognomen:     s => s.motherCognomen,
-    wifeMotherBirthDate:    s => s.motherBirthDate,
-    wifeMotherDeathDate:    s => s.motherDeathDate,
-    wifeMotherBirthPlace:   s => s.motherBirthPlace,
-    wifeMotherOccupation:   s => s.motherOccupation,
-    wifeMotherRemark:       s => s.motherRemark,
-    wifeMotherClan:         s => s.motherClan,
-    wifeMotherBrothers:     s => s.motherBrothersTxt,
-    wifeMotherSisters:      s => s.motherSistersTxt,
-    wifeMotherAchievements: s => joinTextList(s.motherAchievements, s.motherAchievementsTxt),
-    wifeMotherHobbies:      s => joinTextList(s.motherHobbies,      s.motherHobbiesTxt)
-  });
+mapSourceToDataset(block.dataset, wb, WIFE_FATHER_MAP);
+mapSourceToDataset(block.dataset, wb, WIFE_MOTHER_MAP);
 
   // 2) تعبئة الحقول من dataset (وليس مباشرة من wb)
   // أب الزوجة
-  fillInputsFromDataset(block, block.dataset, {
-    '.wife-father':              'wifeFatherName',
-    '.wife-father-cognomen':     'wifeFatherCognomen',
-    '.wife-father-birthDate':    'wifeFatherBirthDate',
-    '.wife-father-deathDate':    'wifeFatherDeathDate',
-    '.wife-father-birthPlace':   'wifeFatherBirthPlace',
-    '.wife-father-occupation':   'wifeFatherOccupation',
-    '.wife-father-remark':       'wifeFatherRemark',
-    '.wife-father-clan':         'wifeFatherClan',
-    '.wife-father-brothers':     'wifeFatherBrothers',
-    '.wife-father-sisters':      'wifeFatherSisters',
-    '.wife-father-achievements': 'wifeFatherAchievements',
-    '.wife-father-hobbies':      'wifeFatherHobbies'
-  });
-
-  // أم الزوجة
-  fillInputsFromDataset(block, block.dataset, {
-    '.wife-mother':              'wifeMotherName',
-    '.wife-mother-cognomen':     'wifeMotherCognomen',
-    '.wife-mother-birthDate':    'wifeMotherBirthDate',
-    '.wife-mother-deathDate':    'wifeMotherDeathDate',
-    '.wife-mother-birthPlace':   'wifeMotherBirthPlace',
-    '.wife-mother-occupation':   'wifeMotherOccupation',
-    '.wife-mother-remark':       'wifeMotherRemark',
-    '.wife-mother-clan':         'wifeMotherClan',
-    '.wife-mother-brothers':     'wifeMotherBrothers',
-    '.wife-mother-sisters':      'wifeMotherSisters',
-    '.wife-mother-achievements': 'wifeMotherAchievements',
-    '.wife-mother-hobbies':      'wifeMotherHobbies'
-  });
-
+mapDatasetToInputs(block, block.dataset, WIFE_FATHER_MAP);
+mapDatasetToInputs(block, block.dataset, WIFE_MOTHER_MAP);
 
   // إذا كانت هناك بيانات لأب/أم الزوجة ⇒ ثبّت وضع المعاينة مثل الأب/الأم/الأجداد
   if (hasWifeFatherMeta) {
@@ -732,8 +815,8 @@ wivesList.innerHTML = '';
         const wifeDeathYear    = wb.deathYear ? String(wb.deathYear).trim() : '';
         const wifeDeathDateVal = (wb.deathDate && wb.deathDate !== '-') ? wb.deathDate : '';
 
-        setDateOrYearInput(block.querySelector('.wife-birthDate'), wifeBirthDateVal, wifeBirthYear);
-        setDateOrYearInput(block.querySelector('.wife-deathDate'), wifeDeathDateVal, wifeDeathYear);
+ setDateValue(block.querySelector('.wife-birthDate'), wifeBirthDateVal || wifeBirthYear);
+setDateValue(block.querySelector('.wife-deathDate'), wifeDeathDateVal || wifeDeathYear);
 
 
         block.querySelector('.wife-birthPlace').value    = w.bio?.birthPlace || '';
@@ -789,8 +872,8 @@ wivesList.innerHTML = '';
           const childDeathYear    = cb.deathYear ? String(cb.deathYear).trim() : '';
           const childDeathDateVal = (cb.deathDate && cb.deathDate !== '-') ? cb.deathDate : '';
 
-          setDateOrYearInput(bInp, childBirthDateVal, childBirthYear);
-          setDateOrYearInput(dInp, childDeathDateVal, childDeathYear);
+      setDateValue(bInp, childBirthDateVal || childBirthYear);
+setDateValue(dInp, childDeathDateVal || childDeathYear);
 
           list.appendChild(li);
         });
@@ -812,11 +895,10 @@ wivesList.innerHTML = '';
   initYearOnlyToggles(modal);
 
   // اللقطة الأولى + baseline بعد استقرار وضع الحقول (سنة/تاريخ)
-  initialFormSnapshot = computeSnapshot();
-  committedAncestorsRawKey = initialFormSnapshot.ancKey;
-  modal.resetDirtyIndicators?.();
-  checkDirty();
-
+initialFormSnapshot = computeSnapshot();
+committedAncestorsRawKey = initialFormSnapshot.ancKey;
+modal.resetDirtyIndicators?.();
+clearDirty();
 
   /* ========= 6) أحداث الأجداد ========= */
 ancAddBtn.addEventListener('click', ()=>{
@@ -827,8 +909,8 @@ ancAddBtn.addEventListener('click', ()=>{
   initYearOnlyToggles(row);
 
   renumberAncestorLabels(true);
-  updateAddAncestorBtnText();
-  checkDirty();
+updateAddAncestorBtnText();
+markDirty();
 
   setTimeout(()=> row.querySelector('.ancestor-name')?.focus(), 0);
 });
@@ -849,7 +931,7 @@ ancAddBtn.addEventListener('click', ()=>{
            showInfo(`تم حذف الجد: ${ord} «${highlight(nm)}»`);
 
 
-          checkDirty();
+markDirty();
         });
       return;
     }
@@ -861,7 +943,7 @@ ancAddBtn.addEventListener('click', ()=>{
       if (!prev) return notifyNoChange({ scope:'ancestor', name:nm, index:idxBefore });
       ancList.insertBefore(row, prev);
       const idxAfter = idxBefore - 1;
-      renumberAncestorLabels(true); updateAddAncestorBtnText(); checkDirty();
+renumberAncestorLabels(true); updateAddAncestorBtnText(); markDirty();
       notifyMove({ scope:'ancestor', name:nm, from:idxBefore, to:idxAfter, ordIndex:idxBefore });
       return;
     }
@@ -873,7 +955,7 @@ ancAddBtn.addEventListener('click', ()=>{
       if (!next) return notifyNoChange({ scope:'ancestor', name:nm, index:idxBefore });
       ancList.insertBefore(row, next.nextSibling);
       const idxAfter = idxBefore + 1;
-      renumberAncestorLabels(true); updateAddAncestorBtnText(); checkDirty();
+renumberAncestorLabels(true); updateAddAncestorBtnText(); markDirty();
       notifyMove({ scope:'ancestor', name:nm, from:idxBefore, to:idxAfter, ordIndex:idxBefore });
     }
   });
@@ -890,7 +972,7 @@ addWifeBtn.addEventListener('click', ()=>{
   updateAddWifeBtnText();
   updateChildrenCount(block);
   wireChildrenDnD(block);
-  checkDirty();
+markDirty();
   block.querySelector('.wife-name')?.focus();
 });
 
@@ -901,46 +983,19 @@ addWifeBtn.addEventListener('click', ()=>{
     const editorWrap = w.querySelector('.children-editor');
     const addArea = w.querySelector('.children-add');
     // حفظ ميتا أب الزوجة → dataset (باستخدام Helper عام)
-    if (e.target.closest('.save-father-btn')){
-      fillDatasetFromInputs(w, w.dataset, {
-        '.wife-father':              'wifeFatherName',
-        '.wife-father-cognomen':     'wifeFatherCognomen',
-        '.wife-father-birthDate':    'wifeFatherBirthDate',
-        '.wife-father-deathDate':    'wifeFatherDeathDate',
-        '.wife-father-birthPlace':   'wifeFatherBirthPlace',
-        '.wife-father-occupation':   'wifeFatherOccupation',
-        '.wife-father-remark':       'wifeFatherRemark',
-        '.wife-father-clan':         'wifeFatherClan',
-        '.wife-father-brothers':     'wifeFatherBrothers',
-        '.wife-father-sisters':      'wifeFatherSisters',
-        '.wife-father-achievements': 'wifeFatherAchievements',
-        '.wife-father-hobbies':      'wifeFatherHobbies'
-      });
-
-      checkDirty();
-      return;
-    }
+if (e.target.closest('.save-father-btn')){
+  mapInputsToDataset(w, w.dataset, WIFE_FATHER_MAP);
+  markDirty();
+  return;
+}
 
     // حفظ ميتا أم الزوجة → dataset
-    if (e.target.closest('.save-wife-mother-btn, .save-mother-btn, .wife-mother-save-btn')){
-      fillDatasetFromInputs(w, w.dataset, {
-        '.wife-mother':              'wifeMotherName',
-        '.wife-mother-cognomen':     'wifeMotherCognomen',
-        '.wife-mother-birthDate':    'wifeMotherBirthDate',
-        '.wife-mother-deathDate':    'wifeMotherDeathDate',
-        '.wife-mother-birthPlace':   'wifeMotherBirthPlace',
-        '.wife-mother-occupation':   'wifeMotherOccupation',
-        '.wife-mother-remark':       'wifeMotherRemark',
-        '.wife-mother-clan':         'wifeMotherClan',
-        '.wife-mother-brothers':     'wifeMotherBrothers',
-        '.wife-mother-sisters':      'wifeMotherSisters',
-        '.wife-mother-achievements': 'wifeMotherAchievements',
-        '.wife-mother-hobbies':      'wifeMotherHobbies'
-      });
+if (e.target.closest('.save-wife-mother-btn, .save-mother-btn, .wife-mother-save-btn')){
+  mapInputsToDataset(w, w.dataset, WIFE_MOTHER_MAP);
+  markDirty();
+  return;
+}
 
-      checkDirty();
-      return;
-    }
 
     // أسهم الترتيب + إزالة ابن
     const childLi = e.target.closest('.child-item');
@@ -972,7 +1027,7 @@ addWifeBtn.addEventListener('click', ()=>{
         });
 
         updateAddWifeBtnText();
-        checkDirty();
+markDirty();
 
         const infoLabelHtml = `الزوجة ${ord}` + (nm ? ` «${highlight(nm)}»` : '');
         showInfo(`تم حذف ${infoLabelHtml} مع جميع أبنائها.`);
@@ -997,7 +1052,7 @@ addWifeBtn.addEventListener('click', ()=>{
           editorWrap.style.display = 'none';
           updateChildrenCount(w);
           showSuccess('تم حذف جميع الأبناء.');
-          checkDirty();
+markDirty();
         });
       return;
     }
@@ -1053,7 +1108,7 @@ addWifeBtn.addEventListener('click', ()=>{
         if (x) x.value = '';
       });
 
-      checkDirty();
+markDirty();
     }
 
   });
@@ -1066,7 +1121,7 @@ addWifeBtn.addEventListener('click', ()=>{
     updateChildrenCount(w);
     initChildrenOrderBaselines(w);
     if (list){ refreshChildrenOrderDirty(list); if (!list.children.length) w.querySelector('.children-editor').style.display='none'; }
-    checkDirty();
+markDirty();
   });
 
   wivesList.addEventListener('child:moveUp', (e)=>{
@@ -1087,7 +1142,7 @@ addWifeBtn.addEventListener('click', ()=>{
     });
     refreshChildrenOrderDirty(list);
     notifyMove({ scope:'child', name, role, from:idxBefore, to:idxAfter });
-    checkDirty();
+markDirty();
   });
 
   wivesList.addEventListener('child:moveDown', (e)=>{
@@ -1108,7 +1163,7 @@ addWifeBtn.addEventListener('click', ()=>{
     });
     refreshChildrenOrderDirty(list);
     notifyMove({ scope:'child', name, role, from:idxBefore, to:idxAfter });
-    checkDirty();
+markDirty();
   });
 
   /* ========= 8) عدّاد الأبناء المحلي ========= */
@@ -1117,29 +1172,100 @@ addWifeBtn.addEventListener('click', ()=>{
     try { updateChildrenCountView?.(wrap); } catch {}
   }
 
-  /* ========= 9) لقطة النموذج + فحص الاتساخ ========= */
-  function computeSnapshot(){
-    const { formFields, wives, ancestors, father } = readUI();
-    const ancKey = Form.makeAncestorsRawKey(ancestors.map(a=>a.name));
-    return Form.computeFormSnapshot({ formFields, wives, ancestors, father, ancKey });
+/* ========= 9) لقطة النموذج + فحص الاتساخ ========= */
+function computeSnapshot(){
+  const { formFields, wives, ancestors, father } = readUI();
+  const ancKey = Form.makeAncestorsRawKey(ancestors.map(a=>a.name));
+  return Form.computeFormSnapshot({ formFields, wives, ancestors, father, ancKey });
+}
+  
+  // ===== Stable compare for snapshots (no false positives from key order) =====
+function stableStringify(value){
+  const seen = new WeakSet();
+
+  const walk = (v) => {
+    if (v === null || typeof v !== 'object') return v;
+
+    if (seen.has(v)) return '[Circular]';
+    seen.add(v);
+
+    if (Array.isArray(v)) return v.map(walk);
+
+    // object: sort keys
+    const out = {};
+    Object.keys(v).sort().forEach(k => { out[k] = walk(v[k]); });
+    return out;
+  };
+
+  return JSON.stringify(walk(value));
+}
+
+// إزالة الضوضاء (IDs) من snapshot للمقارنة فقط
+function stripSnapshotNoise(obj){
+  if (obj == null || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(stripSnapshotNoise);
+
+  const out = {};
+  for (const [k, v] of Object.entries(obj)){
+    if (k === '_id') continue;          // ✅ تجاهل _id للمقارنة
+    out[k] = stripSnapshotNoise(v);
   }
-  function checkDirty(){
-    const snap = computeSnapshot();
-    const dirty = (snap.ancKey !== committedAncestorsRawKey) || (JSON.stringify(snap) !== JSON.stringify(initialFormSnapshot));
-    labelSpan.textContent = dirty ? 'حفظ التعديلات' : 'حفظ العائلة';
-    submitBtn.classList.toggle('save-dirty', dirty);
-  }
-  formEl.addEventListener('input', checkDirty);
-  formEl.addEventListener('change', checkDirty);
-  new MutationObserver(checkDirty).observe(wivesList, { childList:true, subtree:true });
-  new MutationObserver(()=>{ renumberAncestorLabels(false); updateAddAncestorBtnText(); checkDirty(); })
-    .observe(ancList, { childList:true, subtree:false });
+  return out;
+}
+
+function equalSnapshots(a, b){
+  return stableStringify(stripSnapshotNoise(a)) === stableStringify(stripSnapshotNoise(b));
+}
+
+
+// فحص دقيق (ثقيل) يُستخدم فقط عند الإغلاق/حفظ "لا تغيّر"
+function isFormDirtyAccurate(){
+  const snap = computeSnapshot();
+  return (snap.ancKey !== committedAncestorsRawKey) ||
+         (!equalSnapshots(snap, initialFormSnapshot));
+}
+
+// بدل checkDirty الثقيل على كل input: نرفع dirtyFlag فقط
+function isFromMetaEditor(target){
+  // أي input/change حصل داخل محرّر ميتا (حتى لو كان مخفي/ظاهر)
+  return !!target?.closest?.('.meta-edit');
+}
+
+formEl.addEventListener('input', (e) => {
+  if (isFromMetaEditor(e.target)) return;
+  markDirty();
+});
+
+formEl.addEventListener('change', (e) => {
+  if (isFromMetaEditor(e.target)) return;
+  markDirty();
+});
+  
+formEl.addEventListener('input', (e)=>{
+  validateYearOnlyLive(e.target);
+}, true);
+
+formEl.addEventListener('blur', (e)=>{
+  validateYearOnlyLive(e.target);
+}, true);
+
+// MutationObserver مخفف: بدون subtree (أرخص)
+new MutationObserver(()=> markDirty()).observe(wivesList, { childList:true, subtree:false });
+new MutationObserver(()=>{
+  renumberAncestorLabels(false);
+  updateAddAncestorBtnText();
+  markDirty();
+}).observe(ancList, { childList:true, subtree:false });
 
   /* ========= 10) إغلاق مؤكد ========= */
-  function isFormDirty(){
-    const snap = computeSnapshot();
-    return (snap.ancKey !== committedAncestorsRawKey) || (JSON.stringify(snap) !== JSON.stringify(initialFormSnapshot));
-  }
+function isFormDirty(){
+  // سريع
+  if (!dirtyFlag) return false;
+
+  // دقيق (ثقيل) فقط إذا كان عندنا مؤشر تغيّر
+  return isFormDirtyAccurate();
+}
+
   function requestClose(){
     if (!isFormDirty()) {
       disposeDirtyIndicators(modal);
@@ -1208,8 +1334,9 @@ addWifeBtn.addEventListener('click', ()=>{
     return {
       name:        (mb.dataset.motherName         || ff('#newMother')      || '').trim(),
       clan:        (mb.dataset.motherClan         || ff('#newMotherClan')  || '').trim(),
-      birthDate:   (mb.dataset.motherBirthDate    || '').trim(),
-      deathDate:   (mb.dataset.motherDeathDate    || '').trim(),
+birthDate: getDateValue(mb, '.mother-birthDate', 'motherBirthDate'),
+deathDate: getDateValue(mb, '.mother-deathDate', 'motherDeathDate'),
+
       birthPlace:  (mb.dataset.motherBirthPlace   || '').trim(),
       occupation:  (mb.dataset.motherOccupation   || '').trim(),
       cognomen:    (mb.dataset.motherCognomen     || '').trim(),
@@ -1225,8 +1352,8 @@ addWifeBtn.addEventListener('click', ()=>{
   const formFields = {
     title: ff('#newFamilyTitle'),
     rootName: ff('#newRootPerson'),
-    rootBirthDate: ff('#newRootPersonBirthDate'),
-    rootDeathDate: ff('#newRootPersonDeathDate'),
+rootBirthDate: getDateValue(formEl, '#newRootPersonBirthDate'),
+rootDeathDate: getDateValue(formEl, '#newRootPersonDeathDate'),
     rootBirthPlace: ff('#newRootPersonBirthPlace'),
     rootCognomen:   ff('#newRootPersonCognomen'),
     rootOccupation: ff('#newRootPersonOccupation'),
@@ -1273,27 +1400,6 @@ const ancestors = Array.from(ancList.querySelectorAll('.ancestor-row')).map(r=>(
   }
 })).filter(a=>a.name);
 
-  /* أداة قراءة تاريخ/سنة طفل واحد مع دعم yearOnly/fullDate
-     مع تفضيل القيمة المحفوظة في dataset (آخر حالة تم حفظها في الموديل) */
-  function readChildDate(ci, inputSelector, datasetKey){
-    // 1) القيمة المحفوظة في dataset ← هي المرجع الأساسي للـ snapshot
-    const ds = (ci.dataset[datasetKey] || '').trim();
-    if (ds) return ds;
-
-    // 2) إن لم يكن لدينا dataset، نقرأ من input (مع yearOnly/fullDate)
-    const inp = ci.querySelector(inputSelector);
-    if (inp){
-      const y = (inp.dataset.yearOnly || '').trim();
-      const d = (inp.dataset.fullDate || '').trim();
-
-      if (y && !d) return y;          // سنة فقط
-      if (d) return d;                // تاريخ كامل
-      return (inp.value || '').trim(); // fallback: قيمة الحقل
-    }
-
-    return '';
-  }
-
 
     const wives = Array.from(wivesList.querySelectorAll('.wife-block')).map(w=>{
       const pick = cls => (w.querySelector(`.${cls}`)?.value || '').trim();
@@ -1304,8 +1410,8 @@ const ancestors = Array.from(ancList.querySelectorAll('.ancestor-row')).map(r=>(
         role: (ci.dataset.childRole || 'ابن').trim(),
 
         // قراءة تاريخ/سنة الميلاد والوفاة من مدخلات الطفل مع دعم yearOnly/fullDate
-        birthDate: readChildDate(ci, '.child-edit-birthDate', 'childBirthDate'),
-        deathDate: readChildDate(ci, '.child-edit-deathDate', 'childDeathDate'),
+       birthDate: getDateValue(ci, '.child-edit-birthDate', 'childBirthDate'),
+deathDate: getDateValue(ci, '.child-edit-deathDate', 'childDeathDate'),
 
         birthPlace: (ci.dataset.childBirthPlace || '').trim(),
         occupation: (ci.dataset.childOccupation || '').trim(),
@@ -1357,8 +1463,9 @@ const ancestors = Array.from(ancList.querySelectorAll('.ancestor-row')).map(r=>(
           // باقي ميتا الزوجة (مباشرة من الحقول كما كان)
           tribe:      pick('wife-tribe'),
           clan:       pick('wife-clan'),
-          birthDate:  pick('wife-birthDate'),
-          deathDate:  pick('wife-deathDate'),
+birthDate: getDateValue(w, '.wife-birthDate'),
+deathDate: getDateValue(w, '.wife-deathDate'),
+
           birthPlace: pick('wife-birthPlace'),
           cognomen:   pick('wife-cognomen'),
           occupation: pick('wife-occupation'),
@@ -1382,23 +1489,6 @@ const ancestors = Array.from(ancList.querySelectorAll('.ancestor-row')).map(r=>(
       const fb = fatherBlock;
       if (!fb) return { name:'', bio:{} };
 
-      // أداة قراءة تاريخ/سنة للأب مع دعم yearOnly/fullDate
-      // تُفضِّل القيمة المحفوظة في dataset أولاً
-      const readFatherDate = (inputSelector, datasetKey) => {
-        const ds = (fb.dataset[datasetKey] || '').trim();
-        if (ds) return ds;
-
-        const inp = fb.querySelector(inputSelector);
-        if (inp){
-          const y = (inp.dataset.yearOnly || '').trim();
-          const d = (inp.dataset.fullDate || '').trim();
-          if (y && !d) return y;
-          if (d) return d;
-          return (inp.value || '').trim();
-        }
-        return '';
-      };
-
        // أداة قراءة نص (الإخوة/الأخوات) للأب:
       // تعتمد فقط على dataset (القيمة المثبّتة بعد الحفظ الفرعي)
       const readFatherText = (inputSelector, datasetKey) => {
@@ -1408,8 +1498,9 @@ const ancestors = Array.from(ancList.querySelectorAll('.ancestor-row')).map(r=>(
       return {
         name: (fb.dataset.fatherName || '').trim(),
         bio: {
-          birthDate:   readFatherDate('.father-birthDate', 'fatherBirthDate'),
-          deathDate:   readFatherDate('.father-deathDate', 'fatherDeathDate'),
+          birthDate: getDateValue(fb, '.father-birthDate', 'fatherBirthDate'),
+deathDate: getDateValue(fb, '.father-deathDate', 'fatherDeathDate'),
+
           birthPlace:  (fb.dataset.fatherBirthPlace || '').trim(),
           occupation:  (fb.dataset.fatherOccupation || '').trim(),
           cognomen:    (fb.dataset.fatherCognomen || '').trim(),
@@ -1438,9 +1529,32 @@ const ancestors = Array.from(ancList.querySelectorAll('.ancestor-row')).map(r=>(
     // 1) اقرأ القيم
     const { formFields, wives, ancestors, father } = readUI();
 
-    // 2) تحقّق عام
-    const errs = [];
-    let firstInvalidEl = null;
+// 2) تحقّق عام
+const errs = [];
+let firstInvalidEl = null;
+
+// تحقق سنة فقط (قبل بقية التحقق)
+const yearOnlyBad = Array.from(
+  formEl.querySelectorAll('input[data-year-toggle="1"]')
+).filter(inp => {
+  // فقط في وضع السنة فقط
+  if (inp.type !== 'text') return false;
+
+  const v = (inp.value || '').trim();
+  if (!v) return false; // الفاضي مسموح
+
+  return !/^\d{4}$/.test(v);
+});
+
+if (yearOnlyBad.length){
+  // وسم + تركيز أول واحد
+  yearOnlyBad.forEach(inp => validateYearOnlyLive(inp));
+  firstInvalidEl = yearOnlyBad[0];
+  markInvalid(firstInvalidEl);
+
+  showInfo('السنة يجب أن تكون 4 أرقام (مثال: 1999).');
+  return;
+}
 
     if (!formFields.title){
       errs.push('حقل "عنوان العائلة" مطلوب.');
@@ -1489,7 +1603,7 @@ const ancestors = Array.from(ancList.querySelectorAll('.ancestor-row')).map(r=>(
         .forEach(el=>{ if (el && !el.value.trim()) markInvalid(el); });
       emptyWives.forEach(x=> x.el && markInvalid(x.el));
       if (firstInvalidEl) markInvalid(firstInvalidEl);
-      showInfo(errs.join(' | '));
+showInfo(errs.map(e => `• ${e}`).join('\n'));
       return;
     }
 
@@ -1518,7 +1632,7 @@ normalizeNewFamilyForLineage(familyObj);
     if (editKey){
       const snapNow = computeSnapshot();
       const noAncChange  = snapNow.ancKey === committedAncestorsRawKey;
-      const noFormChange = JSON.stringify(snapNow) === JSON.stringify(initialFormSnapshot);
+const noFormChange = equalSnapshots(snapNow, initialFormSnapshot);
       if (noAncChange && noFormChange){ showInfo('لم يتم إجراء أي تغيير.'); return; }
     }
 
@@ -1552,8 +1666,8 @@ try {
     // إعادة ضبط واتساخ النصوص
     initialFormSnapshot = computeSnapshot();
     committedAncestorsRawKey = initialFormSnapshot.ancKey;
-    modal.resetDirtyIndicators?.();
-    checkDirty();
+modal.resetDirtyIndicators?.();
+clearDirty();
 
     disposeDirtyIndicators(modal);
     ModalManager.close(modal);

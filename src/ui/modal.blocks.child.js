@@ -6,7 +6,6 @@ import { makeMetaBlock, computeAgeFromBirthDate, formatListForMeta } from './mod
 
 import { attachYearModeToggle } from './modal.yearToggle.js';
 import { ensureDirtyDot, snapshotFieldValue } from './modal.dirtyIndicators.js';
-import { markGlobalDirty } from './modal.skeleton.js';
 
 /* =================== ثوابت معاينة الطفل (labels/icons/keys) =================== */
 
@@ -343,7 +342,6 @@ export function createChildEditItem(name, role, givenId) {
 
       try { nameEl.__dirtyToggle?.(); } catch {}
       try { childBlock?.dirtyCtl?.toggle(); } catch {}
-      try { markGlobalDirty(); } catch {}
     }
 
     [nameEl, roleEl, ...otherFields].forEach((el) => {
@@ -367,7 +365,6 @@ export function createChildEditItem(name, role, givenId) {
 
     try { nameEl.__dirtyToggle?.(); } catch {}
     try { childBlock?.dirtyCtl?.toggle(); } catch {}
-    try { markGlobalDirty(); } catch {}
   });
 
   /* ---------- ربط عنوان الطفل بنظام الاتساخ (نقطة ملونة) ---------- */

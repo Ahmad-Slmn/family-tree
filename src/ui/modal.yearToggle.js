@@ -62,10 +62,13 @@ export function getLogicalDateValue(inputEl){
 
   // وضع السنة فقط (type="text")
   if (inputEl.type === 'text'){
-    if (/^\d{4}$/.test(raw))           return raw;
+    //  إذا المستخدم كتب شيئًا (حتى لو غلط) اعتبره هو الحقيقة المنطقية
+    if (raw) return raw;
+
+    // إذا فاضي: ارجع المخزون الصحيح
     if (/^\d{4}$/.test(y))             return y;
     if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d.slice(0, 4);
-    return raw || y || d;
+    return '';
   }
 
   // وضع التاريخ الكامل (type="date")
@@ -173,6 +176,9 @@ export function attachYearModeToggle(inputEl){
     inputEl.setAttribute('inputmode', 'numeric');
     inputEl.setAttribute('pattern', '\\d{4}');
     inputEl.value = y;
+// 🔸 مهم: التغيير تم برمجيًا، نطلق أحداثًا حتى تتحدث أنظمة الاتساخ
+inputEl.dispatchEvent(new Event('input',  { bubbles: true }));
+inputEl.dispatchEvent(new Event('change', { bubbles: true }));
 
     btn.textContent = getToggleText('year');
     btn.dataset.mode = 'year';
@@ -192,6 +198,8 @@ export function attachYearModeToggle(inputEl){
     inputEl.removeAttribute('inputmode');
     inputEl.removeAttribute('pattern');
     inputEl.value = d;
+inputEl.dispatchEvent(new Event('input',  { bubbles: true }));
+inputEl.dispatchEvent(new Event('change', { bubbles: true }));
 
     btn.textContent = getToggleText('date');
     btn.dataset.mode = 'date';

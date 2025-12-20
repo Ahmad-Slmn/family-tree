@@ -6,6 +6,7 @@ import * as Model from '../model/families.js';
 import { roleGroup, inferGender } from '../model/roles.js';
 import * as Lineage from './lineage.js';
 import { getDuplicatesStatusForAllFamilies, getDuplicateSummary } from './duplicates.js';
+import { normalizeFamilyPipeline } from '../model/families.core.js';
 
 let _ctx = null;
 
@@ -120,15 +121,16 @@ const processFamily = (famKey)=>{
   const f = fams[famKey]; if (!f) return;
 
   // NEW: تهيئة pipeline + ensureIds بقوة (الهدف: غياب _id حالة نادرة)
-  if ((!f.__pipelineReady) && typeof Model.normalizeFamilyPipeline === 'function') {
-    const fromVer =
-      Number.isFinite(f.__v) ? f.__v :
-      Number.isFinite(f.schemaVersion) ? f.schemaVersion :
-      0;
+if (!f.__pipelineReady && typeof normalizeFamilyPipeline === 'function') {
+  const fromVer =
+    Number.isFinite(f.__v) ? f.__v :
+    Number.isFinite(f.schemaVersion) ? f.schemaVersion :
+    0;
 
-    Model.normalizeFamilyPipeline(f, { fromVer, markCore: f.__core === true });
-    f.__pipelineReady = true;
-  }
+  normalizeFamilyPipeline(f, { fromVer, markCore: f.__core === true });
+  f.__pipelineReady = true;
+}
+
   if (typeof Model.ensureIds === 'function'){
     try { Model.ensureIds(f); } catch {}
   }

@@ -65,13 +65,21 @@ const ROOT_FIELDS = [
 /* ====================== Mark global dirty ====================== */
 
 let familyFormRef = null;
+export const GLOBAL_DIRTY_EVENT = 'family:globalDirty';
+
+export function setFamilyFormRef(form) {
+  familyFormRef = form || null;
+}
 
 // تمييز زر الحفظ العام مباشرة بعد أي حفظ/تعديل فرعي
-export function markGlobalDirty() {
-  const form = familyFormRef || document.querySelector('#addFamilyForm');
+export function markGlobalDirty(reason = 'subsave') {
+  const form = familyFormRef;
   if (!form) return;
-  familyFormRef = form;
-  form.dispatchEvent(new Event('input', { bubbles: true }));
+
+  form.dispatchEvent(new CustomEvent(GLOBAL_DIRTY_EVENT, {
+    bubbles: true,
+    detail: { reason },
+  }));
 }
 
 /* ====================== أجزاء هيكل المودال ====================== */
@@ -179,8 +187,7 @@ ${buildActionsHTML()}
   wrap.innerHTML = html.trim();
   const modal = wrap.firstElementChild;
 
-  // حفظ مرجع النموذج للاستخدام في markGlobalDirty
-  familyFormRef = modal.querySelector('#addFamilyForm') || null;
+setFamilyFormRef(modal.querySelector('#addFamilyForm'));
 
   let ancLive = modal.querySelector('#ancLive');
   if (!ancLive) {

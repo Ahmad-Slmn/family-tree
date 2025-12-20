@@ -857,10 +857,7 @@ export function resolveGrandchildren(person, family, ctx){
 // 8) resolveUnclesAunts: الأعمام/العمّات/الأخوال/الخالات
 // ---------------------------------------
 export function resolveUnclesAunts(person, family, ctx){
-  if (!person || !family) return {
-    paternalUncles:[], paternalAunts:[],
-    maternalUncles:[], maternalAunts:[]
-  };
+  if (!person || !family) return { paternalUncles:[], paternalAunts:[], maternalUncles:[], maternalAunts:[] };
   const c = ensureCtx(family, ctx);
   const { father, mother } = getParents(person, family, c);
 
@@ -868,76 +865,97 @@ export function resolveUnclesAunts(person, family, ctx){
     if (!p) return [];
     const gp = getParents(p, family, c);
 
-    // أولاً من childrenIds
-    let kids = gp.father?.childrenIds
-      ?.map(id=>c.byId.get(String(id)))
-      .filter(Boolean) || [];
-
+    let kids = gp.father?.childrenIds?.map(id=>c.byId.get(String(id))).filter(Boolean) || [];
     if (!kids.length){
-      // fallback: من يشترك في نفس والديه
       let all = Array.from(c.byId.values());
-      if (c.connectedIds && c.connectedIds.size){
-        all = all.filter(x => x && c.connectedIds.has(String(x._id)));
-      }
+      if (c.connectedIds?.size) all = all.filter(x => x && c.connectedIds.has(String(x._id)));
 
-      const pFatherId = p.fatherId || p.bio?.fatherId || gp.father?._id || null;
-      const pMotherId = p.motherId || p.bio?.motherId || gp.mother?._id || null;
+      const pF = p.fatherId || p.bio?.fatherId || gp.father?._id || null;
+      const pM = p.motherId || p.bio?.motherId || gp.mother?._id || null;
 
       kids = all.filter(x=>{
         if (!x || x._id === p._id) return false;
-        const xFatherId = x.fatherId || x.bio?.fatherId || null;
-        const xMotherId = x.motherId || x.bio?.motherId || null;
-        const sameFather = pFatherId && xFatherId && String(pFatherId) === String(xFatherId);
-        const sameMother = pMotherId && xMotherId && String(pMotherId) === String(xMotherId);
-        return sameFather || sameMother;
+        const xF = x.fatherId || x.bio?.fatherId || null;
+        const xM = x.motherId || x.bio?.motherId || null;
+        return (pF && xF && String(pF) === String(xF)) || (pM && xM && String(pM) === String(xM));
       });
     }
-
     return kids.filter(x=>x._id!==p._id);
   };
 
-  const fatherSibs = getSibsOf(father);
-  const motherSibs = getSibsOf(mother);
-
-   const mapPeople = (arr, wantGender)=> (arr||[])
-    .filter(x => inferGender(x) === wantGender)
-    .map(x => ({ name:x.name, _id:x._id }));
-
-  // fallback يدوي من bio
+  const mapPeople = (arr, g)=> (arr||[]).filter(x => inferGender(x) === g).map(x => ({ name:x.name, _id:x._id }));
   const manualSibsOf = (p)=>{
-    if (!p) return { bro:[], sis:[] };
-    const b = p.bio || {};
-    return {
-      bro: Array.isArray(b.siblingsBrothers) ? b.siblingsBrothers : [],
-      sis: Array.isArray(b.siblingsSisters)  ? b.siblingsSisters  : []
-    };
+    const b = p?.bio || {};
+    return { bro: Array.isArray(b.siblingsBrothers) ? b.siblingsBrothers : [], sis: Array.isArray(b.siblingsSisters) ? b.siblingsSisters : [] };
   };
 
-  const fMan = manualSibsOf(father);
-  const mMan = manualSibsOf(mother);
+  const normName = (s)=> String(s||'')
+    .replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]/g,'')
+    .replace(/\u0640/g,'')
+    .replace(/[اأإآ]/g,'ا')
+    .replace(/[يى]/g,'ي')
+    .replace(/[هة]/g,'ه')
+    .replace(/\s+/g,' ')
+    .trim();
 
-  const mergeByNameOrId = (a,b)=>{
-    const out = [];
-    const seen = new Set();
-    const push = (x)=>{
-      if (!x) return;
-      const nm = String(x.name||'').trim();
-      if (!nm) return;
-      const idk = x._id ? `id:${x._id}` : `nm:${nm}`;
-      if (seen.has(idk)) return;
-      seen.add(idk);
-      out.push({ name:nm, _id:x._id });
+  // ربط manual بـ inferred فقط عند تطابق اسم "وحيد" (لتفادي الازدواجية)
+  const attachIdsFromInferredByName = (manualArr, inferredArr)=>{
+    const idx = new Map();
+    (inferredArr||[]).forEach(p=>{
+      if (!p?._id) return;
+      const k = normName(p.name);
+      if (!k) return;
+      (idx.get(k) || idx.set(k, []).get(k)).push(p);
+    });
+    return (manualArr||[]).map(x=>{
+      if (!x || x._id) return x;
+      const matches = idx.get(normName(x.name)) || [];
+      return (matches.length === 1) ? { ...x, _id: matches[0]._id } : x; // متعدد/صفر => يظل بدون id (يأخذ synthetic لاحقًا)
+    });
+  };
+
+  const mergePreferInferred = (inferred, manual)=>{
+    const out = [], seenIds = new Set(), usedSynthetic = new Set();
+    const makeSyntheticId = (key)=>{
+      let base = `manual:${key || 'x'}`, i = 1, id = base;
+      while (usedSynthetic.has(id) || seenIds.has(id)) id = `${base}#${++i}`;
+      usedSynthetic.add(id); return id;
     };
-    (a||[]).forEach(push);
-    (b||[]).forEach(push);
+
+    (inferred||[]).forEach(x=>{
+      const nm = String(x?.name||'').trim(); if (!nm) return;
+      const id = x?._id ? String(x._id) : null;
+      if (id && seenIds.has(id)) return;
+      if (id) seenIds.add(id);
+      out.push({ name:nm, _id:x._id });
+    });
+
+    (manual||[]).forEach(x=>{
+      const nm = String(x?.name||'').trim(); if (!nm) return;
+      const id = x?._id ? String(x._id) : null;
+      if (id){
+        if (seenIds.has(id)) return;
+        seenIds.add(id);
+        out.push({ name:nm, _id:x._id });
+      } else {
+        const sid = makeSyntheticId(normName(nm));
+        out.push({ name:nm, _id:sid, virtual:true, source:'manual' });
+      }
+    });
+
     return out;
   };
 
-  const paternalUncles = mergeByNameOrId(mapPeople(fatherSibs,'M'), fMan.bro);
-  const paternalAunts  = mergeByNameOrId(mapPeople(fatherSibs,'F'), fMan.sis);
-  const maternalUncles = mergeByNameOrId(mapPeople(motherSibs,'M'), mMan.bro);
-  const maternalAunts  = mergeByNameOrId(mapPeople(motherSibs,'F'), mMan.sis);
+  const fatherSibs = getSibsOf(father), motherSibs = getSibsOf(mother);
+  const fMan = manualSibsOf(father), mMan = manualSibsOf(mother);
 
+  const inferredPU = mapPeople(fatherSibs,'M'), inferredPA = mapPeople(fatherSibs,'F');
+  const inferredMU = mapPeople(motherSibs,'M'), inferredMA = mapPeople(motherSibs,'F');
+
+  const paternalUncles = mergePreferInferred(inferredPU, attachIdsFromInferredByName(fMan.bro, inferredPU));
+  const paternalAunts  = mergePreferInferred(inferredPA, attachIdsFromInferredByName(fMan.sis, inferredPA));
+  const maternalUncles = mergePreferInferred(inferredMU, attachIdsFromInferredByName(mMan.bro, inferredMU));
+  const maternalAunts  = mergePreferInferred(inferredMA, attachIdsFromInferredByName(mMan.sis, inferredMA));
 
   return { paternalUncles, paternalAunts, maternalUncles, maternalAunts };
 }

@@ -35,49 +35,47 @@ function normalizeDateOrYear(raw = '') {
   const v = String(raw || '').trim();
   if (!v) return { date: '', year: '' };
 
-  // سنة فقط (3–4 أرقام)
-  if (/^\d{3,4}$/.test(v)) {
-    return { date: '', year: v };
-  }
+// سنة فقط (4 أرقام)
+if (/^\d{4}$/.test(v)) {
+  return { date: '', year: v };
+}
 
-  // تاريخ مثل YYYY-MM-DD أو YYYY/MM/DD ⇒ نأخذ أول 3–4 أرقام كسنة
-  const m = v.match(/^(\d{3,4})[-/]/);
-  const year = m ? m[1] : v.slice(0, 4);
-  return { date: v, year };
+// تاريخ مثل YYYY-MM-DD أو YYYY/MM/DD ⇒ نأخذ أول 4 أرقام كسنة
+const m = v.match(/^(\d{4})[-/]/);
+const year = m ? m[1] : (/^\d{4}/.test(v) ? v.slice(0,4) : '');
+return { date: v, year };
+
+
 }
 
 /* ======================= أجداد ======================= */
 
 export function normalizeAncestors(list = []) {
   // يقبل إما [{name,bio}, ...] أو مجرد أسماء
-  const raw = (list || [])
-    .map((a, i) => ({
-      name: String(a?.name ?? a ?? '').trim(),
-      bio: {
-        birthDate:  a?.bio?.birthDate  || '',
-        deathDate:  a?.bio?.deathDate  || '',
-        birthPlace: a?.bio?.birthPlace || '',
-        occupation: a?.bio?.occupation || '',
-        cognomen:   a?.bio?.cognomen   || '',
-        remark:     a?.bio?.remark     || '',
+const raw = (list || [])
+  .map((a, i) => ({
+    _id: a?._id || '',
+    name: String(a?.name ?? a ?? '').trim(),
+    bio: {
+      birthDate:  a?.bio?.birthDate  || '',
+      deathDate:  a?.bio?.deathDate  || '',
+      birthPlace: a?.bio?.birthPlace || '',
+      occupation: a?.bio?.occupation || '',
+      cognomen:   a?.bio?.cognomen   || '',
+      remark:     a?.bio?.remark     || '',
+      tribe:      a?.bio?.tribe      || '',
+      clan:       a?.bio?.clan       || '',
+      birthYear:  a?.bio?.birthYear  || '',
+      deathYear:  a?.bio?.deathYear  || '',
+      achievements:    Array.isArray(a?.bio?.achievements) ? a.bio.achievements : [],
+      hobbies:         Array.isArray(a?.bio?.hobbies)      ? a.bio.hobbies      : [],
+      achievementsTxt: a?.bio?.achievementsTxt || '',
+      hobbiesTxt:      a?.bio?.hobbiesTxt      || ''
+    },
+    i
+  }))
+  .filter(x => x.name);
 
-        // نسب الجد
-        tribe:      a?.bio?.tribe      || '',
-        clan:       a?.bio?.clan       || '',
-
-        // دعم بيانات سابقة لو كان فيها birthYear/deathYear
-        birthYear:  a?.bio?.birthYear  || '',
-        deathYear:  a?.bio?.deathYear  || '',
-
-        // إنجازات/هوايات (دعم مصفوفة أو نص مفصول بفواصل)
-        achievements:    Array.isArray(a?.bio?.achievements) ? a.bio.achievements : [],
-        hobbies:         Array.isArray(a?.bio?.hobbies)      ? a.bio.hobbies      : [],
-        achievementsTxt: a?.bio?.achievementsTxt || '',
-        hobbiesTxt:      a?.bio?.hobbiesTxt      || ''
-      },
-      i
-    }))
-    .filter(x => x.name);
 
   return raw.map((x, idx) => {
     const b     = x.bio || {};
@@ -103,7 +101,7 @@ export function normalizeAncestors(list = []) {
     delete bio.hobbiesTxt;
 
     return {
-      _id: x?._id || newId(),
+      _id: x._id || newId(),
       name: x.name,
       generation: idx + 1,
       role: `الجد ${idx + 1}`,
@@ -296,29 +294,38 @@ const fSisters  = splitTextToNameObjects(fb.sistersTxt  || '');
   const fAchievements = splitTextList(fb.achievementsTxt || '');
   const fHobbies      = splitTextList(fb.hobbiesTxt      || '');
 
-   return {
-    _id: fatherIn._id || newId(),
-    name: fatherIn.name,
-    role: 'الأب',
-       fatherId: null,
+const bio = {
+  ...cloneBio(),
+  ...fb,
+  birthDate:  fBirth.date,
+  birthYear:  fBirth.year || fb.birthYear || '',
+  deathDate:  fDeath.date,
+  deathYear:  fDeath.year || fb.deathYear || '',
+  birthPlace: fb.birthPlace || '',
+  occupation: fb.occupation || '',
+  cognomen:   fb.cognomen   || '',
+  remark:     fb.remark     || '',
+  siblingsBrothers: fBrothers,
+  siblingsSisters:  fSisters,
+  achievements:     fAchievements,
+  hobbies:          fHobbies
+};
+
+//  لا نخزن txt داخل bio النهائي
+delete bio.brothersTxt;
+delete bio.sistersTxt;
+delete bio.achievementsTxt;
+delete bio.hobbiesTxt;
+
+return {
+  _id: fatherIn._id || newId(),
+  name: fatherIn.name,
+  role: 'الأب',
+  fatherId: null,
   motherId: null,
-    bio: {
-      ...cloneBio(),
-      ...fb,
-      birthDate:  fBirth.date,
-      birthYear:  fBirth.year || fb.birthYear || '',
-      deathDate:  fDeath.date,
-      deathYear:  fDeath.year || fb.deathYear || '',
-      birthPlace: fb.birthPlace || '',
-      occupation: fb.occupation || '',
-      cognomen:   fb.cognomen   || '',
-      remark:     fb.remark     || '',
-      siblingsBrothers: fBrothers,
-      siblingsSisters:  fSisters,
-      achievements:     fAchievements,
-      hobbies:          fHobbies
-    }
-  };
+  bio
+};
+
 }
 
 // بناء rootPerson مع ميتا الأم (من formFields) + الإخوة + الإنجازات والهوايات
@@ -371,10 +378,8 @@ function buildRootPerson({
       siblingsBrothers: gBrothers,
       siblingsSisters:  gSisters,
 
-      achievements:    rootAchievements,
-      hobbies:         rootHobbies,
-      achievementsTxt: rootAchievementsTxt,
-      hobbiesTxt:      rootHobbiesTxt,
+   achievements: rootAchievements,
+hobbies:      rootHobbies,
 
       motherName,
       motherClan,
@@ -388,10 +393,9 @@ function buildRootPerson({
       motherBrothersTxt: formFields.rootMotherBrothersTxt || '',
       motherSistersTxt:  formFields.rootMotherSistersTxt  || '',
 
-      motherAchievements,
-      motherHobbies,
-      motherAchievementsTxt,
-      motherHobbiesTxt
+motherAchievements,
+motherHobbies
+
     }
   };
 }
@@ -461,11 +465,6 @@ function buildWives({ wives, rootName, familyObj }) {
         achievements: childAchievements,
         hobbies:      childHobbies,
 
-        // روابط النسب الجديدة داخل bio أيضًا
-        fatherId,
-        motherId,
-        father: fatherId,
-  mother: motherId
       };
 
       // أجداد أم/أب
@@ -513,10 +512,8 @@ return {
       siblingsBrothers: wifeBrothers,
       siblingsSisters:  wifeSisters,
 
-      achievements:    wifeAchievements,
-      hobbies:         wifeHobbies,
-      achievementsTxt: wifeAchievementsTxt,
-      hobbiesTxt:      wifeHobbiesTxt,
+achievements: wifeAchievements,
+hobbies:      wifeHobbies,
 
       fatherAchievements: wifeFatherAchievements,
       fatherHobbies:      wifeFatherHobbies,
@@ -524,6 +521,15 @@ return {
       motherAchievements: wifeMotherAchievements,
       motherHobbies:      wifeMotherHobbies
     };
+// لا نخزن txt داخل bio النهائي للزوجة
+delete wifeBio.achievementsTxt;
+delete wifeBio.hobbiesTxt;
+
+// (اختياري لكن غالبًا مطلوب إذا عندك arrays بديلة لها)
+delete wifeBio.fatherAchievementsTxt;
+delete wifeBio.fatherHobbiesTxt;
+delete wifeBio.motherAchievementsTxt;
+delete wifeBio.motherHobbiesTxt;
 
         return { _id: wifeId, name: w.name || '', role, bio: wifeBio, children: mappedChildren };
 

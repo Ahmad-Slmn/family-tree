@@ -4,7 +4,6 @@
 import { makeMetaBlock, computeAgeFromBirthDate, formatListForMeta } from './modal.metaBlock.js';
 
 import { attachYearModeToggle } from './modal.yearToggle.js';
-import { markGlobalDirty } from './modal.skeleton.js';
 
 /* ======================= ثوابت عرض الأم (labels/icons/keys) ======================= */
 
@@ -215,7 +214,6 @@ export function createMotherBlock() {
       }
 
       try { nameEl.__dirtyToggle?.(); } catch {}
-      try { markGlobalDirty(); } catch {}
     }
 
     [nameEl, ...otherInputs].forEach((el) => {
