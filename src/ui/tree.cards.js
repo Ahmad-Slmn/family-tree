@@ -403,7 +403,7 @@ function normalizeLabel(l){
 }
 
 // ترتيب ثابت لعناوين العدّادات
-const COUNTER_RIGHT_ORDER = ['أبناء','بنات','أحفاد','حفيدات','إجمالي','الإجمالي'];
+const COUNTER_RIGHT_ORDER = ['أبناء','بنات','أحفاد','حفيدات','المجموع'];
 const COUNTER_LEFT_ORDER  = ['زوجات','إخوة','أخوات','أعمام','عمّات','أخوال','خالات'];
 
 export function createCounterBox(items = []){
@@ -524,7 +524,7 @@ export function createCounterBoxForPerson(person){
   if (dau.length)  items.push({ label:'بنات',  value: dau.length });
 
   // "الإجمالي" للأبناء يظهر فقط لصاحب الشجرة
-  if (isRoot && kids.length) items.push({ label:'الإجمالي', value: kids.length });
+  if (isRoot && kids.length) items.push({ label:'المجموع', value: kids.length });
 
   // NEW: عدّادات الأحفاد (أبناء/بنات/إجمالي) مثل قسم "الأسلاف والأجداد"
   const gkidsAll = Lineage.resolveGrandchildren(ref, family, ctx) || [];
@@ -539,6 +539,10 @@ export function createCounterBoxForPerson(person){
   }
 
 
+  // helper محلي
+  const hasName = (p) => !!String((p && typeof p === 'object') ? (p.name || '') : (p || '')).trim();
+
+  // ===== الإخوة/الأخوات: لا تربطها بـ connectedIds =====
   const sib = Lineage.resolveSiblings(ref, family, ctx) || {};
   const types = sib.types || {};
 
@@ -548,9 +552,10 @@ export function createCounterBoxForPerson(person){
     ...(Array.isArray(types.maternal) ? types.maternal : [])
   ];
 
-  let sibAll = sibAllRaw
-    .filter(x => x && x._id && ctx.connectedIds.has(String(x._id)));
+  // لا نفلتر بـ connectedIds هنا
+  let sibAll = sibAllRaw.filter(x => x && x._id && hasName(x));
 
+  // dedupe
   const seenSib = new Set();
   sibAll = sibAll.filter(s => {
     const id = String(s._id);
@@ -560,32 +565,36 @@ export function createCounterBoxForPerson(person){
   });
 
   if (!sibAll.length){
-    const brosFallback = (sib.brothers||[]).filter(s => s?._id && ctx.connectedIds.has(String(s._id)));
-    const sisFallback  = (sib.sisters ||[]).filter(s => s?._id && ctx.connectedIds.has(String(s._id)));
- if (brosFallback.length) items.push({ label:'إخوة', value:brosFallback.length });
-if (sisFallback.length)  items.push({ label:'أخوات', value:sisFallback.length });
+    const brosFallback = (sib.brothers || []).filter(hasName);
+    const sisFallback  = (sib.sisters  || []).filter(hasName);
+
+    if (brosFallback.length) items.push({ label:'إخوة',  value: brosFallback.length });
+    if (sisFallback.length)  items.push({ label:'أخوات', value: sisFallback.length });
   } else {
-    const bros = sibAll.filter(s => String(s.role||'').trim() === 'ابن');
-    const sis  = sibAll.filter(s => String(s.role||'').trim() === 'بنت');
-  if (bros.length) items.push({ label:'إخوة', value:bros.length });
-if (sis.length)  items.push({ label:'أخوات', value:sis.length });
+    const bros = sibAll.filter(s => String(s.role || '').trim() === 'ابن');
+    const sis  = sibAll.filter(s => String(s.role || '').trim() === 'بنت');
+
+    if (bros.length) items.push({ label:'إخوة',  value: bros.length });
+    if (sis.length)  items.push({ label:'أخوات', value: sis.length });
   }
 
+  // ===== الأعمام/العمات/الأخوال/الخالات: لا تربطها بـ connectedIds =====
   const ua = Lineage.resolveUnclesAunts(ref, family, ctx) || {};
 
-  const patUncles = Array.isArray(ua.paternalUncles) ? ua.paternalUncles : [];
-  const patAunts  = Array.isArray(ua.paternalAunts)  ? ua.paternalAunts  : [];
-  const matUncles = Array.isArray(ua.maternalUncles) ? ua.maternalUncles : [];
-  const matAunts  = Array.isArray(ua.maternalAunts)  ? ua.maternalAunts  : [];
+  const patUncles = (Array.isArray(ua.paternalUncles) ? ua.paternalUncles : []).filter(hasName);
+  const patAunts  = (Array.isArray(ua.paternalAunts)  ? ua.paternalAunts  : []).filter(hasName);
+  const matUncles = (Array.isArray(ua.maternalUncles) ? ua.maternalUncles : []).filter(hasName);
+  const matAunts  = (Array.isArray(ua.maternalAunts)  ? ua.maternalAunts  : []).filter(hasName);
 
-if (patUncles.length) items.push({ label:'أعمام',  value:patUncles.length });
-if (patAunts.length)  items.push({ label:'عمّات',  value:patAunts.length });
-if (matUncles.length) items.push({ label:'أخوال',  value:matUncles.length });
-if (matAunts.length)  items.push({ label:'خالات', value:matAunts.length });
+  if (patUncles.length) items.push({ label:'أعمام',  value: patUncles.length });
+  if (patAunts.length)  items.push({ label:'عمّات',  value: patAunts.length });
+  if (matUncles.length) items.push({ label:'أخوال',  value: matUncles.length });
+  if (matAunts.length)  items.push({ label:'خالات', value: matAunts.length });
 
   return items.length ? createCounterBox(items) : null;
 
 }
+
 
 // ===== موصلات بصرية بسيطة =====
 export function createConnector(){ return el('div','connector'); }

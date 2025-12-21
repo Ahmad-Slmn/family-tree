@@ -11,8 +11,13 @@ function getLineageMeta(family){
   return {
     tribeRule: meta.tribeRule || 'father',      // father | mother | firstAncestor | none
     clanRule:  meta.clanRule  || 'father',      // father | mother | firstAncestor | none
+
+    // NEW: سلوكيات حساسة "غير واقعية" لا تُفعّل إلا صراحة
+    allowNameParentInference: meta.allowNameParentInference === true,   // default false
+    allowLegacyGrandpaAdoptsRootKids: meta.allowLegacyGrandpaAdoptsRootKids === true // default false
   };
 }
+
 
 // مساعد: مرن لاستخراج parentId
 function getParentIdAny(p, which, ctx){
@@ -123,6 +128,31 @@ export function buildLineageContext(family){
     }
     return null;
   }
+  
+  function findUniqueParentByName(name){
+  const key = _norm(name);
+  if (!key) return null;
+
+  const matches = [];
+  for (const p of ctx.allById.values()){
+    if (!p) continue;
+
+    const nm = _norm(p.name || p.bio?.fullName || p.bio?.fullname || '');
+    if (!nm || nm !== key) continue;
+
+    // فلترة بسيطة لمنع ربط الاسم بشخص "ابن/بنت/زوجة" غالبًا
+    const r = String(p.role || '').trim();
+    const bad =
+      (r === 'ابن' || r === 'بنت' || r === 'زوجة' || r.startsWith('الزوجة'));
+    if (bad) continue;
+
+    matches.push(p);
+    if (matches.length > 1) break; // نريد "وحيد" فقط
+  }
+
+  return (matches.length === 1) ? matches[0] : null;
+}
+
 
   /* ============================================================
      (B) register all persons into allById
@@ -223,17 +253,20 @@ for (const w of ctx.wives){
     let wf = getParentIdAnyLocal(w, 'father');
     let wm = getParentIdAnyLocal(w, 'mother');
 
-    // NEW: infer by name if ids missing
-    if (!wf){
-      const fn = w.bio?.fatherName || w.fatherName || '';
-      const fp = findByName(fn);
-      if (fp?._id) wf = String(fp._id);
-    }
-    if (!wm){
-      const mn = w.bio?.motherName || w.motherName || '';
-      const mp = findByName(mn);
-      if (mp?._id) wm = String(mp._id);
-    }
+// SAFE: infer by name ONLY if explicitly enabled + unique match
+if (ctx.meta?.allowNameParentInference === true){
+  if (!wf){
+    const fn = w.bio?.fatherName || w.fatherName || '';
+    const fp = findUniqueParentByName(fn);
+    if (fp?._id) wf = String(fp._id);
+  }
+  if (!wm){
+    const mn = w.bio?.motherName || w.motherName || '';
+    const mp = findUniqueParentByName(mn);
+    if (mp?._id) wm = String(mp._id);
+  }
+}
+
 
     // سجّلهم كـ implied parents للزوجة (ديناميكي)
     if (wf || wm){
@@ -319,6 +352,91 @@ for (const w of ctx.wives){
       ctx.parentByChild.set(fid, storedF);
     }
   }
+  
+    // NEW 3) إدخال إخوة/أخوات الأب كأبناء حقيقيين لنفس الجد (أبي الأب)
+  // حتى يتم توريثهم داخل childrenIds للجد ويظهرون كأعمام/عمّات بشكل صحيح
+  if (ctx.father?._id && Array.isArray(ctx.ancestors) && ctx.ancestors.length) {
+    const fatherId   = String(ctx.father._id);
+    const grandpa    = ctx.ancestors[0]; // أقرب جد للأب
+    const grandpaId  = grandpa?._id ? String(grandpa._id) : null;
+
+    const fb = Array.isArray(ctx.father?.bio?.siblingsBrothers) ? ctx.father.bio.siblingsBrothers : [];
+    const fs = Array.isArray(ctx.father?.bio?.siblingsSisters)  ? ctx.father.bio.siblingsSisters  : [];
+
+    // مُعرّف ثابت للجلسة لمنع التكرار
+    const makeId = (kind, idx) => `fatherSib:${fatherId}:${kind}:${idx}`;
+
+    const addFatherSibling = (entry, role, idx) => {
+      if (!grandpaId) return;
+      const nm = String(entry?.name || '').trim();
+      if (!nm) return;
+
+const sid = makeId(role === 'ابن' ? 'bro' : 'sis', idx);
+
+// 0) إن كان العم/العمة موجود مسبقًا (نفس الاسم + نفس fatherId=grandpaId) استخدمه بدل synthetic
+const existing = (() => {
+  const key = _norm(nm);
+  if (!key) return null;
+  for (const p of ctx.allById.values()){
+    if (!p?._id) continue;
+    const pn = _norm(p.name || p.bio?.fullName || p.bio?.fullname || '');
+    if (pn !== key) continue;
+
+    const pf = getParentIdAnyLocal(p, 'father');
+    if (pf && String(pf) === String(grandpaId)) return p;
+  }
+  return null;
+})();
+
+if (existing?._id){
+  const exId = String(existing._id);
+
+  // ضمّه للسياق إن لم يكن متصلًا
+  if (!ctx.byId.has(exId)) ctx.byId.set(exId, existing);
+  ctx.connectedIds.add(exId);
+
+  const stored = ctx.parentByChild.get(exId) || {};
+  if (!stored.father) stored.father = grandpaId;
+  ctx.parentByChild.set(exId, stored);
+
+  if (!existing.fatherId && !existing.bio?.fatherId) existing.fatherId = grandpaId;
+  return;
+}
+
+// 1) لا تعيد إنشاءه لو synthetic موجود
+if (ctx.allById.has(sid)) return;
+
+// بعدها مباشرةً يجي كودك الحالي لإنشاء sib
+const sib = {
+  _id: sid,
+  name: nm,
+  role,
+  bio: {},
+  fatherId: grandpaId,
+  motherId: null,
+  spousesIds: [],
+  childrenIds: []
+};
+
+
+      // سجّل في جميع الخرائط
+      ctx.allById.set(sid, sib);
+      ctx.byId.set(sid, sib);
+      ctx.connectedIds.add(sid);
+
+      // ثبّت الأب/الأم ضمنيًا لهذا الشخص (لأجل getParents/resolve... إلخ)
+      const stored = ctx.parentByChild.get(sid) || {};
+      if (!stored.father) stored.father = grandpaId;
+      if (!stored.mother) stored.mother = null;
+      ctx.parentByChild.set(sid, stored);
+    };
+
+    // إخوة الأب => أبناء للجد
+    fb.forEach((b, i) => addFatherSibling(b, 'ابن', i));
+    // أخوات الأب => بنات للجد
+    fs.forEach((s, i) => addFatherSibling(s, 'بنت', i));
+  }
+
 
 
   /* ============================================================
@@ -413,9 +531,6 @@ for (const w of ctx.wives){
   /* ============================================================
      (G) rebuild childrenIds from scratch
      ============================================================ */
-  for (const p of ctx.byId.values()){
-    if (p) p.childrenIds = [];
-  }
 
   function pushChild(parentId, childId){
     if (!parentId || !childId) return;
@@ -458,19 +573,20 @@ for (const w of ctx.wives){
     ctx.connectedIds.add(String(pr._id));
   }
 
-  /* ============================================================
-     (I) father inherits rootPerson kids (legacy)
-     ============================================================ */
-  if (ctx.father && ctx.rootPerson?._id){
-    const rootId = String(ctx.rootPerson._id);
-    const fatherId = String(ctx.father._id);
+/* ============================================================
+   (I) legacy (DISABLED by default):
+   ============================================================ */
+if (ctx.meta?.allowLegacyGrandpaAdoptsRootKids && ctx.father && ctx.rootPerson?._id){
+  const rootId = String(ctx.rootPerson._id);
+  const fatherId = String(ctx.father._id);
 
-    for (const [cid, pr] of ctx.parentByChild.entries()){
-      if (pr?.father && String(pr.father) === rootId){
-        pushChild(fatherId, cid);
-      }
+  for (const [cid, pr] of ctx.parentByChild.entries()){
+    if (pr?.father && String(pr.father) === rootId){
+      pushChild(fatherId, cid);
     }
   }
+}
+
 
   return ctx;
 }

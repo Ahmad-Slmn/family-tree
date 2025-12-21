@@ -709,11 +709,17 @@ export function ensureRealMotherForRoot(fam){
 
   const rp = fam.rootPerson;
   const b  = rp.bio || {};
-  const hasMother =
-    ((b.motherName && b.motherName !== '-') ||
-     (b.motherClan && b.motherClan !== '-'));
+const hasRealMotherName = (b.motherName && b.motherName !== '-' && String(b.motherName).trim());
+const hasMotherClanOnly = (!hasRealMotherName) && (b.motherClan && b.motherClan !== '-' && String(b.motherClan).trim());
 
-  if (!hasMother) return;
+// لا ننشئ "أم افتراضية" بناءً على العشيرة فقط
+if (!hasRealMotherName && hasMotherClanOnly){
+  // نترك motherClan على bio فقط، ولا ننشئ person ولا motherId
+  if (rp.motherId) rp.motherId = null;
+  return;
+}
+
+if (!hasRealMotherName) return;
 
   // إن وُجد الأب: نضمن أن دوره على الأقل "الأب" إن كان فارغًا
   if (fam.father){
@@ -722,6 +728,21 @@ export function ensureRealMotherForRoot(fam){
       fam.father.role = 'الأب';
     }
   }
+  // helper: اربط الأم كزوجة للأب (فقط إذا كان اسمها موجود وحقيقي)
+  const linkMomAsWifeToFather = (momObj) => {
+    if (!fam.father || !momObj?._id) return;
+
+    const nm = String(momObj.name || '').trim();
+
+    // الشرط: لازم اسم حقيقي
+    if (!nm || nm === '-' || nm === 'أم صاحب الشجرة') return;
+
+    if (!Array.isArray(fam.father.wives)) fam.father.wives = [];
+
+    const mid = String(momObj._id);
+    const exists = fam.father.wives.some(w => w && String(w._id || w.id || '') === mid);
+    if (!exists) fam.father.wives.push(momObj);
+  };
 
   // لو كان للأم سجلّ موجود مسبقًا في fam.persons استخدمه واضبط له دورًا عامًا فقط إن كان فارغًا
   if (rp.motherId && fam.persons && fam.persons[rp.motherId]){
@@ -730,6 +751,19 @@ export function ensureRealMotherForRoot(fam){
     if (!mr){
       momExisting.role = 'الأم';
     }
+
+    // المهم: اربطها كزوجة للأب أيضًا
+    linkMomAsWifeToFather(momExisting);
+
+    // تأكيد spousesIds عند الطرفين (احتياط)
+    if (fam.father){
+      if (!Array.isArray(fam.father.spousesIds)) fam.father.spousesIds = [];
+      if (fam.father.spousesIds.indexOf(momExisting._id) === -1) fam.father.spousesIds.push(momExisting._id);
+
+      if (!Array.isArray(momExisting.spousesIds)) momExisting.spousesIds = [];
+      if (momExisting.spousesIds.indexOf(fam.father._id) === -1) momExisting.spousesIds.push(fam.father._id);
+    }
+
     return;
   }
 
@@ -763,6 +797,9 @@ export function ensureRealMotherForRoot(fam){
     if (!Array.isArray(fam.father.spousesIds)) fam.father.spousesIds = [];
     if (fam.father.spousesIds.indexOf(mom._id) === -1) fam.father.spousesIds.push(mom._id);
   }
+
+  // المهم: اربطها كزوجة للأب في father.wives
+  linkMomAsWifeToFather(mom);
 }
 
 
@@ -1374,22 +1411,26 @@ export function stripPhotosDeep(obj) {
 export function setChildDefaults(child, fam, wife) {
   if (!child || !child.bio) return;
 
-  const fatherShort = String(
-    fam.rootPerson?.name ||
-    fam.father?.name ||
-    ''
-  ).trim().split(/\s+/u)[0] || '';
+  const fatherFull =
+    String(
+      fam.rootPerson?.bio?.fullName ||
+      fam.rootPerson?.bio?.fullname ||
+      fam.rootPerson?.name ||
+      fam.father?.bio?.fullName ||
+      fam.father?.name ||
+      ''
+    ).trim();
 
   if (!child.bio.fatherName || child.bio.fatherName === '-') {
-    child.bio.fatherName = fatherShort;
+    child.bio.fatherName = fatherFull || '-';
   }
+
   if (!child.bio.motherName || child.bio.motherName === '-') {
     child.bio.motherName = (wife?.name && wife.name !== '-') ? wife.name : '-';
   }
 }
 
 // ربط wives داخل rootPerson كمرآة مشتقّة من fam.wives
-// ربط wives داخل rootPerson كمؤشر (pointer) لنفس مصفوفة fam.wives (بدون نسخ)
 export function linkRootPersonWives(fam) {
   if (!fam) return;
   if (!Array.isArray(fam.wives)) fam.wives = [];

@@ -401,9 +401,9 @@ window.__LINEAGE_CTX__ = lineageCtx;
 if (sib.sisters)  merged.push({label:'أخوات', value:sib.sisters});
 if (sib.wives)    merged.push({label:'زوجات', value:sib.wives});
 
-        if (allC.sons)      merged.push({label:'الأبناء', value:allC.sons});
-        if (allC.daughters) merged.push({label:'البنات', value:allC.daughters});
-        if (allC.total)     merged.push({label:'الإجمالي', value:allC.total});
+        if (allC.sons)      merged.push({label:'أبناء', value:allC.sons});
+        if (allC.daughters) merged.push({label:'بنات', value:allC.daughters});
+        if (allC.total)     merged.push({label:'المجموع', value:allC.total});
 
         const uaRoot = getUnclesAuntsForPerson(person, fam, lineageCtx);
 
@@ -617,9 +617,9 @@ if (q){
          if (sib.brothers) merged.push({ label: 'إخوة',  value: sib.brothers });
 if (sib.sisters)  merged.push({ label: 'أخوات', value: sib.sisters  });
 
-          if (kids.sons)      merged.push({ label: 'الأبناء',  value: kids.sons });
-          if (kids.daughters) merged.push({ label: 'البنات',   value: kids.daughters });
-          if (kids.total)     merged.push({ label: 'الإجمالي', value: kids.total });
+          if (kids.sons)      merged.push({ label: 'أبناء',  value: kids.sons });
+          if (kids.daughters) merged.push({ label: 'بنات',   value: kids.daughters });
+          if (kids.total)     merged.push({ label: 'المجموع', value: kids.total });
 
           if (uaWife.paternalUncles?.length)
             merged.push({ label: 'أعمام',  value: uaWife.paternalUncles.length });
