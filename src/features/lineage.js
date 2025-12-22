@@ -26,11 +26,11 @@ function getParentIdAny(p, which, ctx){
   return (
     p?.[`${w}Id`] || p?.[`${w}_id`] ||
     p?.bio?.[`${w}Id`] || p?.bio?.[`${w}_id`] ||
-    (ctx?.parentsOf?.get?.(id)?.[w]) ||
     (ctx?.parentByChild?.get?.(id)?.[w]) ||
     null
   );
 }
+
 
 // بناء سياق للعائلة لتجميع أهم المراجع
 export function buildLineageContext(family){
@@ -50,6 +50,18 @@ export function buildLineageContext(family){
     meta: getLineageMeta(fam)
   };
 
+    /* ============================================================
+     (B0) normalize ancestors order (nearest first: generation=1)
+     ============================================================ */
+  ctx.ancestors = (Array.isArray(fam?.ancestors) ? fam.ancestors.slice() : [])
+    .map(a => ({ a, gen: Number.isFinite(+a?.generation) ? +a.generation : 1 }))
+    .sort((x, y) => (x.gen ?? 1) - (y.gen ?? 1))
+    .map(x => x.a);
+
+  // IMPORTANT:
+  // في core: sortedAncestors يجعل gen=1 (الأقرب) أولاً.
+  // لذلك لا تعمل reverse هنا.
+
   /* ============================================================
      (A) helpers
      ============================================================ */
@@ -62,7 +74,6 @@ export function buildLineageContext(family){
     return (
       p?.[`${w}Id`] || p?.[`${w}_id`] ||
       p?.bio?.[`${w}Id`] || p?.bio?.[`${w}_id`] ||
-      (ctx.parentsOf?.get?.(id)?.[w]) ||            // إن وُجدت لاحقاً
       (ctx.parentByChild.get(String(id||''))?.[w]) ||
       null
     );
@@ -117,6 +128,66 @@ export function buildLineageContext(family){
     .replace(/[هة]/g,'ه')
     .replace(/\s+/g,' ')
     .trim();
+
+    function findExistingByNameAndFatherId(nm, fatherId){
+    const key = _norm(nm);
+    if (!key || !fatherId) return null;
+
+    const fid = String(fatherId);
+    for (const p of ctx.allById.values()){
+      if (!p?._id) continue;
+
+      const pn = _norm(p.name || p.bio?.fullName || p.bio?.fullname || '');
+      if (pn !== key) continue;
+
+      const pf = getParentIdAnyLocal(p, 'father');
+      if (pf && String(pf) === fid) return p;
+    }
+    return null;
+  }
+
+  function connectExistingAsChildOfFather(existingPerson, fatherId){
+    if (!existingPerson?._id || !fatherId) return;
+    const exId = String(existingPerson._id);
+    const fid  = String(fatherId);
+
+    if (!ctx.byId.has(exId)) ctx.byId.set(exId, existingPerson);
+    ctx.connectedIds.add(exId);
+
+    const stored = ctx.parentByChild.get(exId) || {};
+    if (!stored.father) stored.father = fid;
+    if (!('mother' in stored)) stored.mother = null;
+    ctx.parentByChild.set(exId, stored);
+
+    if (!existingPerson.fatherId && !existingPerson.bio?.fatherId) existingPerson.fatherId = fid;
+  }
+
+  function ensureSyntheticSibling(sid, nm, role, fatherId){
+    if (!sid || !nm || !fatherId) return;
+    if (ctx.allById.has(sid)) return;
+
+    const fid = String(fatherId);
+
+    const sib = {
+      _id: sid,
+      name: nm,
+      role,
+      bio: {},
+      fatherId: fid,
+      motherId: null,
+      spousesIds: [],
+      childrenIds: []
+    };
+
+    ctx.allById.set(sid, sib);
+    ctx.byId.set(sid, sib);
+    ctx.connectedIds.add(sid);
+
+    const stored = ctx.parentByChild.get(sid) || {};
+    if (!stored.father) stored.father = fid;
+    if (!('mother' in stored)) stored.mother = null;
+    ctx.parentByChild.set(sid, stored);
+  }
 
   function findByName(name){
     const key = _norm(name);
@@ -314,7 +385,61 @@ if (ctx.meta?.allowNameParentInference === true){
       }
     }
   }
-  
+
+  /* ============================================================
+     (D3) NEW: إدخال إخوة/أخوات كل "جد" كأبناء لنفس أبيه (الجد الأعلى)
+     حتى يظهرون كأعمام/عمّات للجيل الأدنى بشكل صحيح
+     ============================================================ */
+  if (Array.isArray(ctx.ancestors) && ctx.ancestors.length > 1) {
+    const anc = ctx.ancestors; // الأقرب أولاً
+
+    for (let i = 0; i < anc.length - 1; i++) {
+      const curAnc    = anc[i];
+      const parentAnc = anc[i + 1];
+      if (!curAnc?._id || !parentAnc?._id) continue;
+
+      const curId     = String(curAnc._id);
+      const grandpaId = String(parentAnc._id);
+
+      const bros = Array.isArray(curAnc?.bio?.siblingsBrothers) ? curAnc.bio.siblingsBrothers : [];
+      const sis  = Array.isArray(curAnc?.bio?.siblingsSisters)  ? curAnc.bio.siblingsSisters  : [];
+      if (!bros.length && !sis.length) continue;
+
+      // إخوة الجد
+      for (let bi = 0; bi < bros.length; bi++){
+        const entry = bros[bi];
+        const nm = String(entry?.name || '').trim();
+        if (!nm) continue;
+
+        const existing = findExistingByNameAndFatherId(nm, grandpaId);
+        if (existing?._id){
+          connectExistingAsChildOfFather(existing, grandpaId);
+          continue;
+        }
+
+        const sid = `ancSib:${curId}:bro:${bi}`;
+        ensureSyntheticSibling(sid, nm, 'ابن', grandpaId);
+      }
+
+      // أخوات الجد
+      for (let si = 0; si < sis.length; si++){
+        const entry = sis[si];
+        const nm = String(entry?.name || '').trim();
+        if (!nm) continue;
+
+        const existing = findExistingByNameAndFatherId(nm, grandpaId);
+        if (existing?._id){
+          connectExistingAsChildOfFather(existing, grandpaId);
+          continue;
+        }
+
+        const sid = `ancSib:${curId}:sis:${si}`;
+        ensureSyntheticSibling(sid, nm, 'بنت', grandpaId);
+      }
+    }
+  }
+
+
     /* ============================================================
      (D2) NEW: ensure paternal chain links (rootPerson -> father -> nearest ancestor)
      ============================================================ */
@@ -371,64 +496,17 @@ if (ctx.meta?.allowNameParentInference === true){
       const nm = String(entry?.name || '').trim();
       if (!nm) return;
 
-const sid = makeId(role === 'ابن' ? 'bro' : 'sis', idx);
+      const sid = makeId(role === 'ابن' ? 'bro' : 'sis', idx);
 
-// 0) إن كان العم/العمة موجود مسبقًا (نفس الاسم + نفس fatherId=grandpaId) استخدمه بدل synthetic
-const existing = (() => {
-  const key = _norm(nm);
-  if (!key) return null;
-  for (const p of ctx.allById.values()){
-    if (!p?._id) continue;
-    const pn = _norm(p.name || p.bio?.fullName || p.bio?.fullname || '');
-    if (pn !== key) continue;
+      // 0) إن كان موجود مسبقًا بنفس (الاسم + نفس fatherId=grandpaId) استخدمه
+      const existing = findExistingByNameAndFatherId(nm, grandpaId);
+      if (existing?._id){
+        connectExistingAsChildOfFather(existing, grandpaId);
+        return;
+      }
 
-    const pf = getParentIdAnyLocal(p, 'father');
-    if (pf && String(pf) === String(grandpaId)) return p;
-  }
-  return null;
-})();
-
-if (existing?._id){
-  const exId = String(existing._id);
-
-  // ضمّه للسياق إن لم يكن متصلًا
-  if (!ctx.byId.has(exId)) ctx.byId.set(exId, existing);
-  ctx.connectedIds.add(exId);
-
-  const stored = ctx.parentByChild.get(exId) || {};
-  if (!stored.father) stored.father = grandpaId;
-  ctx.parentByChild.set(exId, stored);
-
-  if (!existing.fatherId && !existing.bio?.fatherId) existing.fatherId = grandpaId;
-  return;
-}
-
-// 1) لا تعيد إنشاءه لو synthetic موجود
-if (ctx.allById.has(sid)) return;
-
-// بعدها مباشرةً يجي كودك الحالي لإنشاء sib
-const sib = {
-  _id: sid,
-  name: nm,
-  role,
-  bio: {},
-  fatherId: grandpaId,
-  motherId: null,
-  spousesIds: [],
-  childrenIds: []
-};
-
-
-      // سجّل في جميع الخرائط
-      ctx.allById.set(sid, sib);
-      ctx.byId.set(sid, sib);
-      ctx.connectedIds.add(sid);
-
-      // ثبّت الأب/الأم ضمنيًا لهذا الشخص (لأجل getParents/resolve... إلخ)
-      const stored = ctx.parentByChild.get(sid) || {};
-      if (!stored.father) stored.father = grandpaId;
-      if (!stored.mother) stored.mother = null;
-      ctx.parentByChild.set(sid, stored);
+      // 1) وإلا: أنشئ synthetic موحّد عبر helper
+      ensureSyntheticSibling(sid, nm, role, grandpaId);
     };
 
     // إخوة الأب => أبناء للجد
@@ -711,7 +789,7 @@ export function resolveTribe(person, family, ctx){
 
   const parents = getParents(person, family, c);
   const fTribe  = parents.father?.bio?.tribe;
-  const mTribe  = parents.mother?.bio?.tribe;
+  const mTribe  = parents.mother?.bio?.tribe || bio.motherTribe;
 
   // الزوجة ترث فقط من والديها لا من الزوج/الأبناء
   if (role === 'زوجة' || role.startsWith('الزوجة')){

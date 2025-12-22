@@ -16,6 +16,7 @@ const MOTHER_VIEW_LABELS = {
   motherBirthPlace:   'مكان الميلاد',
   motherOccupation:   'المهنة',
   motherRemark:       'ملاحظة',
+  motherTribe:        'القبيلة',
   motherClan:         'العشيرة',
   motherBrothers:     'الإخوة',
   motherSisters:      'الأخوات',
@@ -32,6 +33,7 @@ const MOTHER_VIEW_ICONS = {
   motherBirthPlace:   'fa-location-dot',
   motherOccupation:   'fa-briefcase',
   motherRemark:       'fa-note-sticky',
+  motherTribe:        'fa-people-group',
   motherClan:         'fa-users',
   motherBrothers:     'fa-user-group',
   motherSisters:      'fa-user-group',
@@ -39,8 +41,8 @@ const MOTHER_VIEW_ICONS = {
   motherHobbies:      'fa-heart',
 };
 
-const MOTHER_PREVIEW_KEYS = ['motherName', 'motherAge', 'motherBirthPlace', 'motherClan'];
-const MOTHER_FULL_KEYS    = [
+const MOTHER_PREVIEW_KEYS = ['motherName', 'motherAge', 'motherBirthPlace', 'motherTribe', 'motherClan'];
+const MOTHER_FULL_KEYS = [
   'motherName',
   'motherAge',
   'motherBirthDate',
@@ -49,12 +51,14 @@ const MOTHER_FULL_KEYS    = [
   'motherOccupation',
   'motherCognomen',
   'motherRemark',
+  'motherTribe',
   'motherClan',
-  'motherAchievements',
-  'motherHobbies',
   'motherBrothers',
   'motherSisters',
+  'motherAchievements',
+  'motherHobbies',
 ];
+
 
 /* ======================= إنشاء كتلة الأم ======================= */
 
@@ -63,7 +67,7 @@ export function createMotherBlock() {
   row.className = 'mother-row';
 
   // نفس الـ DOM السابق بدون تغيير
-  row.innerHTML = `
+row.innerHTML = `
 <label class="label mother-label" for="motherName">
   <i class="fa-solid fa-person-dress"></i> الأم
 </label>
@@ -117,6 +121,10 @@ export function createMotherBlock() {
     <span class="label"><i class="fa-solid fa-note-sticky"></i> ملاحظة</span>
     <input type="text" class="mother-remark" name="motherRemark" placeholder="معلومة مختصرة">
   </label>
+  <label class="field-inline">
+    <span class="label"><i class="fa-solid fa-people-group"></i> القبيلة</span>
+    <input type="text" class="mother-tribe" name="motherTribe" placeholder="مثال: قحطان">
+  </label>
 
   <label class="field-inline">
     <span class="label"><i class="fa-solid fa-users"></i> العشيرة</span>
@@ -149,7 +157,6 @@ export function createMotherBlock() {
   </div>
 </div>
 `;
-
   const grid   = row.querySelector('.mother-grid');
   const toggle = row.querySelector('.meta-toggle-btn');
   const view   = row.querySelector('.mother-view');
@@ -165,6 +172,7 @@ export function createMotherBlock() {
   const bpEl   = edit.querySelector('.mother-birthPlace');
   const ocEl   = edit.querySelector('.mother-occupation');
   const rmEl   = edit.querySelector('.mother-remark');
+  const tribeEl = edit.querySelector('.mother-tribe');
   const clanEl = edit.querySelector('.mother-clan');
   const brosEl = edit.querySelector('.mother-brothers');
   const sisEl  = edit.querySelector('.mother-sisters');
@@ -172,7 +180,7 @@ export function createMotherBlock() {
   const hobEl  = edit.querySelector('.mother-hobbies');
 
   // الحقول الأخرى (غير الاسم) التي يعتمد عليها شرط الاسم الإلزامي
-  const otherInputs = [cgEl, bdEl, ddEl, bpEl, ocEl, rmEl, clanEl, brosEl, sisEl, achEl, hobEl];
+  const otherInputs = [cgEl, bdEl, ddEl, bpEl, ocEl, rmEl, tribeEl, clanEl, brosEl, sisEl, achEl, hobEl];
 
   // تفعيل وضع السنة/التاريخ
   attachYearModeToggle(bdEl);
@@ -189,6 +197,7 @@ export function createMotherBlock() {
     motherBirthPlace:   bpEl,
     motherOccupation:   ocEl,
     motherRemark:       rmEl,
+    motherTribe:        tribeEl,
     motherClan:         clanEl,
     motherBrothers:     brosEl,
     motherSisters:      sisEl,
@@ -254,6 +263,7 @@ valueTransform(v) {
     motherBirthPlace: (v.motherBirthPlace || '').trim(),
     motherOccupation: (v.motherOccupation || '').trim(),
     motherRemark:     (v.motherRemark     || '').trim(),
+    motherTribe:      (v.motherTribe      || '').trim(),
     motherClan:       (v.motherClan       || '').trim(),
 
     // تحويل النصوص المتعددة إلى قوائم نقطية في المعاينة

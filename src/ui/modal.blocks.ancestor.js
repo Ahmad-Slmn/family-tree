@@ -16,6 +16,8 @@ const ANCESTOR_VIEW_LABELS = {
   birthPlace:   'مكان الميلاد',
   occupation:   'المهنة',
   cognomen:     'اللقب',
+    brothers:     'الإخوة',
+  sisters:      'الأخوات',
   remark:       'ملاحظة',
   achievements: 'الإنجازات',
   hobbies:      'الهوايات',
@@ -29,6 +31,8 @@ const ANCESTOR_VIEW_ICONS = {
   birthPlace:   'fa-location-dot',
   occupation:   'fa-briefcase',
   cognomen:     'fa-signature',
+    brothers:     'fa-people-group',
+  sisters:      'fa-people-group',
   remark:       'fa-note-sticky',
   achievements: 'fa-trophy',
   hobbies:      'fa-heart',
@@ -43,6 +47,8 @@ const ANCESTOR_VIEW_FULL_KEYS    = [
   'birthPlace',
   'occupation',
   'cognomen',
+  'brothers',
+  'sisters',
   'remark',
   'achievements',
   'hobbies',
@@ -111,6 +117,17 @@ row.dataset.generation   = String(index);
     <span class="label"><i class="fa-solid fa-signature"></i> اللقب</span>
     <input type="text" class="ancestor-cognomen" name="ancestorCognomen" placeholder="مثال: أبو خالد">
   </label>
+  
+    <label class="field-inline">
+    <span class="label"><i class="fa-solid fa-people-group"></i> الإخوة</span>
+    <input type="text" class="ancestor-brothers" name="ancestorBrothers" placeholder="مثال: محمد، صالح، عبدالله">
+  </label>
+
+  <label class="field-inline">
+    <span class="label"><i class="fa-solid fa-people-group"></i> الأخوات</span>
+    <input type="text" class="ancestor-sisters" name="ancestorSisters" placeholder="مثال: فاطمة، نورة">
+  </label>
+
 
   <label class="field-inline">
     <span class="label"><i class="fa-solid fa-trophy"></i> الإنجازات</span>
@@ -149,6 +166,8 @@ row.dataset.generation   = String(index);
   const bpEl   = edit.querySelector('.ancestor-birthPlace');
   const ocEl   = edit.querySelector('.ancestor-occupation');
   const cgEl   = edit.querySelector('.ancestor-cognomen');
+  const brEl   = edit.querySelector('.ancestor-brothers');
+  const siEl   = edit.querySelector('.ancestor-sisters');
   const achEl  = edit.querySelector('.ancestor-achievements');
   const hobEl  = edit.querySelector('.ancestor-hobbies');
   const rmEl   = edit.querySelector('.ancestor-remark');
@@ -158,7 +177,7 @@ row.dataset.generation   = String(index);
   const editAncBtn   = row.querySelector('.edit-ancestor-btn');
 
   // مجموعة الحقول المستخدمة في makeMetaBlock
-  const ancInputs = [nameEl, bdEl, ddEl, bpEl, ocEl, cgEl, achEl, hobEl, rmEl];
+  const ancInputs = [nameEl, bdEl, ddEl, bpEl, ocEl, cgEl, brEl, siEl, achEl, hobEl, rmEl];
 
   /* ---------- تحسين إمكانية الوصول لمقبض السحب / العنوان ---------- */
 
@@ -195,6 +214,8 @@ row.dataset.generation   = String(index);
     ancestorBirthPlace:   bpEl,
     ancestorOccupation:   ocEl,
     ancestorCognomen:     cgEl,
+    ancestorBrothers:    brEl,
+    ancestorSisters:     siEl,
     ancestorAchievements: achEl,
     ancestorHobbies:      hobEl,
     ancestorRemark:       rmEl,
@@ -232,6 +253,8 @@ row.dataset.generation   = String(index);
         birthPlace:   (v.ancestorBirthPlace  || '').trim(),
         occupation:   (v.ancestorOccupation  || '').trim(),
         cognomen:     (v.ancestorCognomen    || '').trim(),
+        brothers:     formatListForMeta(v.ancestorBrothers),
+        sisters:      formatListForMeta(v.ancestorSisters),
         remark:       (v.ancestorRemark      || '').trim(),
 
         achievements: formatListForMeta(v.ancestorAchievements),

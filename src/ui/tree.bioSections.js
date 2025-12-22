@@ -767,6 +767,7 @@ function buildBasicSection(bio, person, family){
 
   addBioRow(body, LABELS.tribe      || 'القبيلة',    resolvedTribe,  'tribe');
   addBioRow(body, LABELS.clan       || 'العشيرة',    resolvedClan,   'clan');
+    addBioRow(body, LABELS.motherTribe || 'قبيلة الأم', bio.motherTribe, 'motherTribe');
   addBioRow(body, LABELS.motherClan || 'عشيرة الأم', bio.motherClan, 'motherClan');
 
   // تلخيص الانتماء القبلي نصيًا (مع تذكير/تأنيث الفعل)
@@ -942,7 +943,6 @@ function buildBasicSection(bio, person, family){
   return section;
 }
 
-
 /* ===== 2) الأسلاف والأجداد + الأحفاد ===== */
 function buildGrandsSection(bio, person, family, handlers){
   const { section, body } = createBioSection('grands', 'الأسلاف والأجداد', { defaultOpen: true });
@@ -951,14 +951,18 @@ function buildGrandsSection(bio, person, family, handlers){
   fatherSide.append(textEl('h3', 'جهة الأب'));
   addBioRow(fatherSide, 'اسم الجد',    bio.paternalGrandfather);
   addBioRow(fatherSide, 'اسم الجدة',   bio.paternalGrandmother);
+  addBioRow(fatherSide, 'قبيلة الجدة', bio.paternalGrandmotherTribe);
   addBioRow(fatherSide, 'عشيرة الجدة', bio.paternalGrandmotherClan);
 
   const motherSide = el('div', 'bio-subsection');
   motherSide.append(textEl('h3', 'جهة الأم'));
   addBioRow(motherSide, 'اسم الجد',  bio.maternalGrandfather);
-  addBioRow(motherSide, 'اسم الجدة', bio.maternalGrandmother);
   const derivedMaternalClan = bio.maternalGrandfatherClan || bio.motherClan || '';
+  const derivedMaternalTribe = bio.maternalGrandfatherTribe || bio.motherTribe || '';
+  addBioRow(motherSide, 'قبيلة الجد', derivedMaternalTribe);
   addBioRow(motherSide, 'عشيرة الجد',  derivedMaternalClan);
+  addBioRow(motherSide, 'اسم الجدة', bio.maternalGrandmother);
+  addBioRow(motherSide, 'قبيلة الجدة', bio.maternalGrandmotherTribe);
   addBioRow(motherSide, 'عشيرة الجدة', bio.maternalGrandmotherClan);
 
   const hasFatherSide = !!fatherSide.querySelector('.bio-field');

@@ -5,7 +5,7 @@
 import { getArabicOrdinal, getArabicOrdinalF } from '../utils.js';
 
 // نسخة الـ Schema الحالية
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 // ================================
 // 1) تطبيع نصوص وأسماء (عربي عام)
@@ -81,9 +81,12 @@ export const DEFAULT_BIO = {
   name: '',
   fatherName: '',
   motherName: '',
+  motherTribe: '',
   motherClan: '',
   tribe: '',
   clan: '',
+  paternalGrandmotherTribe: '',
+  maternalGrandmotherTribe: '',
   birthDate: '',
   birthYear: '',
   deathDate: '',
@@ -105,11 +108,14 @@ export const LABELS = {
   tribe: 'القبيلة',
   clan: 'العشيرة',
   motherName: 'اسم الأم',
+  motherTribe: 'قبيلة الأم',
   motherClan: 'عشيرة الأم',
   maternalGrandfather: 'اسم الجد من جهة الأم',
   maternalGrandmother: 'الجدة من جهة الأم',
+   maternalGrandmotherTribe: 'قبيلة الجدة من جهة الأم',
   maternalGrandmotherClan: 'عشيرة الجدة من جهة الأم',
   paternalGrandmother: 'الجدة من جهة الأب',
+  paternalGrandmotherTribe: 'قبيلة الجدة من جهة الأب',
   paternalGrandmotherClan: 'عشيرة الجدة من جهة الأب',
   paternalGrandfather: 'الجد من جهة الأب',
 
@@ -196,17 +202,26 @@ export function normalizeWifeRole(role, idx){
 
 export function normalizeWife(w, idx){
   const wifeBio = _withBio(w?.bio);
+
   const ww = {
+    _id: w?._id, // مهم جدًا: لا تسقط الـ id حتى لا تتكرر الإضافة لاحقًا
     name: w?.name || '',
     role: normalizeWifeRole(w?.role, idx),
     bio: wifeBio,
+
+    //  حافظ على روابط الوالدين إن كانت موجودة (اختياري لكنه مفيد)
+    fatherId: (w?.fatherId != null) ? w.fatherId : (w?.bio?.fatherId ?? null),
+    motherId: (w?.motherId != null) ? w.motherId : (w?.bio?.motherId ?? null),
+
     stories: Array.isArray(w?.stories) ? w.stories : [],
     events: Array.isArray(w?.events) ? w.events : [],
     sources: Array.isArray(w?.sources) ? w.sources : []
   };
+
   ww.children = (w?.children || []).map(normalizeChild);
   return ww;
 }
+
 
 // نسخة أعمق للاستيراد/التحميل
 export function normalizeChildForLoad(c) {
@@ -542,6 +557,12 @@ export function normalizeNewFamilyForLineage(f){
   }
 
   if (f.father && f.father.bio) fixSiblings(f.father.bio);
+  // NEW: الأسلاف أيضًا (الجد/الأجداد) — حتى تتحول النصوص إلى siblingsBrothers/siblingsSisters
+  if (Array.isArray(f.ancestors)) {
+    f.ancestors.forEach(a => {
+      if (a && a.bio) fixSiblings(a.bio);
+    });
+  }
 
   if (f.rootPerson && f.rootPerson.bio) {
     fixSiblings(f.rootPerson.bio);
@@ -709,15 +730,21 @@ export function ensureRealMotherForRoot(fam){
 
   const rp = fam.rootPerson;
   const b  = rp.bio || {};
-const hasRealMotherName = (b.motherName && b.motherName !== '-' && String(b.motherName).trim());
-const hasMotherClanOnly = (!hasRealMotherName) && (b.motherClan && b.motherClan !== '-' && String(b.motherClan).trim());
+const hasRealMotherName =
+  (b.motherName && b.motherName !== '-' && String(b.motherName).trim());
 
-// لا ننشئ "أم افتراضية" بناءً على العشيرة فقط
-if (!hasRealMotherName && hasMotherClanOnly){
-  // نترك motherClan على bio فقط، ولا ننشئ person ولا motherId
+const hasMotherMetaOnly =
+  (!hasRealMotherName) && (
+    (b.motherClan  && b.motherClan  !== '-' && String(b.motherClan).trim()) ||
+    (b.motherTribe && b.motherTribe !== '-' && String(b.motherTribe).trim())
+  );
+
+// لا ننشئ "أم افتراضية" بناءً على (قبيلة/عشيرة) فقط
+if (hasMotherMetaOnly){
   if (rp.motherId) rp.motherId = null;
   return;
 }
+
 
 if (!hasRealMotherName) return;
 
@@ -1428,6 +1455,44 @@ export function setChildDefaults(child, fam, wife) {
   if (!child.bio.motherName || child.bio.motherName === '-') {
     child.bio.motherName = (wife?.name && wife.name !== '-') ? wife.name : '-';
   }
+  
+  const gpName  = String(fam?.rootPerson?.bio?.motherName  || '').trim();
+  const gpClan  = String(fam?.rootPerson?.bio?.motherClan  || '').trim();
+  const gpTribe = String(fam?.rootPerson?.bio?.motherTribe || '').trim();
+
+  // اسم الجدة من جهة الأب
+  if ((!child.bio.paternalGrandmother || child.bio.paternalGrandmother === '-') && gpName) {
+    child.bio.paternalGrandmother = gpName;
+  }
+
+  // عشيرة الجدة من جهة الأب
+  if ((!child.bio.paternalGrandmotherClan || child.bio.paternalGrandmotherClan === '-') && gpClan) {
+    child.bio.paternalGrandmotherClan = gpClan;
+  }
+
+  // قبيلة الجدة من جهة الأب (هذه كانت ناقصة)
+  if ((!child.bio.paternalGrandmotherTribe || child.bio.paternalGrandmotherTribe === '-') && gpTribe) {
+    child.bio.paternalGrandmotherTribe = gpTribe;
+  }
+  
+  const mgmName  = String(wife?.bio?.motherName  || '').trim();
+const mgmClan  = String(wife?.bio?.motherClan  || '').trim();
+const mgmTribe = String(wife?.bio?.motherTribe || '').trim();
+
+// اسم الجدة من جهة الأم
+if ((!child.bio.maternalGrandmother || child.bio.maternalGrandmother === '-') && mgmName) {
+  child.bio.maternalGrandmother = mgmName;
+}
+
+// عشيرة الجدة من جهة الأم
+if ((!child.bio.maternalGrandmotherClan || child.bio.maternalGrandmotherClan === '-') && mgmClan) {
+  child.bio.maternalGrandmotherClan = mgmClan;
+}
+
+// قبيلة الجدة من جهة الأم (هذا المطلوب الأساسي)
+if ((!child.bio.maternalGrandmotherTribe || child.bio.maternalGrandmotherTribe === '-') && mgmTribe) {
+  child.bio.maternalGrandmotherTribe = mgmTribe;
+}
 }
 
 // ربط wives داخل rootPerson كمرآة مشتقّة من fam.wives

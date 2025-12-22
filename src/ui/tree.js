@@ -95,12 +95,7 @@ export function drawFamilyTree(families = {}, selectedKey = null, domRefs = {}, 
 
   const __currentIds = new Set();
 let fam = families[selectedKey];
-// تأكد دائمًا من وجود _id للأشخاص الجدد (زوجات/أبناء/أجداد تمت إضافتهم بعد الـ pipeline)
-if (fam) {
-  ensureIds(fam);
-}
 
-// NEW: تشغيل pipeline مرة واحدة بعد الاستيراد/التحميل
 if (fam && !fam.__pipelineReady) {
   const fromVer =
     Number.isFinite(fam.__v) ? fam.__v :
@@ -109,13 +104,14 @@ if (fam && !fam.__pipelineReady) {
 
   normalizeFamilyPipeline(fam, {
     fromVer,
-    // ثبّت حالة core فقط إذا كانت العائلة موسومة من الأصل
     markCore: fam.__core === true
   });
 
-  // علامة داخلية حتى لا يُعاد تشغيل الـ pipeline لهذه العائلة
   fam.__pipelineReady = true;
 }
+
+// بعد الـ pipeline: ثبّت ids لأي عناصر تمت إضافتها/توليدها
+if (fam) ensureIds(fam);
 
 
 

@@ -148,12 +148,12 @@ const WIFE_FATHER_MAP = {
   wifeFatherBirthPlace:   { sel: '.wife-father-birthPlace',   from: s => s.fatherBirthPlace },
   wifeFatherOccupation:   { sel: '.wife-father-occupation',   from: s => s.fatherOccupation },
   wifeFatherRemark:       { sel: '.wife-father-remark',       from: s => s.fatherRemark },
-  wifeFatherClan:         { sel: '.wife-father-clan',         from: s => s.fatherClan },
   wifeFatherBrothers:     { sel: '.wife-father-brothers',     from: s => s.fatherBrothersTxt },
   wifeFatherSisters:      { sel: '.wife-father-sisters',      from: s => s.fatherSistersTxt },
   wifeFatherAchievements: { sel: '.wife-father-achievements', from: s => joinTextList(s.fatherAchievements, s.fatherAchievementsTxt) },
   wifeFatherHobbies:      { sel: '.wife-father-hobbies',      from: s => joinTextList(s.fatherHobbies,      s.fatherHobbiesTxt) }
 };
+
 
 const WIFE_MOTHER_MAP = {
   wifeMotherName:         { sel: '.wife-mother',              from: s => s.motherName },
@@ -163,6 +163,7 @@ const WIFE_MOTHER_MAP = {
   wifeMotherBirthPlace:   { sel: '.wife-mother-birthPlace',   from: s => s.motherBirthPlace },
   wifeMotherOccupation:   { sel: '.wife-mother-occupation',   from: s => s.motherOccupation },
   wifeMotherRemark:       { sel: '.wife-mother-remark',       from: s => s.motherRemark },
+    wifeMotherTribe:        { sel: '.wife-mother-tribe',        from: s => s.motherTribe },
   wifeMotherClan:         { sel: '.wife-mother-clan',         from: s => s.motherClan },
   wifeMotherBrothers:     { sel: '.wife-mother-brothers',     from: s => s.motherBrothersTxt },
   wifeMotherSisters:      { sel: '.wife-mother-sisters',      from: s => s.motherSistersTxt },
@@ -598,6 +599,7 @@ setDateValue(rootDeathEl, rootDeathDateVal || rootDeathYear);
 
   // dataset كمصدر رئيسي
   mb.dataset.motherName         = (rb.motherName         || '').trim();
+  mb.dataset.motherTribe        = (rb.motherTribe        || '').trim();
   mb.dataset.motherClan         = (rb.motherClan         || '').trim();
   mb.dataset.motherCognomen     = (rb.motherCognomen     || '').trim();
   mb.dataset.motherBirthDate    = (rb.motherBirthDate    || '').trim();
@@ -616,6 +618,7 @@ setDateValue(rootDeathEl, rootDeathDateVal || rootDeathYear);
   };
 
   setMb('.mother-name',         mb.dataset.motherName);
+    setMb('.mother-tribe',        mb.dataset.motherTribe);
   setMb('.mother-clan',         mb.dataset.motherClan);
 setDateValue(mb.querySelector('.mother-birthDate'), mb.dataset.motherBirthDate);
 setDateValue(mb.querySelector('.mother-deathDate'), mb.dataset.motherDeathDate);
@@ -737,6 +740,14 @@ setDateValue(ancDeathEl, ancDeathDateVal || ancDeathYear);
         const hobInp = r.querySelector('.ancestor-hobbies');
         if (achInp) achInp.value = achievementsText;
         if (hobInp) hobInp.value = hobbiesText;
+        // ⬅️ إخوة/أخوات الجد (مصفوفة {name} → نص) مع دعم النص الخام القديم
+        const ancBrosText = joinNamesList(ab.siblingsBrothers, ab.brothersTxt);
+        const ancSisText  = joinNamesList(ab.siblingsSisters,  ab.sistersTxt);
+
+        const brInp = r.querySelector('.ancestor-brothers');
+        const siInp = r.querySelector('.ancestor-sisters');
+        if (brInp) brInp.value = ancBrosText;
+        if (siInp) siInp.value = ancSisText;
 
         r.querySelector('.save-ancestor-btn')?.click(); // تثبيت المعاينة (يحدّث الـ dataset + الـ preview)
         ancList.appendChild(r);
@@ -751,25 +762,25 @@ wivesList.innerHTML = '';
   const block = createWifeBlock(i+1);
   const wb = w.bio || {};
   // هل يوجد بيانات فعلية لأب/أم الزوجة؟
-  const hasWifeFatherMeta =
-    (wb.fatherName       || '').trim() ||
-    (wb.fatherCognomen   || '').trim() ||
-    (wb.fatherBirthDate  || '').trim() ||
-    (wb.fatherDeathDate  || '').trim() ||
-    (wb.fatherBirthPlace || '').trim() ||
-    (wb.fatherOccupation || '').trim() ||
-    (wb.fatherRemark     || '').trim() ||
-    (wb.fatherClan       || '').trim();
+const hasWifeFatherMeta =
+  (wb.fatherName       || '').trim() ||
+  (wb.fatherCognomen   || '').trim() ||
+  (wb.fatherBirthDate  || '').trim() ||
+  (wb.fatherDeathDate  || '').trim() ||
+  (wb.fatherBirthPlace || '').trim() ||
+  (wb.fatherOccupation || '').trim() ||
+  (wb.fatherRemark     || '').trim();
 
-  const hasWifeMotherMeta =
-    (wb.motherName       || '').trim() ||
-    (wb.motherCognomen   || '').trim() ||
-    (wb.motherBirthDate  || '').trim() ||
-    (wb.motherDeathDate  || '').trim() ||
-    (wb.motherBirthPlace || '').trim() ||
-    (wb.motherOccupation || '').trim() ||
-    (wb.motherRemark     || '').trim() ||
-    (wb.motherClan       || '').trim();
+const hasWifeMotherMeta =
+  (wb.motherName       || '').trim() ||
+  (wb.motherCognomen   || '').trim() ||
+  (wb.motherBirthDate  || '').trim() ||
+  (wb.motherDeathDate  || '').trim() ||
+  (wb.motherBirthPlace || '').trim() ||
+  (wb.motherOccupation || '').trim() ||
+  (wb.motherRemark     || '').trim() ||
+  (wb.motherTribe      || '').trim() ||
+  (wb.motherClan       || '').trim();
 
   block.querySelector('.wife-name').value = w.name || '';
 
@@ -1334,6 +1345,7 @@ function isFormDirty(){
     return {
       name:        (mb.dataset.motherName         || ff('#newMother')      || '').trim(),
       clan:        (mb.dataset.motherClan         || ff('#newMotherClan')  || '').trim(),
+            tribe:       (mb.dataset.motherTribe        || '').trim(),
 birthDate: getDateValue(mb, '.mother-birthDate', 'motherBirthDate'),
 deathDate: getDateValue(mb, '.mother-deathDate', 'motherDeathDate'),
 
@@ -1368,6 +1380,7 @@ rootDeathDate: getDateValue(formEl, '#newRootPersonDeathDate'),
 
     // أم صاحب الشجرة
     motherName: motherMeta.name,
+    motherTribe: motherMeta.tribe,
     motherClan: motherMeta.clan,
     rootMotherBirthDate:  motherMeta.birthDate,
     rootMotherDeathDate:  motherMeta.deathDate,
@@ -1392,6 +1405,8 @@ const ancestors = Array.from(ancList.querySelectorAll('.ancestor-row')).map(r=>(
     birthPlace: (r.dataset.ancestorBirthPlace||'').trim(),
     occupation: (r.dataset.ancestorOccupation||'').trim(),
     cognomen:   (r.dataset.ancestorCognomen||'').trim(),
+    brothersTxt: (r.dataset.ancestorBrothers||'').trim(),
+    sistersTxt:  (r.dataset.ancestorSisters ||'').trim(),
     remark:     (r.dataset.ancestorRemark||'').trim(),
 
     // نصوص الإنجازات والهوايات (تفصل لاحقًا إلى مصفوفات)
@@ -1436,7 +1451,6 @@ deathDate: getDateValue(ci, '.child-edit-deathDate', 'childDeathDate'),
           fatherBirthPlace: (d.wifeFatherBirthPlace || '').trim(),
           fatherOccupation: (d.wifeFatherOccupation || '').trim(),
           fatherRemark:     (d.wifeFatherRemark     || '').trim(),
-          fatherClan:       (d.wifeFatherClan       || '').trim(),
 
           // نصوص الإخوة/الأخوات + الإنجازات/الهوايات لأب الزوجة
           fatherBrothersTxt:     (d.wifeFatherBrothers      || '').trim(),
@@ -1452,6 +1466,7 @@ deathDate: getDateValue(ci, '.child-edit-deathDate', 'childDeathDate'),
           motherBirthPlace: (d.wifeMotherBirthPlace || '').trim(),
           motherOccupation: (d.wifeMotherOccupation || '').trim(),
           motherRemark:     (d.wifeMotherRemark     || '').trim(),
+          motherTribe:      (d.wifeMotherTribe      || '').trim(),
           motherClan:       (d.wifeMotherClan       || '').trim(),
 
           // نصوص الإخوة/الأخوات + الإنجازات/الهوايات لأم الزوجة

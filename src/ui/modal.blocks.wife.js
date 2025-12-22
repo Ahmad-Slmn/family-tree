@@ -70,7 +70,6 @@ const WIFE_FATHER_VIEW_LABELS = {
   occupation:   'المهنة',
   cognomen:     'اللقب',
   remark:       'ملاحظة',
-  clan:         'العشيرة',
   brothers:     'الإخوة',
   sisters:      'الأخوات',
   achievements: 'الإنجازات',
@@ -86,7 +85,6 @@ const WIFE_FATHER_VIEW_ICONS = {
   occupation:   'fa-briefcase',
   cognomen:     'fa-signature',
   remark:       'fa-note-sticky',
-  clan:         'fa-users',
   brothers:     'fa-user-group',
   sisters:      'fa-user-group',
   achievements: 'fa-trophy',
@@ -103,7 +101,6 @@ const WIFE_FATHER_FULL_KEYS = [
   'occupation',
   'cognomen',
   'remark',
-  'clan',
   'brothers',
   'sisters',
   'achievements',
@@ -136,6 +133,7 @@ const WIFE_MOTHER_VIEW_LABELS = {
   occupation:   'المهنة',
   cognomen:     'اللقب',
   remark:       'ملاحظة',
+  tribe:        'القبيلة',
   clan:         'العشيرة',
   brothers:     'الإخوة',
   sisters:      'الأخوات',
@@ -151,6 +149,7 @@ const WIFE_MOTHER_VIEW_ICONS = {
   birthPlace:   'fa-location-dot',
   occupation:   'fa-briefcase',
   cognomen:     'fa-signature',
+  tribe:        'fa-people-group',
   remark:       'fa-note-sticky',
   clan:         'fa-users',
   brothers:     'fa-user-group',
@@ -169,6 +168,7 @@ const WIFE_MOTHER_FULL_KEYS = [
   'occupation',
   'cognomen',
   'remark',
+  'tribe',
   'clan',
   'brothers',
   'sisters',
@@ -184,6 +184,7 @@ const WIFE_MOTHER_VIEW_KEYMAP = {
   occupation:   'wifeMotherOccupation',
   cognomen:     'wifeMotherCognomen',
   remark:       'wifeMotherRemark',
+  tribe:        'wifeMotherTribe',
   clan:         'wifeMotherClan',
   brothers:     'wifeMotherBrothers',
   sisters:      'wifeMotherSisters',
@@ -268,12 +269,7 @@ function buildWifeFatherHTML(index) {
         <span class="label"><i class="fa-solid fa-note-sticky"></i> ملاحظة</span>
         <input type="text" class="wife-father-remark" name="wifeFatherRemark" placeholder="معلومة مختصرة">
       </label>
-
-      <label class="field-inline">
-        <span class="label"><i class="fa-solid fa-users"></i> العشيرة</span>
-        <input type="text" class="wife-father-clan" name="wifeFatherClan" placeholder="مثال: آل سالم">
-      </label>
-
+ 
       <!-- الإخوة لأب الزوجة -->
       <label class="field-inline">
         <span class="label"><i class="fa-solid fa-user-group"></i> الإخوة</span>
@@ -368,6 +364,10 @@ function buildWifeMotherHTML(index) {
         <span class="label"><i class="fa-solid fa-note-sticky"></i> ملاحظة</span>
         <input type="text" class="wife-mother-remark" name="wifeMotherRemark" placeholder="معلومة مختصرة">
       </label>
+<label class="field-inline">
+  <span class="label"><i class="fa-solid fa-people-group"></i> القبيلة</span>
+  <input type="text" class="wife-mother-tribe" name="wifeMotherTribe" placeholder="مثال: قحطان">
+</label>
 
       <label class="field-inline">
         <span class="label"><i class="fa-solid fa-users"></i> العشيرة</span>
@@ -740,7 +740,6 @@ export function createWifeBlock(index) {
   const fBpEl   = fatherEdit.querySelector('.wife-father-birthPlace');
   const fOcEl   = fatherEdit.querySelector('.wife-father-occupation');
   const fRmEl   = fatherEdit.querySelector('.wife-father-remark');
-  const fClanEl = fatherEdit.querySelector('.wife-father-clan');
   const fBroEl  = fatherEdit.querySelector('.wife-father-brothers');
   const fSisEl  = fatherEdit.querySelector('.wife-father-sisters');
   const fAchEl  = fatherEdit.querySelector('.wife-father-achievements');
@@ -757,7 +756,6 @@ export function createWifeBlock(index) {
     wifeFatherBirthPlace:   fBpEl,
     wifeFatherOccupation:   fOcEl,
     wifeFatherRemark:       fRmEl,
-    wifeFatherClan:         fClanEl,
     wifeFatherBrothers:     fBroEl,
     wifeFatherSisters:      fSisEl,
     wifeFatherAchievements: fAchEl,
@@ -781,7 +779,7 @@ export function createWifeBlock(index) {
     datasetMap: wifeFatherMap,
     viewKeyMap: WIFE_FATHER_VIEW_KEYMAP,
     nameEl:     fnEl,
-    otherEls:   [fCgEl, fBdEl, fDdEl, fBpEl, fOcEl, fRmEl, fClanEl, fBroEl, fSisEl, fAchEl, fHobEl],
+otherEls:   [fCgEl, fBdEl, fDdEl, fBpEl, fOcEl, fRmEl, fBroEl, fSisEl, fAchEl, fHobEl],
     requiredMsg:'أدخل اسم أب الزوجة عند تعبئة أي بيانات أخرى.'
   });
 
@@ -803,6 +801,7 @@ export function createWifeBlock(index) {
   const mBpEl   = motherEdit.querySelector('.wife-mother-birthPlace');
   const mOcEl   = motherEdit.querySelector('.wife-mother-occupation');
   const mRmEl   = motherEdit.querySelector('.wife-mother-remark');
+  const mTribeEl= motherEdit.querySelector('.wife-mother-tribe');
   const mClanEl = motherEdit.querySelector('.wife-mother-clan');
   const mBroEl  = motherEdit.querySelector('.wife-mother-brothers');
   const mSisEl  = motherEdit.querySelector('.wife-mother-sisters');
@@ -820,6 +819,7 @@ export function createWifeBlock(index) {
     wifeMotherBirthPlace:   mBpEl,
     wifeMotherOccupation:   mOcEl,
     wifeMotherRemark:       mRmEl,
+    wifeMotherTribe:        mTribeEl,
     wifeMotherClan:         mClanEl,
     wifeMotherBrothers:     mBroEl,
     wifeMotherSisters:      mSisEl,
@@ -844,7 +844,7 @@ export function createWifeBlock(index) {
     datasetMap: wifeMotherMap,
     viewKeyMap: WIFE_MOTHER_VIEW_KEYMAP,
     nameEl:     mnEl,
-    otherEls:   [mCgEl, mBdEl, mDdEl, mBpEl, mOcEl, mRmEl, mClanEl, mBroEl, mSisEl, mAchEl, mHobEl],
+otherEls:   [mCgEl, mBdEl, mDdEl, mBpEl, mOcEl, mRmEl, mTribeEl, mClanEl, mBroEl, mSisEl, mAchEl, mHobEl],
     requiredMsg:'أدخل اسم أم الزوجة عند تعبئة أي بيانات أخرى.'
   });
 

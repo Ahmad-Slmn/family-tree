@@ -533,30 +533,6 @@ function initResetSettings() {
   });
 }
 
-
-/* =======================
-   ⏰ التاريخ والوقت
-======================= */
-function updateDateTime() {
-  const now = new Date();
-  const weekdays = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
-  const day = weekdays[now.getDay()];
-  const pad = (n) => String(n).padStart(2, '0');
-  let h = now.getHours();
-  const period = h >= 12 ? 'م' : 'ص';
-  h = h % 12 || 12;
-
-  const date = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`;
-  const time = `${pad(h)}:${pad(now.getMinutes())}:${pad(now.getSeconds())} ${period}`;
-
-  const el = byId('dateTimeText');
-  if (el) el.innerHTML = `<span class="day-name">${day}</span> - <span class="date">${date}</span> - <span class="time">${time}</span>`;
-}
-function initDateTime() {
-  updateDateTime();
-  setInterval(updateDateTime, 1000);
-}
-
 /* =======================
    🚀 DOMContentLoaded
 ======================= */
@@ -564,7 +540,6 @@ document.addEventListener('DOMContentLoaded', () => {
   nodes.toastContainer = byId('toastContainer');
   initFontSize();
   initResetSettings();
-  initDateTime();
 
   // طباعة
   const printBtn = byId('printBtn');

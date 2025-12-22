@@ -54,6 +54,18 @@ function safeFileName(name) {
   );
 }
 
+// إزالة بادئة "عائلة" من الاسم إن كانت موجودة (متوافق مع JSHint)
+function stripFamilyPrefix(label){
+  var s = String(label || '').trim();
+
+  // أشكال شائعة
+  s = s.replace(/^عائلة\s*:\s*/, '');
+  s = s.replace(/^عائلة\s*-\s*/, '');
+  s = s.replace(/^عائلة\s+/, '');
+
+  return s.trim();
+}
+
 // إعادة تسمية مفاتيح العائلات المستوردة إذا كان هناك تصادم
 function rekeyImportedFamilies(obj) {
   const out = {};
@@ -314,10 +326,47 @@ async function doImport(ctx, obj) {
 // 2) واجهة المستخدم (تصدير/استيراد/تفريغ/سحب)
 // ==============================
 
+function getCurrentFamilyDisplayName(){
+  // 1) نفس منطق الطباعة: treeTitle إن وُجد
+  const treeTitle = byId('treeTitle');
+  const t = treeTitle?.textContent?.trim();
+  if (t) return t;
+
+  // 2) fallback: من العائلة المختارة في الموديل
+  try {
+    const all = Model.exportFamilies?.() || {};
+    const key = Model.getSelectedKey?.() || 'family1';
+    const fam = all[key];
+    if (fam){
+      return String(
+        fam.familyName ||
+        fam.fullRootPersonName ||
+        fam.rootPerson?.name ||
+        key
+      ).trim();
+    }
+  } catch {}
+
+  return '';
+}
+
 // تهيئة زر التصدير
 function bindExportButton() {
   const exportBtn = byId('exportBtn');
   if (!exportBtn) return;
+
+  const icon = exportBtn.querySelector('i'); // الأيقونة موجودة بالـ HTML
+
+  const updateLabel = () => {
+    const nm = getCurrentFamilyDisplayName();
+    // نعيد بناء محتوى الزر مع الحفاظ على الأيقونة
+    exportBtn.innerHTML = '';
+    if (icon) exportBtn.appendChild(icon);
+    exportBtn.appendChild(document.createTextNode(nm ? ` تصدير ${nm}` : ' تصدير'));
+  };
+
+  // تحديث أولي
+  updateLabel();
 
   exportBtn.addEventListener('click', () => {
     const all = Model.exportFamilies();
@@ -330,15 +379,11 @@ function bindExportButton() {
       return;
     }
 
-    const rawFamilyName = String(
-      fam.familyName ||
-      fam.fullRootPersonName ||
-      fam.rootPerson?.name ||
-      key
-    ).trim();
+// نفس الاسم الذي على الزر (متسق)
+const rawFamilyName = stripFamilyPrefix(getCurrentFamilyDisplayName() || key);
 
-    const rawName  = `عائلة - ${rawFamilyName}`;
-    const safeName = safeFileName(rawName);
+const rawName  = `عائلة - ${rawFamilyName}`;
+const safeName = safeFileName(rawName);
 
     const payload = {
       [key]: fam,
@@ -347,6 +392,14 @@ function bindExportButton() {
 
     downloadJson(payload, `${safeName}.json`);
   });
+
+  // اختياري (مفيد): لو تغيّر عنوان الشجرة في الواجهة بدون إعادة تهيئة io.js
+  // راقب تغيّر treeTitle وحدّث الزر
+  const treeTitle = byId('treeTitle');
+  if (treeTitle && window.MutationObserver){
+    const mo = new MutationObserver(() => updateLabel());
+    mo.observe(treeTitle, { childList:true, subtree:true, characterData:true });
+  }
 }
 
 // تهيئة استيراد من input

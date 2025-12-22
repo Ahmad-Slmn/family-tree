@@ -61,6 +61,14 @@ const raw = (list || [])
       deathDate:  a?.bio?.deathDate  || '',
       birthPlace: a?.bio?.birthPlace || '',
       occupation: a?.bio?.occupation || '',
+            // NEW: نصوص الإخوة/الأخوات (قادمة من readUI)
+      brothersTxt: a?.bio?.brothersTxt || '',
+      sistersTxt:  a?.bio?.sistersTxt  || '',
+
+      // NEW: دعم البيانات الحديثة المحفوظة كمصفوفات {name}
+      siblingsBrothers: Array.isArray(a?.bio?.siblingsBrothers) ? a.bio.siblingsBrothers : [],
+      siblingsSisters:  Array.isArray(a?.bio?.siblingsSisters)  ? a.bio.siblingsSisters  : [],
+
       cognomen:   a?.bio?.cognomen   || '',
       remark:     a?.bio?.remark     || '',
       tribe:      a?.bio?.tribe      || '',
@@ -84,6 +92,11 @@ const raw = (list || [])
 
     const achievementsArr = ensureStringArray(b.achievements, b.achievementsTxt);
     const hobbiesArr      = ensureStringArray(b.hobbies,      b.hobbiesTxt);
+    const brothersArr = (Array.isArray(b.siblingsBrothers) && b.siblingsBrothers.length) ? b.siblingsBrothers
+      : splitTextToNameObjects(b.brothersTxt || '');
+
+    const sistersArr = (Array.isArray(b.siblingsSisters) && b.siblingsSisters.length) ? b.siblingsSisters
+      : splitTextToNameObjects(b.sistersTxt || '');
 
     const bio = {
       ...cloneBio(),
@@ -93,13 +106,17 @@ const raw = (list || [])
       deathDate: death.date,
       deathYear: death.year || b.deathYear || '',
       achievements: achievementsArr,
-      hobbies:      hobbiesArr
+      hobbies:      hobbiesArr,
+            siblingsBrothers: brothersArr,
+      siblingsSisters:  sistersArr,
+
     };
 
     // لم نعد نحتاج النصوص الداخلية
     delete bio.achievementsTxt;
     delete bio.hobbiesTxt;
-
+   delete bio.brothersTxt;
+    delete bio.sistersTxt;
     return {
       _id: x._id || newId(),
       name: x.name,
@@ -158,6 +175,7 @@ export function computeFormSnapshot({ formFields, wives, ancestors, ancKey, fath
 
     // الأم (من formFields بعد قراءتها من بلوك الأم في الـ controller)
     motherName: formFields.motherName || '',
+    motherTribe: formFields.motherTribe || '',
     motherClan: formFields.motherClan || '',
 
     // ميتا أم صاحب الشجرة
@@ -265,6 +283,8 @@ export function computeFormSnapshot({ formFields, wives, ancestors, ancKey, fath
         birthPlace: a.bio?.birthPlace || '',
         occupation: a.bio?.occupation || '',
         cognomen:   a.bio?.cognomen   || '',
+            brothersTxt: a.bio?.brothersTxt || '',
+    sistersTxt:  a.bio?.sistersTxt  || '',
         remark:     a.bio?.remark     || '',
         tribe:      a.bio?.tribe      || '',
         clan:       a.bio?.clan       || '',
@@ -312,8 +332,6 @@ const bio = {
 };
 
 //  لا نخزن txt داخل bio النهائي
-delete bio.brothersTxt;
-delete bio.sistersTxt;
 delete bio.achievementsTxt;
 delete bio.hobbiesTxt;
 
@@ -350,6 +368,7 @@ function buildRootPerson({
   rootHobbiesTxt,
   motherName,
   motherClan,
+  motherTribe,
   motherAchievements,
   motherHobbies,
   motherAchievementsTxt,
@@ -383,6 +402,7 @@ hobbies:      rootHobbies,
 
       motherName,
       motherClan,
+      motherTribe,
       motherBirthDate:  formFields.rootMotherBirthDate  || '',
       motherDeathDate:  formFields.rootMotherDeathDate  || '',
       motherBirthPlace: formFields.rootMotherBirthPlace || '',
@@ -638,6 +658,7 @@ export function composeFamilyObject({ formFields, wives, ancestors, prevFamily, 
   // الأم من formFields
   const motherName = formFields.motherName || '';
   const motherClan = formFields.motherClan || '';
+  const motherTribe = formFields.motherTribe || '';
 
   const motherAchievementsTxt = formFields.rootMotherAchievementsTxt || '';
   const motherHobbiesTxt      = formFields.rootMotherHobbiesTxt      || '';
@@ -696,6 +717,7 @@ export function composeFamilyObject({ formFields, wives, ancestors, prevFamily, 
     rootHobbiesTxt,
     motherName,
     motherClan,
+    motherTribe,
     motherAchievements,
     motherHobbies,
     motherAchievementsTxt,

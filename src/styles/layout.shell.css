@@ -105,10 +105,10 @@
 
 /* أزرار العائلة والفلاتر */
 .family-button{
-  height:var(--h);display:flex;align-items:center;
+  height:var(--h);display:flex;align-items:center;justify-content: flex-start;
   gap:.3rem;padding:0 .3rem;background:var(--card-bg);color:var(--text-main);
   border:1px solid var(--surface-border);border-radius:.65rem;
-  font-size:.95rem;font-weight:600;line-height:1;
+  font-size:.95rem;font-weight:600;line-height:1.3;
   box-shadow:0 1px 4px color-mix(in oklab,var(--text-main) 8%,transparent);
   cursor:pointer
 }
@@ -155,7 +155,7 @@
 .family-switcher.is-open .family-switcher-arrow::before{content:"▴"}
 
 /* حالة الفتح: إبراز الزر */
-.family-switcher.is-open .family-switcher-toggle{
+.family-switcher.is-open .family-switcher-toggle, #filtersToggle[aria-expanded="true"]{
   transform:translateY(-1px);
   box-shadow:0 8px 20px color-mix(in oklab,var(--text-main) 12%,transparent);
   border-color:var(--focus-border)
@@ -241,9 +241,6 @@
   border:1px solid var(--surface-border);border-radius:.65rem;
   color:var(--text-main);font-size:.92rem;line-height:1;white-space:nowrap
 }
-.date-time-display i{font-size:.95rem;opacity:.8}
-.day-name{color:var(--title-color);font-weight:700}
-.time{color:var(--arrow-color);font-feature-settings:"tnum"}
 
 /* تنظيف تغليف قديم */
 .top-bar>div{all:unset;position:relative}
@@ -257,7 +254,6 @@
 .top-bar>*:nth-child(1){animation-delay:20ms;z-index:99; border-radius:.7rem}
 .top-bar>*:nth-child(2){animation-delay:60ms}
 .top-bar>*:nth-child(3){animation-delay:100ms}
-.top-bar>*:nth-child(4){animation-delay:140ms}
 @keyframes topbar-in{
   from{opacity:0;transform:translateY(-6px)}
   to{opacity:1;transform:translateY(0)}
@@ -347,7 +343,7 @@
 /* ========== الشريط الجانبي ========== */
 .side-overlay{position:fixed;inset:0;background:var(--side-overlay);z-index:1098}
 .side-panel{
-  position:fixed;inset:0 auto 0 0;width:min(360px,92vw); max-height: 100vh;overflow-y: auto;
+  position:fixed;inset:0 auto 0 0;width: min(420px, 92vw); max-height: 100vh;overflow-y: auto;
   background:var(--card-bg);color:var(--text-main);scrollbar-width: thin;
   scrollbar-color: var(--scroll-thumb) var(--scroll-track);
   transform:translateX(-100%);transition:transform .25s ease;
@@ -827,4 +823,7 @@
 @media (max-width:520px){
   .scroll-buttons{right:14px;bottom:14px;gap:8px}
   .scroll-btn{width:42px;height:42px;font-size:17px}
+    .side-panel{
+    width: min(360px, 92vw);
+  }
 }
