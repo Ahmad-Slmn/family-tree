@@ -776,11 +776,7 @@ async function onInlineRename(personId, patch) {
   const p = findPersonByIdInFamily(fam, personId) || findPersonByIdInFamily(fam, targetId);
   if (TreeUI.refreshAvatarById && p) TreeUI.refreshAvatarById(p);
 
-  const parts = [];
-if (patch.name != null) parts.push('الاسم');
-if (patch.cognomen != null) parts.push('اللقب');
-
-showSuccess(parts.length ? `تم تحديث ${parts.join(' و ')}.` : 'تم التحديث.');
+showSuccess('تم تحديث الاسم بنجاح.');
 
   FeatureDuplicates.warnDuplicatesIfAny(famKey);
 }

@@ -1,4 +1,4 @@
-// features/stats.js — إحصاءات + مخططات + فلاتر + CSV
+// features/stats.js — إحصاءات + مخططات + فلاتر + تصدير Excel
 // يعتمد على: utils.byId ، model/families.getFamilies ، model/roles.roleGroup
 
 import { byId } from '../utils.js';
@@ -834,31 +834,234 @@ ctx.fillStyle = pal.text; ctx.fillText('أبناء', legendX + box + 6, legendY 
   requestAnimationFrame(frame);
 }
 
-
 /* =========================
-   5) CSV: توليد وتنزيل
+   5) Excel: توليد وتنزيل
 ========================= */
-function toCSV(perFamily){
-  const head = ['العائلة','الأشخاص','أبناء (صاحب الشجرة)','بنات (صاحب الشجرة)','الزوجات','غير محدد'];
-  const rows = perFamily.map(f=>[
-    safeCSV(f.label), f.persons, f.rootSons, f.rootDaughters, f.wives, f.unknown
-  ].join(','));
-  return head.join(',') + '\n' + rows.join('\n');
+
+function escapeHtml(s){
+  return String(s ?? '')
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
 }
 
-function safeCSV(s){
-  const v = String(s ?? '');
-  return /[",\n]/.test(v) ? `"${v.replace(/"/g,'""')}"` : v;
+function toExcelHtml(rows, meta = {}){
+  const stamp         = meta.stamp || new Date().toLocaleString('ar');
+  const scopeText     = meta.scopeText || 'كل العائلات';
+  const filters       = Array.isArray(meta.filters) ? meta.filters : [];
+  const clans         = Array.isArray(meta.clans) ? meta.clans : [];
+  const familiesCount = Number(meta.familiesCount ?? (rows?.length || 0));
+
+  // ===== جدول العائلات =====
+  const head = [
+    'العائلة','الأشخاص','أبناء (صاحب الشجرة)','بنات (صاحب الشجرة)',
+    'الإجمالي (أبناء+بنات)','الزوجات','غير محدد'
+  ];
+
+  const trHead = `<tr>${head.map(h => `<th>${escapeHtml(h)}</th>`).join('')}</tr>`;
+
+  const trBody = (rows || []).map(f => `
+    <tr>
+      <td class="txt">${escapeHtml(f.label)}</td>
+      <td class="num">${Number(f.persons||0)}</td>
+      <td class="num">${Number(f.rootSons||0)}</td>
+      <td class="num">${Number(f.rootDaughters||0)}</td>
+      <td class="num">${Number(f.rootSons||0) + Number(f.rootDaughters||0)}</td>
+      <td class="num">${Number(f.wives||0)}</td>
+      <td class="num">${Number(f.unknown||0)}</td>
+    </tr>
+  `).join('');
+
+  const totals = (rows || []).reduce((acc, f) => {
+    acc.persons       += Number(f.persons||0);
+    acc.rootSons      += Number(f.rootSons||0);
+    acc.rootDaughters += Number(f.rootDaughters||0);
+    acc.totalKids     += (Number(f.rootSons||0) + Number(f.rootDaughters||0));
+    acc.wives         += Number(f.wives||0);
+    acc.unknown       += Number(f.unknown||0);
+    return acc;
+  }, { persons:0, rootSons:0, rootDaughters:0, totalKids:0, wives:0, unknown:0 });
+
+  const trTotal = `
+    <tr class="total">
+      <td class="txt">الإجمالي</td>
+      <td class="num">${totals.persons}</td>
+      <td class="num">${totals.rootSons}</td>
+      <td class="num">${totals.rootDaughters}</td>
+      <td class="num">${totals.totalKids}</td>
+      <td class="num">${totals.wives}</td>
+      <td class="num">${totals.unknown}</td>
+    </tr>
+  `;
+
+  // ===== جدول العشائر =====
+  const clansHead   = ['العشيرة','الأشخاص','الذكور','الإناث','غير محدد'];
+  const trClansHead = `<tr>${clansHead.map(h => `<th>${escapeHtml(h)}</th>`).join('')}</tr>`;
+
+  const trClansBody = (clans || []).map(c => `
+    <tr>
+      <td class="txt">${escapeHtml(c.clan)}</td>
+      <td class="num">${Number(c.persons||0)}</td>
+      <td class="num">${Number(c.males||0)}</td>
+      <td class="num">${Number(c.females||0)}</td>
+      <td class="num">${Number(c.unknownGender||0)}</td>
+    </tr>
+  `).join('') || `<tr><td colspan="5" class="empty">لا بيانات</td></tr>`;
+
+  const clansTotals = (clans || []).reduce((a, c) => {
+    a.persons       += Number(c.persons||0);
+    a.males         += Number(c.males||0);
+    a.females       += Number(c.females||0);
+    a.unknownGender += Number(c.unknownGender||0);
+    return a;
+  }, { persons:0, males:0, females:0, unknownGender:0 });
+
+  const trClansTotal = `
+    <tr class="total">
+      <td class="txt">الإجمالي</td>
+      <td class="num">${clansTotals.persons}</td>
+      <td class="num">${clansTotals.males}</td>
+      <td class="num">${clansTotals.females}</td>
+      <td class="num">${clansTotals.unknownGender}</td>
+    </tr>
+  `;
+
+  return `<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<style>
+body{font-family:'Cairo',system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif;margin:16px;font-size:18px;}
+table,th,td{font-family:inherit;}
+.title{font-size:24px;font-weight:800;margin:0 0 6px 0;padding-right:16px;}
+.section{font-size:20px;font-weight:800;margin:14px 0 8px;padding-right:16px;}
+.meta{color:#6b7280;font-size:18px;margin:0 0 6px 0;padding-right:16px;}
+
+table.xl-table{border-collapse:collapse;width:90%;direction:rtl;table-layout:fixed;mso-table-lspace:0pt;mso-table-rspace:0pt;margin:0 0 0 auto;}
+th,td{overflow:hidden;text-overflow:ellipsis;border:1px solid #d0d7de;padding:10px 12px;vertical-align:middle;font-size:16px;}
+th{background:#f3f4f6;font-weight:700;white-space:nowrap;text-align:center;font-size:16px;}
+td.txt{text-align:right;}
+td.num{text-align:center;mso-number-format:"0";}
+tbody tr:nth-child(even){background:#fafafa;}
+.total td{background:#eef2ff;font-weight:700;}
+.empty{color:#6b7280;text-align:center;}
+
+table.xl-spacer{border-collapse:collapse;width:90%;direction:rtl;table-layout:fixed;margin:0 0 0 auto;}
+table.xl-spacer td{border:none;height:24pt;}
+table.xl-wrap{border-collapse:collapse;width:100%;direction:rtl;table-layout:fixed;mso-table-lspace:0pt;mso-table-rspace:0pt;}
+.title,.section,.meta{text-align:right;padding-right:16px;padding-left:0;}
+</style>
+</head>
+<body>
+
+<table class="xl-wrap" width="100%" style="width:100%;table-layout:fixed;mso-table-lspace:0pt;mso-table-rspace:0pt;">
+  <tr>
+    <td align="right" style="width:100%;text-align:right;direction:rtl;">
+      <div class="title">تقرير إحصاءات العائلات</div>
+      <div class="meta">تاريخ التصدير: ${escapeHtml(stamp)}</div>
+      <div class="meta">النطاق: ${escapeHtml(scopeText)}</div>
+      <div class="meta">عدد العائلات: ${escapeHtml(familiesCount)}</div>
+      ${filters.length ? `<div class="meta">الفلاتر: ${escapeHtml(filters.join(' | '))}</div>` : ''}
+
+      <div class="section">تفصيل حسب العائلة</div>
+      <table class="xl-table" width="90%" align="right" style="width:90%;table-layout:fixed;mso-table-lspace:0pt;mso-table-rspace:0pt;">
+        <colgroup>
+          <col style="width:22%"><!-- العائلة -->
+          <col style="width:11%"><!-- الأشخاص -->
+          <col style="width:12%"><!-- أبناء (صاحب الشجرة) -->
+          <col style="width:12%"><!-- بنات (صاحب الشجرة) -->
+          <col style="width:15%"><!-- الإجمالي -->
+          <col style="width:14%"><!-- الزوجات -->
+          <col style="width:14%"><!-- غير محدد -->
+        </colgroup>
+        <thead>${trHead}</thead>
+        <tbody>${trBody}${trTotal}</tbody>
+      </table>
+
+      <table class="xl-spacer" width="90%" align="center" style="width:90%;"><tr><td>&nbsp;</td></tr></table>
+
+      <div class="section">تفاصيل العشائر</div>
+      <table class="xl-table" width="90%" align="right" style="width:90%;table-layout:fixed;mso-table-lspace:0pt;mso-table-rspace:0pt;">
+        <colgroup>
+          <col style="width:28%"><!-- العشيرة -->
+          <col style="width:18%"><!-- الأشخاص -->
+          <col style="width:18%"><!-- الذكور -->
+          <col style="width:18%"><!-- الإناث -->
+          <col style="width:18%"><!-- غير محدد -->
+        </colgroup>
+        <thead>${trClansHead}</thead>
+        <tbody>${trClansBody}${clans.length ? trClansTotal : ''}</tbody>
+      </table>
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>`;
 }
-function downloadCSV(filename, text){
-  const blob = new Blob([text], { type:'text/csv;charset=utf-8' });
-  const a = document.createElement('a');
+
+function downloadExcelHtml(filename, html){
+  const bom  = '\ufeff'; // UTF-8 BOM لتحسين العربية في Excel
+  const blob = new Blob([bom + html], { type:'application/vnd.ms-excel;charset=utf-8' });
+  const a    = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = filename || 'stats.csv';
+  a.download = filename || 'families-stats.xls';
   document.body.appendChild(a);
   a.click();
-  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },0);
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
 }
+
+function buildExportRows(rows){
+  const sort = byId('fSort')?.value || 'total';
+  const sorters = {
+    total:     (a,b) => ((b.rootSons + b.rootDaughters) - (a.rootSons + a.rootDaughters)),
+    sons:      (a,b) => (b.rootSons - a.rootSons),
+    daughters: (a,b) => (b.rootDaughters - a.rootDaughters),
+  };
+  return (rows || []).slice().sort(sorters[sort] || sorters.total);
+}
+
+function buildExportMeta(){
+  const stamp = new Date().toLocaleString('ar');
+
+  const scopeSel = byId('fScope');
+  const scopeVal = scopeSel?.value || 'all';
+  let scopeText  = scopeSel?.selectedOptions?.[0]?.textContent || 'كل العائلات';
+
+  // إذا لم يكن "كل العائلات" → أضف كلمة "عائلة"
+  if ((scopeVal || 'all') !== 'all') scopeText = `عائلة ${scopeText}`;
+
+  const q   = String(byId('fSearch')?.value || '').trim();
+  const min = Math.max(0, parseInt(byId('fMin')?.value || '0', 10) || 0);
+
+  const filters = [];
+  if (q)   filters.push(`بحث: ${q}`);
+  if (min) filters.push(`حد أدنى للأشخاص: ${min}`);
+
+  return { stamp, scopeVal, scopeText, filters };
+}
+
+function buildExportClansFromRows(rows, computeStatsCachedFn){
+  const keys = Array.from(new Set((rows || []).map(r => r.familyKey).filter(Boolean)));
+  if (!keys.length) return [];
+
+  // نستخدم cache إن كانت متاحة، وإلا fallback لـ computeStats مباشرة
+  const clanStats = (typeof computeStatsCachedFn === 'function')  ? computeStatsCachedFn(keys, { uniqueAcrossFamilies:false, diagnostics:true })
+    : computeStats(keys, { uniqueAcrossFamilies:false, diagnostics:true });
+
+  return Array.from((clanStats.perClan || new Map()).values())
+    .map(v => ({
+      clan: v.label || '',
+      persons: Number(v.persons||0),
+      males: Number(v.males||0),
+      females: Number(v.females||0),
+      unknownGender: Number(v.unknownGender||0),
+    }))
+    .sort((a,b) => b.persons - a.persons);
+}
+
 
 /* =========================
    6) واجهة العرض + الفلاتر
@@ -950,10 +1153,11 @@ function renderStats(){
           </select>
         </div>
 
-        <button id="btnExportCsv" class="btn primary" type="button" title="تصدير CSV">
-          <i class="fa-solid fa-file-export" aria-hidden="true"></i>
-          <span>تصدير CSV</span>
-        </button>
+   <button id="btnExportExcel" class="btn primary" type="button" title="تصدير Excel">
+  <i class="fa-solid fa-file-export" aria-hidden="true"></i>
+  <span>تصدير Excel</span>
+</button>
+
       </div>
     </section>
 
@@ -1242,6 +1446,7 @@ if (selScope){
   const selSort   = byId('fSort');
   const selTopN   = byId('fTopN');
   const cvStack   = byId('statsStacked');
+  let _exportRows = null;
 
 const getScopedStats = ()=>{
   const scopeVal = selScope?.value || 'all';
@@ -1360,6 +1565,7 @@ const sorters = {
   daughters: (a,b)=> (b.rootDaughters - a.rootDaughters)
 };
 rows.sort(sorters[sort] || sorters.total);
+_exportRows = rows.slice();
 
     tbFam.innerHTML = rows.length ? rows.map(f => {
       const dup = dupMap.get(f.familyKey);
@@ -1506,12 +1712,18 @@ tbClan.innerHTML = top.length ? top.map(c=>{
     applyFilters();
   });
 
+// تصدير Excel (مطابق للفلاتر الحالية + ترتيب مطابق لاختيار "ترتيب" في UI)
+byId('btnExportExcel')?.addEventListener('click', ()=>{
+  const baseRows = _exportRows || getScopedStats().perFamily;
+  const rows = buildExportRows(baseRows);
 
-  // تصدير CSV
-  byId('btnExportCsv')?.addEventListener('click', ()=>{
-    const csv = toCSV(getScopedStats().perFamily);
-    downloadCSV('families-stats.csv', csv);
-  });
+  const meta = buildExportMeta();
+  meta.clans = buildExportClansFromRows(rows, computeStatsCached);
+
+  const html = toExcelHtml(rows, meta);
+  const safeDate = new Date().toISOString().slice(0,10);
+  downloadExcelHtml(`families-stats_${safeDate}.xls`, html);
+});
 
   // إعادة الرسم عند تغير الحجم
   const ro = new ResizeObserver(()=> requestAnimationFrame(redrawCharts));

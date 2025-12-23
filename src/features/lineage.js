@@ -870,7 +870,16 @@ export function resolveClan(person, family, ctx){
 // ---------------------------------------
 // 4) resolveFullName: اسم مركّب ديناميكي (من سلسلة النسب)
 // ---------------------------------------
-export function resolveFullName(person, family, ctx, { maxDepth = 6, joiner = ' بن ' } = {}){
+export function resolveFullName(
+  person,
+  family,
+  ctx,
+  {
+    maxDepth = 30,
+    joiner = ' بن ',          // (اختياري) للذكور
+    joinerF = ' بنت '         // (جديد) للإناث
+  } = {}
+){
   if (!person) return '';
   const bio = person.bio || {};
 
@@ -884,38 +893,45 @@ export function resolveFullName(person, family, ctx, { maxDepth = 6, joiner = ' 
   const c = ensureCtx(fam, ctx);
   if (!fam || !c) return String(person.name || '').trim();
 
-  const parts = [];
-  const seen = new Set();
+  const seenIds = new Set();
+  const out = [];
 
-  const pushName = (nm) => {
-    const s = String(nm || '').trim();
-    if (!s || s === '-') return;
-    // منع التكرار لو تكرر نفس الاسم في السلسلة لأي سبب
-    const key = s;
-    if (seen.has(key)) return;
-    seen.add(key);
-    parts.push(s);
-  };
+  const clean = (s) => String(s || '').trim();
 
-  // اسم الشخص
-  pushName(person.name);
+  // اسم الشخص أولاً
+  const selfName = clean(person.name);
+  if (!selfName || selfName === '-') return '';
+  out.push(selfName);
 
   // سلسلة الآباء
   let cur = person;
   for (let i = 0; i < maxDepth; i++){
+    // منع حلقة لو رجعنا لنفس الشخص
+    const curId = cur?._id ? String(cur._id) : null;
+    if (curId){
+      if (seenIds.has(curId)) break;
+      seenIds.add(curId);
+    }
+
     const pr = getParents(cur, fam, c);
     const father = pr?.father || null;
     if (!father) break;
 
-    pushName(father.name);
+    const fatherName = clean(father.name);
+    if (!fatherName || fatherName === '-') break;
+
+    // الوصل يعتمد على جنس "الابن الحالي" (cur)
+    const g = inferGender(cur);
+    const link = (g === 'F') ? joinerF : joiner;
+
+    out.push(link.trim(), fatherName);
+
     cur = father;
   }
 
-  // لو فشل الحساب لأي سبب، ارجع للاسم فقط
-  if (!parts.length) return String(person.name || '').trim();
-
-  return parts.join(joiner).trim();
+  return out.join(' ').replace(/\s+/g, ' ').trim();
 }
+
 
 // ---------------------------------------
 // 5) resolveGrandparents: تجميع بيانات الأجداد المخزّنة
