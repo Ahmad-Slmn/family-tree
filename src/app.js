@@ -473,33 +473,41 @@ subscribeTo(
    أدوات مساعدة للبحث داخل العائلة
    ========================= */
 function findPersonByIdInFamily(fam, pid) {
-  if (!fam || !pid) return null;
+  if (!fam || pid == null) return null;
+
+  const target = String(pid);
+
+  const eqId = (obj) => (obj && obj._id != null) ? String(obj._id) === target : false;
+
   const tops = [
     ...(Array.isArray(fam.ancestors) ? fam.ancestors : []),
     fam.father, fam.rootPerson, ...(fam.wives || [])
   ].filter(Boolean);
 
   for (const p of tops) {
-    if (p?._id === pid) return p;
+    if (eqId(p)) return p;
 
     const ch = Array.isArray(p?.children) ? p.children : [];
-    for (const c of ch) { if (c?._id === pid) return c; }
+    for (const c of ch) { if (eqId(c)) return c; }
 
     const ws = Array.isArray(p?.wives) ? p.wives : [];
     for (const w of ws) {
-      if (w?._id === pid) return w;
+      if (eqId(w)) return w;
       const wc = Array.isArray(w?.children) ? w.children : [];
-      for (const c of wc) { if (c?._id === pid) return c; }
+      for (const c of wc) { if (eqId(c)) return c; }
     }
   }
+
   const mirror = (fam.rootPerson && Array.isArray(fam.rootPerson.wives)) ? fam.rootPerson.wives : [];
   for (const w of mirror) {
-    if (w?._id === pid) return w;
+    if (eqId(w)) return w;
     const wc = Array.isArray(w?.children) ? w.children : [];
-    for (const c of wc) { if (c?._id === pid) return c; }
+    for (const c of wc) { if (eqId(c)) return c; }
   }
+
   return null;
 }
+
 
 /* =========================
    عمليات المستوى الأعلى
@@ -723,7 +731,10 @@ async function onInlineRename(personId, patch) {
   const fam = Model.getFamilies()[famKey];
   if (!fam) return;
 
-  FeatureSearch.updatePersonEverywhere(fam, personId, (p) => {
+  const targetId = personId != null ? String(personId) : '';
+
+  const applyPatch = (p) => {
+    if (!p || typeof p !== 'object') return; // يمنع الخطأ نهائيًا
     if (patch.name != null) p.name = String(patch.name).trim();
     if (patch.cognomen != null) {
       p.bio = p.bio || {};
@@ -731,32 +742,49 @@ async function onInlineRename(personId, patch) {
     }
     if (patch.role != null) p.role = String(patch.role).trim();
     FeatureSearch.cacheNorm(p);
-  });
+  };
+
+  // جرّب بنفس الـ id كما هو + كـ string + كـ number (لو كان رقميًا)
+  FeatureSearch.updatePersonEverywhere(fam, personId, applyPatch);
+  FeatureSearch.updatePersonEverywhere(fam, targetId, applyPatch);
+
+  if (/^\d+$/.test(targetId)) {
+    const n = Number(targetId);
+    FeatureSearch.updatePersonEverywhere(fam, n, applyPatch);
+  }
 
   Model.commitFamily(famKey);
 
-  // مزامنة المودال المفتوح
-if (patch.name != null) {
-  dom.currentPerson.name = String(patch.name).trim();
-  if (dom.modalName) dom.modalName.textContent = dom.currentPerson.name;
-}
+  // مزامنة المودال فقط لو الشخص المفتوح هو نفسه
+  if (dom.currentPerson && String(dom.currentPerson._id) === targetId) {
+    if (patch.name != null) {
+      dom.currentPerson.name = String(patch.name).trim();
+      if (dom.modalName) dom.modalName.textContent = dom.currentPerson.name;
+    }
 
-if (patch.cognomen != null) {
-  dom.currentPerson.bio = dom.currentPerson.bio || {};
-  dom.currentPerson.bio.cognomen = String(patch.cognomen).trim();
-}
+    if (patch.cognomen != null) {
+      dom.currentPerson.bio = dom.currentPerson.bio || {};
+      dom.currentPerson.bio.cognomen = String(patch.cognomen).trim();
+    }
 
-if (patch.role != null) {
-  dom.currentPerson.role = String(patch.role).trim();
-  if (dom.modalRole) dom.modalRole.textContent = dom.currentPerson.role; 
-}
+    if (patch.role != null) {
+      dom.currentPerson.role = String(patch.role).trim();
+      if (dom.modalRole) dom.modalRole.textContent = dom.currentPerson.role;
+    }
+  }
 
-  const p = findPersonByIdInFamily(fam, personId);
+  const p = findPersonByIdInFamily(fam, personId) || findPersonByIdInFamily(fam, targetId);
   if (TreeUI.refreshAvatarById && p) TreeUI.refreshAvatarById(p);
 
-  showSuccess('تم الحفظ.');
+  const parts = [];
+if (patch.name != null) parts.push('الاسم');
+if (patch.cognomen != null) parts.push('اللقب');
+
+showSuccess(parts.length ? `تم تحديث ${parts.join(' و ')}.` : 'تم التحديث.');
+
   FeatureDuplicates.warnDuplicatesIfAny(famKey);
 }
+
 
 /* عرض السيرة وتهيئة أدوات الصورة */
 async function onShowDetails(person, opts = {}) {

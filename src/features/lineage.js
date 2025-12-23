@@ -868,25 +868,53 @@ export function resolveClan(person, family, ctx){
 }
 
 // ---------------------------------------
-// 4) resolveFullName: اسم مركّب ديناميكي
+// 4) resolveFullName: اسم مركّب ديناميكي (من سلسلة النسب)
 // ---------------------------------------
-export function resolveFullName(person){
+export function resolveFullName(person, family, ctx, { maxDepth = 6, joiner = ' بن ' } = {}){
   if (!person) return '';
   const bio = person.bio || {};
 
-  if (bio.fullName && bio.fullName !== '-') return String(bio.fullName).trim();
-  if (bio.fullname && bio.fullname !== '-') return String(bio.fullname).trim();
+  // 1) احترم الاسم المخزّن فقط إذا كان "يدوي/مقفول"
+  const manual = String(bio.fullName || bio.fullname || '').trim();
+  const manualLocked = bio.fullNameLocked === true || bio.fullNameManual === true;
+  if (manualLocked && manual && manual !== '-') return manual;
 
-  const name   = (person.name || '').trim();
-  const father = (bio.fatherName || '').trim();
-  const grand  = (bio.paternalGrandfather || '').trim();
+  // 2) احسبه ديناميكيًا من سلسلة الأب باستخدام getParents + ctx
+  const fam = family || (ctx && ctx.family) || null;
+  const c = ensureCtx(fam, ctx);
+  if (!fam || !c) return String(person.name || '').trim();
 
-  const parts = [name];
-  if (father) parts.push(father);
-  if (grand)  parts.push(grand);
+  const parts = [];
+  const seen = new Set();
 
-  const full = parts.filter(Boolean).join(' بن ');
-  return full || name;
+  const pushName = (nm) => {
+    const s = String(nm || '').trim();
+    if (!s || s === '-') return;
+    // منع التكرار لو تكرر نفس الاسم في السلسلة لأي سبب
+    const key = s;
+    if (seen.has(key)) return;
+    seen.add(key);
+    parts.push(s);
+  };
+
+  // اسم الشخص
+  pushName(person.name);
+
+  // سلسلة الآباء
+  let cur = person;
+  for (let i = 0; i < maxDepth; i++){
+    const pr = getParents(cur, fam, c);
+    const father = pr?.father || null;
+    if (!father) break;
+
+    pushName(father.name);
+    cur = father;
+  }
+
+  // لو فشل الحساب لأي سبب، ارجع للاسم فقط
+  if (!parts.length) return String(person.name || '').trim();
+
+  return parts.join(joiner).trim();
 }
 
 // ---------------------------------------

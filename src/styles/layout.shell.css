@@ -260,8 +260,12 @@
 }
 
 #filtersToggle{
-  transition:box-shadow var(--motion-dur),transform var(--motion-dur);
-  will-change:box-shadow,transform
+  will-change:box-shadow,transform;
+  transition: border-color var(--motion-dur) var(--motion-ease),
+    box-shadow var(--motion-dur) var(--motion-ease),
+    transform var(--motion-dur) var(--motion-ease),
+    background var(--motion-dur) var(--motion-ease),
+    color var(--motion-dur) var(--motion-ease)
 }
 #filtersToggle:hover,#activeFamily:hover{
   box-shadow:0 6px 18px color-mix(in oklab,var(--text-main) 12%,transparent)

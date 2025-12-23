@@ -71,7 +71,7 @@ export function clearPhotoCache(){
 
 // ===== إرجاع مصدر صورة الشخص مع دعم idb:/data:/URL =====
 async function getPersonPhotoURL(person){
-  const id  = person?._id || '';
+const id = person?._id != null ? String(person._id) : '';
   const raw = (person?.bio?.photoUrl || person?.photoUrl || '').trim();
 
   if (id){
@@ -146,12 +146,15 @@ async function refreshAvatar(card, person){
 }
 
 export function refreshAvatarById(person){
-  const id = typeof person === 'string' ? person : person?._id;
+  const rawId = (typeof person === 'string' ? person : person?._id);
+  const id = rawId != null ? String(rawId) : '';
   if (!id) return;
+
   const card = _cardById.get(id);
   const p = (typeof person === 'object' && person) || null;
   if (card && p) refreshAvatar(card, p);
 }
+
 
 // ===== إبراز مطابقات جزئية مثل الاقتراحات في البطاقات =====
 const AR_MARKS_OPT = '[\\u0610-\\u061A\\u064B-\\u065F\\u0670\\u06D6-\\u06ED\\u0640]*';
@@ -220,8 +223,14 @@ export function createCard(person, className = '', handlers = {}, opts = {}){
   const card = el('div', `member-card ${className||''}`.trim());
   const bio = person.bio || {};
 
-  if (person._id){ RENDERED_IDS.add(person._id); card.dataset.personId = person._id; } 
-  else { card.removeAttribute('data-person-id'); }
+  const pid = person?._id != null ? String(person._id) : '';
+
+  if (pid){
+    RENDERED_IDS.add(pid);
+    card.dataset.personId = pid;
+  } else {
+    card.removeAttribute('data-person-id');
+  }
 
   const dob = (bio.birthDate && bio.birthDate !== '-') ? String(bio.birthDate).trim()
              : ((bio.birthYear && bio.birthYear !== '-') ? String(bio.birthYear).trim() : '');
@@ -268,8 +277,9 @@ export function createCard(person, className = '', handlers = {}, opts = {}){
         handlers?.showWarning?.('لا يمكن ترك الاسم فارغًا.');
         return;
       }
-      if (v !== old && typeof handlers.onInlineRename === 'function'){
-        handlers.onInlineRename(person._id, { name: v });
+      // مرّر pid (String) بدل person._id
+      if (v !== old && typeof handlers.onInlineRename === 'function' && pid){
+        handlers.onInlineRename(pid, { name: v });
       }
     });
 
@@ -340,7 +350,8 @@ export function createCard(person, className = '', handlers = {}, opts = {}){
 
 // ===== إنشاء/تحديث بطاقة شخص مع الحفاظ على المراجع =====
 export function upsertCard(container, person, handlers, className = '', opts = {}){
-  const id = person._id || null;
+  // توحيد نوع الـ id إلى String دائمًا
+  const id = person?._id != null ? String(person._id) : null;
   const exist = id ? _cardById.get(id) : null;
 
   if (exist && !exist.isConnected) _cardById.delete(id);

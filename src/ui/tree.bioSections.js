@@ -720,7 +720,12 @@ function buildBasicSection(bio, person, family){
 
 
   // الاسم / اللقب / المهنة
-  addBioRow(body, LABELS.fullName   || 'الإسم',        bio.fullName || bio.fullname || '', 'fullName');
+addBioRow(
+  body,
+  LABELS.fullName || 'الإسم',
+  (person && family && ctx) ? Lineage.resolveFullName(person, family, ctx) : (bio.fullName || bio.fullname || ''),
+  'fullName'
+);
   addBioRow(body, LABELS.cognomen   || 'اللقب',        bio.cognomen,   'cognomen');
   addBioRow(body, LABELS.occupation || 'المهنة',       bio.occupation, 'occupation');
 
