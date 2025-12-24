@@ -54,10 +54,45 @@ export function renderFamilyButtons(families = {}, selectedKey = null, handlers 
     return pool.some(p => match(p) && passFilters(p));
   }
 
-  Object.entries(families || {}).forEach(([k,f]) => {
-    if (!f || f.hidden) return;
-    if ((q || flt.role || flt.clan || flt.birthFrom || flt.birthTo) && !familyMatches(f)) return;
+  // ===== ترتيب منطقي للعائلات قبل الرسم =====
+  const coll = new Intl.Collator('ar', { sensitivity:'base', numeric:true });
 
+  const visibleEntries = Object.entries(families || {})
+    .filter(([k, f]) => {
+      if (!f || f.hidden) return false;
+      if ((q || flt.role || flt.clan || flt.birthFrom || flt.birthTo) && !familyMatches(f)) return false;
+      return true;
+    })
+    .map(([k, f]) => {
+      const rawName = (f.familyName || f.title || f.rootPerson?.name || k || '').trim();
+      const nameKey = rawName || String(k);
+      const isSelected = (k === selectedKey);
+      const isCore = !!f.__core;
+      const isCustom = !!(f.__custom && !f.__core);
+      return { k, f, rawName, nameKey, isSelected, isCore, isCustom };
+    })
+    .sort((a, b) => {
+      // 1) المختارة أولاً
+      if (a.isSelected && !b.isSelected) return -1;
+      if (!a.isSelected && b.isSelected) return 1;
+
+      // 2) custom قبل core
+      if (a.isCustom && !b.isCustom) return -1;
+      if (!a.isCustom && b.isCustom) return 1;
+
+      if (a.isCore && !b.isCore) return 1;   // core بعد غير-core
+      if (!a.isCore && b.isCore) return -1;
+
+      // 3) ترتيب أبجدي عربي (مع أرقام)
+      const c = coll.compare(a.nameKey, b.nameKey);
+      if (c !== 0) return c;
+
+      // 4) كسر تعادل أخير بالمفتاح
+      return coll.compare(String(a.k), String(b.k));
+    });
+
+  // ===== الرسم بعد الفرز =====
+  visibleEntries.forEach(({ k, f }) => {
     const wrap = document.createElement('div'); wrap.className = 'family-item';
     const btn = document.createElement('button');
     btn.type = 'button'; btn.className = 'family-button'; btn.dataset.family = k;
@@ -88,7 +123,8 @@ export function renderFamilyButtons(families = {}, selectedKey = null, handlers 
         if (ok) await handlers?.onDeleteFamily?.(k);
       });
 
-      wrap.append(edit, del);
+wrap.append(edit, del);
+
     } else if (f.__core){
       const hideBtn = document.createElement('button');
       hideBtn.className = 'btn tiny hide-family'; hideBtn.title = 'إخفاء العائلة الأساسية من العرض';
@@ -107,4 +143,5 @@ export function renderFamilyButtons(families = {}, selectedKey = null, handlers 
 
     container.appendChild(wrap);
   });
+
 }
