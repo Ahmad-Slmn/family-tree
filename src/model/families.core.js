@@ -1101,11 +1101,6 @@ export function linkParentChildLinksFromOldShape(fam){
 
     if (!Array.isArray(father.spousesIds)) father.spousesIds = [];
     if (!Array.isArray(root.spousesIds)) root.spousesIds = [];
-
-    if (!Array.isArray(father.children)) father.children = [];
-    if (!father.children.some(ch => ch && ch._id === root._id)){
-      father.children.push(root);
-    }
   }
 
   if (father && Array.isArray(father.children)) {
@@ -1230,6 +1225,97 @@ export function walk(fam, cb, { withPath = false } = {}){
 
 export function walkPersonsWithPath(fam, cb){ walk(fam, cb, { withPath:true }); }
 export function walkPersons(fam, cb){ walk(fam, cb, { withPath:false }); }
+// ================================
+// FIX: إزالة تكرار _id داخل العائلة + تحديث الروابط
+// ================================
+function _newSafeId(prefix='p'){
+  try { if (crypto?.randomUUID) return crypto.randomUUID(); } catch {}
+  // أكثر أمانًا من Math.random لوحده
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,10)}`;
+}
+
+function _replaceIdEverywhere(fam, oldId, newId){
+  if (!fam) return;
+  const oldS = String(oldId);
+  const newS = String(newId);
+
+  walkPersons(fam, (p) => {
+    if (!p || typeof p !== 'object') return;
+
+    // روابط مباشرة
+    if (p.fatherId != null && String(p.fatherId) === oldS) p.fatherId = newS;
+    if (p.motherId != null && String(p.motherId) === oldS) p.motherId = newS;
+
+    // bio links
+    if (p.bio && typeof p.bio === 'object'){
+      if (p.bio.fatherId != null && String(p.bio.fatherId) === oldS) p.bio.fatherId = newS;
+      if (p.bio.motherId != null && String(p.bio.motherId) === oldS) p.bio.motherId = newS;
+    }
+
+    // arrays
+    if (Array.isArray(p.spousesIds)){
+      p.spousesIds = p.spousesIds.map(x => (x != null && String(x) === oldS) ? newS : x);
+    }
+    if (Array.isArray(p.childrenIds)){
+      p.childrenIds = p.childrenIds.map(x => (x != null && String(x) === oldS) ? newS : x);
+    }
+
+    // الشكل القديم اللي عندك: father/mother أحيانًا يساوي id
+    if (p.father != null && String(p.father) === oldS) p.father = newS;
+    if (p.mother != null && String(p.mother) === oldS) p.mother = newS;
+  });
+
+  // fam.persons
+  if (fam.persons && typeof fam.persons === 'object'){
+    if (fam.persons[oldS]){
+      fam.persons[newS] = fam.persons[oldS];
+      delete fam.persons[oldS];
+    }
+  }
+
+  // rootPerson motherId
+  if (fam.rootPerson?.motherId != null && String(fam.rootPerson.motherId) === oldS){
+    fam.rootPerson.motherId = newS;
+  }
+}
+
+export function dedupeIdsInFamily(fam){
+  if (!fam) return fam;
+
+  const firstPathById = new Map();
+  const duplicates = [];
+
+  // لاحظ: نستخدم walkPersonsWithPath لأن مشكلتك تظهر هنا
+  walkPersonsWithPath(fam, (p, path) => {
+    if (!p || p._id == null) return;
+
+    const id = String(p._id);
+    const curPath = path || '(unknown)';
+
+    if (firstPathById.has(id)){
+      duplicates.push({ id, path: curPath, first: firstPathById.get(id), obj: p });
+    } else {
+      firstPathById.set(id, curPath);
+    }
+  });
+
+  // إن لم توجد تكرارات: خلاص
+  if (!duplicates.length) return fam;
+
+  // نعيد تسمية كل ظهور مكرر (عدا الأول)
+  for (const d of duplicates){
+    const newId = _newSafeId('dup');
+    const oldId = d.id;
+
+    // حدّث هذا الشخص نفسه
+    if (d.obj) d.obj._id = newId;
+
+    // حدّث كل الروابط في العائلة من oldId -> newId
+    _replaceIdEverywhere(fam, oldId, newId);
+  }
+
+  return fam;
+}
 
 export function findPathByIdInFamily(fam, pid) {
   let out = null;
@@ -1566,6 +1652,7 @@ export function normalizeFamilyPipeline(fam, { fromVer = 0, markCore = false } =
   ensureFamilyBios(fam);
   ensureIds(fam);
   linkRootPersonWives(fam);
+  dedupeIdsInFamily(fam);
   buildRealLinks(fam);
 
   // هنا التعديل المهم

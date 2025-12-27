@@ -1,5 +1,4 @@
-// stateManager.js
-// إدارة حالة واجهة التطبيق + نشر/اشتراك مع حفظ محلي وتزامن عبر التبويبات
+// stateManager.js — إدارة حالة واجهة التطبيق (pub/sub) + حفظ محلي + تزامن عبر التبويبات
 
 /* ======================= الإعدادات العامة ======================= */
 const DEFAULTS = {
@@ -10,62 +9,83 @@ const DEFAULTS = {
   filters: {
     role:      localStorage.getItem('flt_role') || '',
     clan:      localStorage.getItem('flt_clan') || '',
+    life:      localStorage.getItem('flt_life') || '',
+    gen:       localStorage.getItem('flt_gen')  || '',
     birthFrom: localStorage.getItem('flt_from') || '',
     birthTo:   localStorage.getItem('flt_to')   || '',
   },
 };
 
-// مفاتيح تُحفَظ في localStorage (انتقائيًا)
+// مفاتيح الحفظ الانتقائي في localStorage
 const PERSIST_MAP = {
-  theme:       'familyTreeTheme',
-  fontSize:    'siteFontSize',
+  theme: 'familyTreeTheme',
+  fontSize: 'siteFontSize',
   selectedFamily: 'selectedFamily',
-  search:      'searchText',          // اختياري للفلاتر/البحث
-  'filters.role':      'flt_role',
-  'filters.clan':      'flt_clan',
+  search: 'searchText',
+  'filters.role': 'flt_role',
+  'filters.clan': 'flt_clan',
   'filters.birthFrom': 'flt_from',
-  'filters.birthTo':   'flt_to',
+  'filters.birthTo': 'flt_to',
+  'filters.life': 'flt_life',
+  'filters.gen': 'flt_gen',
 };
 
-// اختناق الحفظ
 const SAVE_DEBOUNCE_MS = 150;
 
 /* ======================= أدوات مساعدة ======================= */
-// مقارنة سطحية بسيطة
 function shallowEqual(a, b){
   if (a === b) return true;
   if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
   const ka = Object.keys(a), kb = Object.keys(b);
   if (ka.length !== kb.length) return false;
-  for (const k of ka){ if (a[k] !== b[k]) return false; }
+  for (const k of ka) if (a[k] !== b[k]) return false;
   return true;
 }
 
-// التحقق/التطبيع لقيم الحالة
+// تطبيع/تحقق قيم الحالة (حدود الخط + التاريخ + قيم الفلاتر)
 function normalizeState(s){
-  const out = { ...DEFAULTS, ...s, filters: { ...DEFAULTS.filters, ...(s?.filters||{}) } };
-  // ضبط حدود الحجم
+  const out = { ...DEFAULTS, ...s, filters: { ...DEFAULTS.filters, ...(s?.filters || {}) } };
+
+  // حدود حجم الخط
   let fs = parseInt(out.fontSize, 10);
   if (!Number.isFinite(fs)) fs = 16;
   out.fontSize = Math.min(24, Math.max(12, fs));
-  // تواريخ بصيغة YYYY-MM-DD أو فارغة
-  const dt = v => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : (v ? String(v).trim() : ''));
+
+  // تواريخ YYYY-MM-DD أو فارغ
+  const dt = (v) =>
+    (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) ? v : (v ? String(v).trim() : '');
   out.filters.birthFrom = dt(out.filters.birthFrom);
   out.filters.birthTo   = dt(out.filters.birthTo);
+
   // نص البحث
-  out.search = String(out.search||'').trim();
-  // الدور أحد القيم المعروفة أو فارغ
-  const role = String(out.filters.role||'').trim();
-  out.filters.role = ['ابن','بنت','زوجة','الأب','جد',''].includes(role) ? role : '';
+  out.search = String(out.search || '').trim();
+
+  // الدور: قيمة معروفة أو فارغ
+  const role = String(out.filters.role || '').trim();
+  out.filters.role = ['جد','الأب','صاحب الشجرة','زوجة','ابن','بنت',''].includes(role) ? role : '';
+
+  // الحالة: alive/deceased أو فارغ
+  const life = String(out.filters.life || '').trim();
+  out.filters.life = (life === 'alive' || life === 'deceased') ? life : '';
+
+  // الجيل: اترك "0" كما هو
+  const genRaw = (out.filters.gen == null) ? '' : String(out.filters.gen).trim();
+  if (genRaw === '') {
+    out.filters.gen = '';
+  } else {
+    const n = parseInt(genRaw, 10);
+    out.filters.gen = Number.isFinite(n) ? String(n) : '';
+  }
+
   return out;
 }
 
-// قراءة قيمة من المسار "a.b.c"
+// قراءة قيمة من مسار "a.b.c"
 function getByPath(obj, path){
   return path.split('.').reduce((acc, k) => (acc ? acc[k] : undefined), obj);
 }
 
-// تعيين قيمة لمسار "a.b.c" دون كسر كائنات أخرى
+// تعيين قيمة لمسار "a.b.c" دون كسر الكائنات الأخرى
 function setByPath(obj, path, val){
   const parts = path.split('.');
   const last = parts.pop();
@@ -86,9 +106,11 @@ let state = normalizeState({
   filters: {
     role:      localStorage.getItem('flt_role') || DEFAULTS.filters.role,
     clan:      localStorage.getItem('flt_clan') || DEFAULTS.filters.clan,
+    life:      localStorage.getItem('flt_life') || DEFAULTS.filters.life,
+    gen:       localStorage.getItem('flt_gen')  || DEFAULTS.filters.gen,
     birthFrom: localStorage.getItem('flt_from') || DEFAULTS.filters.birthFrom,
     birthTo:   localStorage.getItem('flt_to')   || DEFAULTS.filters.birthTo,
-  }
+  },
 });
 
 const listeners = new Set();
@@ -98,7 +120,6 @@ let _saveTimer = null;
 
 /* ======================= الحفظ المحلي ======================= */
 function persistChanged(prev, next){
-  // لا تحفظ أثناء كل ضغطة؛ استخدم اختناق
   if (_saveTimer) clearTimeout(_saveTimer);
   _saveTimer = setTimeout(() => {
     try{
@@ -115,17 +136,18 @@ function persistChanged(prev, next){
 }
 
 /* ======================= واجهة عامة ======================= */
-// إرجاع نسخة غير قابلة للتعديل
-export function getState(){ return { ...state, filters: { ...state.filters } }; }
+export function getState(){
+  return { ...state, filters: { ...state.filters } };
+}
 
-// تحديث مع دمج + تحقّق من التغيّر الحقيقي
 export function setState(patch){
   if (!patch) patch = {};
   const prev = state;
+
   const next = normalizeState({
     ...prev,
     ...patch,
-    filters: { ...prev.filters, ...(patch.filters||{}) }
+    filters: { ...prev.filters, ...(patch.filters || {}) },
   });
 
   const equal =
@@ -135,23 +157,20 @@ export function setState(patch){
     prev.search === next.search &&
     shallowEqual(prev.filters, next.filters);
 
-  if (equal) return; // لا إشعار ولا حفظ
+  if (equal) return;
 
   state = next;
   persistChanged(prev, next);
 
   if (_batchDepth > 0){ _pendingChanged = true; return; }
-
   for (const fn of listeners){ try{ fn(getState()); }catch{} }
 }
 
-// اشتراك بسيط
 export function subscribe(fn){
   listeners.add(fn);
   return () => listeners.delete(fn);
 }
 
-// اشتراك على مقطع محدد مع مقارنة مخصّصة
 export function subscribeTo(selector, onChange, cmp = shallowEqual){
   let last = selector(getState());
   const unsub = subscribe(st => {
@@ -165,7 +184,8 @@ export function subscribeTo(selector, onChange, cmp = shallowEqual){
 // Batch: تجميع عدة setState في إشعار واحد
 export function batch(fn){
   _batchDepth++;
-  try{ fn(); } finally{
+  try{ fn(); }
+  finally{
     _batchDepth = Math.max(0, _batchDepth - 1);
     if (_batchDepth === 0 && _pendingChanged){
       _pendingChanged = false;
@@ -174,34 +194,35 @@ export function batch(fn){
   }
 }
 
-// إدارة الفلاتر
+/* ======================= الفلاتر ======================= */
 export function setFilter(name, value){
   const filters = { ...state.filters, [name]: value };
   setState({ filters });
 }
+
 export function clearFilters(){
-  setState({ filters: { role:'', clan:'', birthFrom:'', birthTo:'' } });
+  setState({ filters: { role:'', clan:'', life:'', gen:'', birthFrom:'', birthTo:'' } });
 }
 
-// إعادة ضبط جزئي/كامل
+/* ======================= إعادة الضبط ======================= */
 export function resetState(part = 'all'){
   if (part === 'filters') return clearFilters();
-  if (part === 'view')    return setState({ search:'', selectedFamily: state.selectedFamily });
-  // كامل
+  if (part === 'view') return setState({ search:'', selectedFamily: state.selectedFamily });
   setState({ ...DEFAULTS });
 }
 
-// مزامنة عبر تبويبات المتصفح
+/* ======================= تزامن التبويبات ======================= */
 window.addEventListener('storage', (e) => {
   if (!e || !e.key) return;
-  const map = Object.entries(PERSIST_MAP);
-  for (const [path, lsKey] of map){
+
+  for (const [path, lsKey] of Object.entries(PERSIST_MAP)){
     if (e.key !== lsKey) continue;
-    const prev = getState();
+
     const next = getState();
-    const newVal = e.newValue == null ? '' : e.newValue;
+    const newVal = (e.newValue == null) ? '' : e.newValue;
     setByPath(next, path, newVal);
-    // استدعاء setState لنيل التحقق/الحفظ/الإشعار إن تغيّر شيء
+
+    // يمر عبر normalize + persist + notify فقط عند وجود تغيير فعلي
     setState(next);
     return;
   }

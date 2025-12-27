@@ -223,13 +223,12 @@ Object.entries(corePhotos).forEach(([famKey, patchMap]) => {
 // 3) تهيئة المخزن (pipeline للبذور + تحميل من IndexedDB)
 // ================================
 export async function initFamiliesStore() {
-  Object.keys(families || {}).forEach(k => {
-    const f = families[k];
-    if (!f) return;
-    f.__key = k;
-    const ver = Number.isFinite(+f.__v) ? +f.__v : 0;
-    normalizeFamilyPipeline(f, { fromVer: ver, markCore: true });
-  });
+Object.keys(families || {}).forEach(k => {
+  const f = families[k];
+  if (!f) return;
+  const ver = Number.isFinite(+f.__v) ? +f.__v : 0;
+  normalizeFamilyPipeline(f, { fromVer: ver, markCore: true });
+});
 
   await loadPersistedFamilies();
 }

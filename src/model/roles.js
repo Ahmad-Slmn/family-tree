@@ -13,7 +13,7 @@ export function roleGroup(p){
 }
 
 // قائمة الأدوار التي نسمح بها في الفلتر (متوافقة مع roleGroup)
-export const ROLE_FILTER_VALUES = ['ابن','بنت','الأب','جد','زوجة'];
+export const ROLE_FILTER_VALUES = ['جد','الأب','صاحب الشجرة','زوجة','ابن','بنت'];
 
 // تخمين جنس الشخص من الحقول المتاحة (bio.gender / person.gender / role)
 export function inferGender(p){

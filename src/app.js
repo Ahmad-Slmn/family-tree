@@ -6,6 +6,7 @@ import * as TreeUI from './ui/tree.js';
 import * as ModalUI from './ui/modal.js';
 import { ModalManager } from './ui/modalManager.js';
 import { validateFamily } from './features/validate.js';
+import { walkPersons, walkPersonsWithPath } from './model/families.core.js';
 
 import {initValidationUI, setValidationResults, getValidationSummary, refreshValidationBadge, vcToastSummaryText} from './ui/validationCenter.js';
 
@@ -27,6 +28,10 @@ import * as FeatureStats from './features/stats.js';
 import * as FeatureIO from './features/io.js';
 import * as FeaturePrint from './features/print.js';
 import * as FeatureEngage from './features/engage.js';
+
+const IS_PROD =
+  (typeof process !== 'undefined' && process?.env?.NODE_ENV === 'production') ||
+  (typeof location !== 'undefined' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1');
 
 // تدوير عبارات رأس الشجرة (كتابة/مسح حرفيًا)
 const rotatingItems=[
@@ -622,6 +627,65 @@ function findPersonByIdInFamily(fam, pid) {
   return null;
 }
 
+// =========================
+// DEV GUARD: منع تكرار _id داخل العائلة
+// =========================
+
+function devAssertNoDuplicateIdsInFamily(fam, famKey) {
+  if (IS_PROD) return;
+  if (!fam) return;
+
+  // نخزن: id -> أول مسار ظهر فيه
+  const firstPathById = new Map();
+  const dups = [];
+
+  // 1) فحص الشجرة الأساسية مع المسارات
+  walkPersonsWithPath(fam, (p, path) => {
+    if (!p || typeof p !== 'object') return;
+    if (p._id == null) return;
+
+    const id = String(p._id);
+    const curPath = path || '(unknown path)';
+
+    if (firstPathById.has(id)) {
+      dups.push({
+        id,
+        first: firstPathById.get(id),
+        second: curPath
+      });
+    } else {
+      firstPathById.set(id, curPath);
+    }
+  });
+
+  // 2) لا تعتبر fam.persons duplicate (فهرس)، بس لو فيه id جديد أضفه
+  if (fam.persons && typeof fam.persons === 'object') {
+    Object.values(fam.persons).forEach(p => {
+      if (!p || typeof p !== 'object') return;
+      if (p._id == null) return;
+
+      const id = String(p._id);
+      if (!firstPathById.has(id)) firstPathById.set(id, 'fam.persons');
+    });
+  }
+
+  // 3) النتيجة
+  if (dups.length) {
+    console.error('[DEV] Duplicate _id detected', {
+      familyKey: famKey,
+      duplicates: dups
+    });
+
+    try {
+      showWarning?.(
+        `تحذير تطوير: يوجد تكرار في _id داخل ${highlight(famKey)}`
+      );
+    } catch {}
+  }
+}
+
+
+
 
 /* =========================
    عمليات المستوى الأعلى
@@ -746,6 +810,8 @@ if (sum.counts.total > 0){
 
 }
 
+// قبل الحفظ: DEV guard ضد تكرار _id
+devAssertNoDuplicateIdsInFamily(familyObj, key);
 
   // نفّذ الحفظ فقط إذا نجح التحقق
   Model.getFamilies()[key] = familyObj;
@@ -1327,6 +1393,12 @@ async function bootstrap(){
     perf.start('bootstrap:loadFamilies');
     setSplashProgress(25,'تحميل بيانات العائلات…');
     await Model.loadPersistedFamilies();
+    // DEV: افحص تكرار _id بعد التحميل مباشرة
+if (!IS_PROD) {
+  const fams = Model.getFamilies?.() || {};
+  Object.keys(fams).forEach(k => devAssertNoDuplicateIdsInFamily(fams[k], k));
+}
+
     perf.end('bootstrap:loadFamilies');
 
     // ===== 4) تقدم أقرب للحقيقة حسب حجم البيانات (30..60) =====

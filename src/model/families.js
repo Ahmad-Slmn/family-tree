@@ -45,7 +45,8 @@ export {
   getDuplicatesConfig,
   findDuplicatesInFamily,
   stripPhotosDeep,
-  findPathByIdInFamily
+  findPathByIdInFamily,
+  walkPersons
 } from './families.core.js';
 
 // 2) التخزين + العائلات الحيّة + اختيار العائلة

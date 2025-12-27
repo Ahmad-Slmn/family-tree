@@ -5,8 +5,6 @@ import { el, textEl, byId, getArabicOrdinal, getArabicOrdinalF } from '../utils.
 import * as Lineage from '../features/lineage.js';
 import { inferGender } from '../model/roles.js';
 import { ensureIds } from '../model/families.js';
-
-// NEW: تهيئة العائلة (pipeline) قبل الرسم
 import { normalizeFamilyPipeline } from '../model/families.core.js';
 
 import {
@@ -46,86 +44,98 @@ import {
   getAvailableBioModes
 } from './tree.bioSections.js';
 
+import { renderFamilyButtons, updatePrintButtonLabel } from './tree.familyButtons.js';
 
-import {
-  renderFamilyButtons,
-  updatePrintButtonLabel
-} from './tree.familyButtons.js';
-
-// ===== حالة الاستعلام/العائلة الأخيرة =====
 let _lastKey = null, _lastQuery = '';
 
-// ===== جدولة رسم متدرّج عند خمول المتصفح =====
-const _ric = window.requestIdleCallback || (cb => setTimeout(
-  () => cb({ timeRemaining: () => 0, didTimeout: true }), 1
-));
+const _ric =
+  window.requestIdleCallback ||
+  (cb => setTimeout(() => cb({ timeRemaining: () => 0, didTimeout: true }), 1));
 
-function runChunked(list, chunkSize, fn, done){
+function runChunked(list, chunkSize, fn, done) {
   let i = 0;
-  function step(){
+  const step = () => {
     _ric((idle) => {
       const budget = idle && typeof idle.timeRemaining === 'function' ? idle.timeRemaining() : 0;
       const dyn = budget > 8 ? Math.max(chunkSize, Math.ceil(chunkSize * 2)) : chunkSize;
       const end = Math.min(i + dyn, list.length);
       for (; i < end; i++) fn(list[i], i);
-      if (i < list.length) step(); else if (done) done();
+      if (i < list.length) step();
+      else if (done) done();
     });
-  }
-  if (list.length) step(); else if (done) done();
+  };
+  if (list.length) step();
+  else if (done) done();
 }
 
-// ===== رسم الشجرة الرئيسية (بحث/فلاتر/زوجات/أبناء) =====
-export function drawFamilyTree(families = {}, selectedKey = null, domRefs = {}, handlers = {}){
-  const tree = (domRefs && domRefs.familyTree) || byId('familyTree'); if (!tree) return;
+export function drawFamilyTree(families = {}, selectedKey = null, domRefs = {}, handlers = {}) {
+  const tree = (domRefs && domRefs.familyTree) || byId('familyTree');
+  if (!tree) return;
 
   const sameKey = _lastKey === selectedKey;
-  const q   = (handlers && handlers.getSearch && handlers.getSearch()) || (domRefs && domRefs.searchText) || '';
-  const flt = (handlers && handlers.getFilters && handlers.getFilters()) || { role:'', clan:'', birthFrom:'', birthTo:'' };
-  const hasNonRoleFilters = !!(flt.clan || flt.birthFrom || flt.birthTo);
+  const q =
+    (handlers && handlers.getSearch && handlers.getSearch()) ||
+    (domRefs && domRefs.searchText) ||
+    '';
+
+  const flt =
+    (handlers && handlers.getFilters && handlers.getFilters()) || {
+      role: '', clan: '', life: '', gen: '', birthFrom: '', birthTo: ''
+    };
+
+  const hasNonRoleFilters = !!(
+    (flt.clan && String(flt.clan).trim()) ||
+    (flt.life && String(flt.life).trim()) ||
+    (flt.gen != null && String(flt.gen).trim() !== '') ||
+    (flt.birthFrom && String(flt.birthFrom).trim()) ||
+    (flt.birthTo && String(flt.birthTo).trim())
+  );
+
   const hideParents = (flt.role === 'ابن' || flt.role === 'بنت' || hasNonRoleFilters);
-  const filtersActive = !!(flt.role || flt.clan || flt.birthFrom || flt.birthTo);
+
+  const filtersActive = !!(
+    (flt.role && String(flt.role).trim()) ||
+    (flt.clan && String(flt.clan).trim()) ||
+    (flt.life && String(flt.life).trim()) ||
+    (flt.gen != null && String(flt.gen).trim() !== '') ||
+    (flt.birthFrom && String(flt.birthFrom).trim()) ||
+    (flt.birthTo && String(flt.birthTo).trim())
+  );
 
   let _drawnTotal = 0;
   tree.innerHTML = '';
 
-  if (!sameKey || q !== _lastQuery){
-    resetCardsState();
-  }
-  _lastKey = selectedKey; _lastQuery = q;
+  if (!sameKey || q !== _lastQuery) resetCardsState();
+  _lastKey = selectedKey;
+  _lastQuery = q;
 
   const __currentIds = new Set();
-let fam = families[selectedKey];
+  let fam = families[selectedKey];
 
-if (fam && !fam.__pipelineReady) {
-  const fromVer =
-    Number.isFinite(fam.__v) ? fam.__v :
-    Number.isFinite(fam.schemaVersion) ? fam.schemaVersion :
-    0;
+  // تهيئة العائلة (pipeline) قبل الرسم + تثبيت ids
+  if (fam && !fam.__pipelineReady) {
+    const fromVer =
+      Number.isFinite(fam.__v) ? fam.__v :
+      Number.isFinite(fam.schemaVersion) ? fam.schemaVersion :
+      0;
 
-  normalizeFamilyPipeline(fam, {
-    fromVer,
-    markCore: fam.__core === true
-  });
+    normalizeFamilyPipeline(fam, { fromVer, markCore: fam.__core === true });
+    fam.__pipelineReady = true;
+  }
+  if (fam) ensureIds(fam);
 
-  fam.__pipelineReady = true;
-}
+  window.__CURRENT_FAMILY__ = fam;
+  const lineageCtx = Lineage.buildLineageContext(fam);
+  window.__LINEAGE_CTX__ = lineageCtx;
 
-// بعد الـ pipeline: ثبّت ids لأي عناصر تمت إضافتها/توليدها
-if (fam) ensureIds(fam);
-
-
-
-window.__CURRENT_FAMILY__ = fam;
-
-const lineageCtx = Lineage.buildLineageContext(fam);
-window.__LINEAGE_CTX__ = lineageCtx;
-
-  if (!fam || fam.hidden){
+  if (!fam || fam.hidden) {
     const titleEl = (domRefs && domRefs.treeTitle) || byId('treeTitle');
     if (titleEl) titleEl.textContent = 'عائلة';
+
     pruneRemoved(new Set());
+
     const treeArea = byId('familyTree');
-    if (treeArea){
+    if (treeArea) {
       treeArea.innerHTML = `
   <style>
     #familyTree .no-family-message{background:var(--card-bg);color:var(--text-main);border:1px dashed var(--ancestor-border);
@@ -146,7 +156,6 @@ window.__LINEAGE_CTX__ = lineageCtx;
     const ord = getArabicOrdinal;
 
     let anc = Array.isArray(f.ancestors) ? f.ancestors.slice() : [];
-
     anc = anc.map((a, idx) => {
       const g = Number.isFinite(+a.generation) ? +a.generation : (idx + 1) || 1;
       let role = String(a.role || '').trim();
@@ -171,7 +180,8 @@ window.__LINEAGE_CTX__ = lineageCtx;
       };
     });
 
-    const fatherRef = (f.father && f.father._id && lineageCtx.byId.get(String(f.father._id))) || f.father;
+    const fatherRef =
+      (f.father && f.father._id && lineageCtx.byId.get(String(f.father._id))) || f.father;
 
     const father = fatherRef ? [{
       ...fatherRef,
@@ -179,7 +189,8 @@ window.__LINEAGE_CTX__ = lineageCtx;
       childrenIds: Array.isArray(fatherRef.childrenIds) ? fatherRef.childrenIds : []
     }] : [];
 
-    const rootRef = (f.rootPerson && f.rootPerson._id && lineageCtx.byId.get(String(f.rootPerson._id))) || f.rootPerson;
+    const rootRef =
+      (f.rootPerson && f.rootPerson._id && lineageCtx.byId.get(String(f.rootPerson._id))) || f.rootPerson;
 
     const root = rootRef ? [{
       ...rootRef,
@@ -187,40 +198,55 @@ window.__LINEAGE_CTX__ = lineageCtx;
       childrenIds: Array.isArray(rootRef.childrenIds) ? rootRef.childrenIds : []
     }] : [];
 
-    const ancForRender = anc.slice().reverse();
-
-    return [...ancForRender, ...father, ...root].filter(Boolean);
+    return [...anc.slice().reverse(), ...father, ...root].filter(Boolean);
   };
 
-  const match = makeMatcher(q, { fields: ['name','role','cognomen'] });
+  const match = makeMatcher(q, { fields: ['name', 'role', 'cognomen'] });
   const passFilters = makePassFilters(flt, fam, lineageCtx);
 
   let tools = null, toggle = null;
   const setMotherVisibility = (on) => {
     tree.querySelectorAll('.mini-strip.mother-strip').forEach(e => { e.style.display = on ? '' : 'none'; });
   };
-  if(q){
-    tools=el('div','generation tree-tools');
-    const wrap=el('div','tree-tools-wrap');
-    const motherWrap=el('div','mother-toggle'); motherWrap.id='motherToggleWrap';
-    const chk=document.createElement('input'); chk.type='checkbox'; chk.id='toggleMotherName'; chk.checked=true;
-    const lbl=textEl('span','إظهار اسم الأم');
-    motherWrap.append(chk,lbl);
-    const res=el('div','results-count');
-    const strongQ=textEl('strong',String(q));
-    const strongNum=textEl('strong','0','resultsNum'); strongNum.id='resultsNum'; strongNum.setAttribute('aria-live','polite');
-    res.append(textEl('span','نتائج البحث عن "'),strongQ,textEl('span','": '),strongNum);
-    wrap.append(motherWrap,res); tools.appendChild(wrap); tree.appendChild(tools);
-    toggle=chk; toggle.addEventListener('change',()=>setMotherVisibility(!!toggle.checked));
+
+  if (q) {
+    tools = el('div', 'generation tree-tools');
+    const wrap = el('div', 'tree-tools-wrap');
+
+    const motherWrap = el('div', 'mother-toggle');
+    motherWrap.id = 'motherToggleWrap';
+
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.id = 'toggleMotherName';
+    chk.checked = true;
+
+    const lbl = textEl('span', 'إظهار اسم الأم');
+    motherWrap.append(chk, lbl);
+
+    const res = el('div', 'results-count');
+    const strongQ = textEl('strong', String(q));
+
+    const strongNum = textEl('strong', '0', 'resultsNum');
+    strongNum.id = 'resultsNum';
+    strongNum.setAttribute('aria-live', 'polite');
+
+    res.append(textEl('span', 'نتائج البحث عن "'), strongQ, textEl('span', '": '), strongNum);
+    wrap.append(motherWrap, res);
+
+    tools.appendChild(wrap);
+    tree.appendChild(tools);
+
+    toggle = chk;
+    toggle.addEventListener('change', () => setMotherVisibility(!!toggle.checked));
   }
-  
+
   const showMotherHint = !!q;
 
   const titleEl = (domRefs && domRefs.treeTitle) || byId('treeTitle');
   if (titleEl) {
-    const full  = (fam.fullRootPersonName || '').trim();
+    const full = (fam.fullRootPersonName || '').trim();
     const short = (fam.familyName || fam.title || fam.rootPerson?.name || '').trim();
-
     const label = short || full || '';
 
     titleEl.textContent = label ? `عائلة: ${label}` : 'عائلة';
@@ -246,7 +272,7 @@ window.__LINEAGE_CTX__ = lineageCtx;
     const pidOwn = String(person._id || '');
     if (!pidOwn) return acc;
 
-    for (const p of ctx.byId.values()){
+    for (const p of ctx.byId.values()) {
       if (!p?._id) continue;
       const pid = String(p._id);
       if (pid === pidOwn) continue;
@@ -261,117 +287,98 @@ window.__LINEAGE_CTX__ = lineageCtx;
       if (!isChild) continue;
 
       const g = inferGender(p);
-      if (g === 'M')      acc.sons++;
+      if (g === 'M') acc.sons++;
       else if (g === 'F') acc.daughters++;
-      else                acc.total++;
+      else acc.total++;
     }
 
     acc.total += acc.sons + acc.daughters;
     return acc;
   };
 
-    const splitTextList = (text) => {
-    return String(text || '')
+  const splitTextList = (text) =>
+    String(text || '')
       .split(/[,\u060C]/u)
       .map(s => s.trim())
       .filter(Boolean);
-  };
 
-  function getUnclesAuntsForPerson(person, fam, ctx){
+  function getUnclesAuntsForPerson(person, fam, ctx) {
     if (!person || !fam || !ctx) {
-      return {
-        paternalUncles: [],
-        paternalAunts:  [],
-        maternalUncles: [],
-        maternalAunts:  []
-      };
+      return { paternalUncles: [], paternalAunts: [], maternalUncles: [], maternalAunts: [] };
     }
 
-    // 1) من سياق النَّسَب (الرسم البياني)
     const ua = Lineage.resolveUnclesAunts(person, fam, ctx) || {};
 
-    // نأخذ نسخًا قابلة للتعديل
     let pu = Array.isArray(ua.paternalUncles) ? ua.paternalUncles.slice() : [];
-    let pa = Array.isArray(ua.paternalAunts)  ? ua.paternalAunts.slice()  : [];
+    let pa = Array.isArray(ua.paternalAunts) ? ua.paternalAunts.slice() : [];
     let mu = Array.isArray(ua.maternalUncles) ? ua.maternalUncles.slice() : [];
-    let ma = Array.isArray(ua.maternalAunts)  ? ua.maternalAunts.slice()  : [];
+    let ma = Array.isArray(ua.maternalAunts) ? ua.maternalAunts.slice() : [];
 
-    // 2) مكملات من الـ bio النصية (تُستخدم فقط إذا الجهة فارغة)
+    // إذا كانت الجهة فارغة نكمّل من نص الـ bio
     const b = person.bio || {};
-
     const fBro = splitTextList(b.fatherBrothersTxt);
     const fSis = splitTextList(b.fatherSistersTxt);
     const mBro = splitTextList(b.motherBrothersTxt);
     const mSis = splitTextList(b.motherSistersTxt);
 
-    // إن لم يوجد أعمام/عمّات من الرسم البياني نكمّل من النص
     if (!pu.length && fBro.length) pu = fBro;
     if (!pa.length && fSis.length) pa = fSis;
     if (!mu.length && mBro.length) mu = mBro;
     if (!ma.length && mSis.length) ma = mSis;
 
-    return {
-      paternalUncles: pu,
-      paternalAunts:  pa,
-      maternalUncles: mu,
-      maternalAunts:  ma
-    };
+    return { paternalUncles: pu, paternalAunts: pa, maternalUncles: mu, maternalAunts: ma };
   }
 
-  // بناء مسار عائلي مختصر لنتائج البحث
-  function buildLineagePathForSearch(person, fam, ctx){
+  function buildLineagePathForSearch(person, fam, ctx) {
     if (!person || !fam || !ctx || !person._id) return '';
 
     const frags = [];
     const role = String(person.role || '').trim();
 
-    // جزء "الابن/البنت"
-    if (role === 'ابن')  frags.push('الابن');
-    if (role === 'بنت')  frags.push('البنت');
+    if (role === 'ابن') frags.push('الابن');
+    if (role === 'بنت') frags.push('البنت');
 
     const pid = String(person._id);
 
-    // جزء "من الزوجة الثانية..."
-    if (Array.isArray(fam.wives) && fam.wives.length){
+    if (Array.isArray(fam.wives) && fam.wives.length) {
       let wifeIndex = -1;
       fam.wives.forEach((w, idx) => {
         if (wifeIndex !== -1 || !w) return;
         const kids = Array.isArray(w.children) ? w.children : [];
-        if (kids.some(c => c && String(c._id || '') === pid)){
-          wifeIndex = idx;
-        }
+        if (kids.some(c => c && String(c._id || '') === pid)) wifeIndex = idx;
       });
-      if (wifeIndex !== -1){
+
+      if (wifeIndex !== -1) {
         const ordF = getArabicOrdinalF(wifeIndex + 1);
         frags.push(`من الزوجة ${ordF}`);
       }
     }
 
-    // جزء "حفيد الجد الثالث" إن وُجد
     let ancPart = '';
-    if (Array.isArray(fam.ancestors) && fam.ancestors.length){
-      for (const a of fam.ancestors){
+    if (Array.isArray(fam.ancestors) && fam.ancestors.length) {
+      for (const a of fam.ancestors) {
         if (!a) continue;
         const aRef = (a._id && ctx.byId.get(String(a._id))) || a;
         const gkidsAll = Lineage.resolveGrandchildren(aRef, fam, ctx) || [];
-        if (gkidsAll.some(g => g && String(g._id || '') === pid)){
+        if (gkidsAll.some(g => g && String(g._id || '') === pid)) {
           const ancRole = String(aRef.role || a.role || 'الجد').trim();
           ancPart = `حفيد ${ancRole}`;
           break;
         }
       }
     }
-    if (ancPart) frags.push(ancPart);
 
+    if (ancPart) frags.push(ancPart);
     if (!frags.length) return '';
     return '@ ' + frags.join(' – ');
   }
 
-  if (!q){
+  if (!q) {
     filteredAncestors.forEach((person, idx) => {
-     const generation = el('div','generation ancestor-generation');
+      const generation = el('div', 'generation ancestor-generation');
       const isRoot = person === fam.rootPerson || person.role === 'صاحب الشجرة';
       const cls = `ancestor${isRoot ? ' rootPerson' : ''}`;
+
       const card = upsertCard(
         generation,
         person,
@@ -381,172 +388,166 @@ window.__LINEAGE_CTX__ = lineageCtx;
       );
 
       _drawnTotal++;
-      if (isRoot){
+
+      if (isRoot) {
         const sibResolved = Lineage.resolveSiblings(person, fam, lineageCtx);
         const sib = {
           brothers: (sibResolved?.brothers || []).length || 0,
-          sisters:  (sibResolved?.sisters  || []).length || 0,
-          wives:    (fam.wives || []).length
+          sisters: (sibResolved?.sisters || []).length || 0,
+          wives: (fam.wives || []).length
         };
 
-         const allC = countChildrenForPerson(person, lineageCtx);
-
+        const allC = countChildrenForPerson(person, lineageCtx);
         const merged = [];
 
-       if (sib.brothers) merged.push({label:'إخوة',  value:sib.brothers});
-if (sib.sisters)  merged.push({label:'أخوات', value:sib.sisters});
-if (sib.wives)    merged.push({label:'زوجات', value:sib.wives});
+        if (sib.brothers) merged.push({ label: 'إخوة', value: sib.brothers });
+        if (sib.sisters) merged.push({ label: 'أخوات', value: sib.sisters });
+        if (sib.wives) merged.push({ label: 'زوجات', value: sib.wives });
 
-        if (allC.sons)      merged.push({label:'أبناء', value:allC.sons});
-        if (allC.daughters) merged.push({label:'بنات', value:allC.daughters});
-        if (allC.total)     merged.push({label:'المجموع', value:allC.total});
+        if (allC.sons) merged.push({ label: 'أبناء', value: allC.sons });
+        if (allC.daughters) merged.push({ label: 'بنات', value: allC.daughters });
+        if (allC.total) merged.push({ label: 'المجموع', value: allC.total });
 
         const uaRoot = getUnclesAuntsForPerson(person, fam, lineageCtx);
 
-        if (uaRoot.paternalUncles?.length)
-          merged.push({label:'أعمام',  value:uaRoot.paternalUncles.length});
-        if (uaRoot.paternalAunts?.length)
-          merged.push({label:'عمّات',  value:uaRoot.paternalAunts.length});
-        if (uaRoot.maternalUncles?.length)
-         merged.push({label:'أخوال',  value:uaRoot.maternalUncles.length});
-        if (uaRoot.maternalAunts?.length)
-          merged.push({label:'خالات', value:uaRoot.maternalAunts.length});
+        if (uaRoot.paternalUncles?.length) merged.push({ label: 'أعمام', value: uaRoot.paternalUncles.length });
+        if (uaRoot.paternalAunts?.length) merged.push({ label: 'عمّات', value: uaRoot.paternalAunts.length });
+        if (uaRoot.maternalUncles?.length) merged.push({ label: 'أخوال', value: uaRoot.maternalUncles.length });
+        if (uaRoot.maternalAunts?.length) merged.push({ label: 'خالات', value: uaRoot.maternalAunts.length });
 
-       const cb = createCounterBox(merged);
+        const cb = createCounterBox(merged);
         if (cb) card.appendChild(cb);
-
       } else {
         const auto = createCounterBoxForPerson(person);
         if (auto) card.appendChild(auto);
       }
 
       if (person && person._id) __currentIds.add(person._id);
-
       if (idx < filteredAncestors.length - 1) generation.appendChild(createConnector());
       tree.appendChild(generation);
     });
   }
 
-if (q){
-  const tokens = normalizeAr(q).split(/\s+/).filter(Boolean);
-  const tokensRaw = String(q || '').trim().split(/\s+/).filter(Boolean);
+  if (q) {
+    const tokens = normalizeAr(q).split(/\s+/).filter(Boolean);
+    const tokensRaw = String(q || '').trim().split(/\s+/).filter(Boolean);
 
-  const pool = collectPersonsForSearch(fam);
-  const results = pool.filter(p => match(p) && passFilters(p));
+    const pool = collectPersonsForSearch(fam);
+    const results = pool.filter(p => match(p) && passFilters(p));
 
-  // NEW: إزالة التكرارات حتى لا يكون العدّ أكبر من عدد البطاقات/الاقتراحات
-  const seen = new Set();
-  const uniqResults = [];
-  for (const p of results){
-    const id = p?._id || p?.id || p?.__tempId || null;
-    const key = id  ? `id:${id}`
-      : `nr:${(p.name||'').trim()}|${(p.role||'').trim()}|${(p?.bio?.motherName||'').trim()}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    uniqResults.push(p);
-  }
+    // إزالة التكرار حتى لا يزيد العدّ عن عدد البطاقات
+    const seen = new Set();
+    const uniqResults = [];
+    for (const p of results) {
+      const id = p?._id || p?.id || p?.__tempId || null;
+      const key = id ? `id:${id}`
+        : `nr:${(p.name || '').trim()}|${(p.role || '').trim()}|${(p?.bio?.motherName || '').trim()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      uniqResults.push(p);
+    }
 
-  if (!uniqResults.length){
-    const empty = el('div','empty-state');
-    empty.style.cssText='padding:2rem;text-align:center;opacity:.8';
-    empty.append(textEl('span','لا توجد نتائج مطابقة لـ "'),
-                 textEl('strong', String(q)),
-                 textEl('span','"'));
-    tree.appendChild(empty);
-    setMotherVisibility(false);
-    pruneRemoved(new Set());
+    if (!uniqResults.length) {
+      const empty = el('div', 'empty-state');
+      empty.style.cssText = 'padding:2rem;text-align:center;opacity:.8';
+      empty.append(
+        textEl('span', 'لا توجد نتائج مطابقة لـ "'),
+        textEl('strong', String(q)),
+        textEl('span', '"')
+      );
+      tree.appendChild(empty);
+      setMotherVisibility(false);
+      pruneRemoved(new Set());
+      toggleConnectors(tree, false);
+      return;
+    }
+
+    const coll = new Intl.Collator('ar', { usage: 'search', sensitivity: 'base', ignorePunctuation: true });
+    const hierarchyOrder = buildHierarchyIndex(fam);
+
+    uniqResults.sort((a, b) => {
+      const ra = getHierarchyRank(hierarchyOrder, a);
+      const rb = getHierarchyRank(hierarchyOrder, b);
+      if (ra !== rb) return ra - rb;
+
+      const sa = scoreForSearch(a, tokens);
+      const sb = scoreForSearch(b, tokens);
+      if (sb !== sa) return sb - sa;
+
+      const coll2 = new Intl.Collator('ar', { usage: 'search', sensitivity: 'base', ignorePunctuation: true });
+      return coll2.compare(String(a.name || ''), String(b.name || ''));
+    });
+
+    const wrap = el('div', 'generation search-results');
+    const grid = el('div', 'children-grid');
+
+    uniqResults.forEach(p => {
+      const wrapCard = el('div', 'relative');
+      const cls = (p.role === 'ابن') ? 'son' : (p.role === 'بنت' ? 'daughter' : '');
+
+      const cgNorm = normalizeAr(p?.bio?.cognomen || '');
+      const nameRoleNorm = normalizeAr(`${p?.name || ''} ${p?.role || ''}`);
+      const hitCogOnly =
+        tokens.some(t => cgNorm.includes(t)) &&
+        !tokens.some(t => nameRoleNorm.includes(t));
+
+      const card = upsertCard(
+        wrapCard,
+        p,
+        handlers,
+        cls,
+        {
+          showMotherHint,
+          highlightTokens: tokensRaw,
+          showCognomenHint: hitCogOnly,
+          readonlyName: !!fam.__core
+        }
+      );
+
+      // شارة توضّح أن المطابقة من اللقب
+      if (hitCogOnly) {
+        const badge = el('div', 'search-match-badge');
+        badge.textContent = 'مطابقة من: اللقب';
+        card.appendChild(badge);
+      }
+
+      // المسار العائلي المختصر أسفل البطاقة
+      const pathText = buildLineagePathForSearch(p, fam, lineageCtx);
+      if (pathText) {
+        const pathEl = el('div', 'search-lineage');
+        pathEl.textContent = pathText;
+        card.appendChild(pathEl);
+      }
+
+      const box = createCounterBoxForPerson(p);
+      if (box && !card.querySelector('.counter-box')) card.appendChild(box);
+
+      grid.appendChild(wrapCard);
+      if (p && p._id) __currentIds.add(p._id);
+    });
+
+    wrap.appendChild(grid);
+    tree.appendChild(wrap);
+
+    const numEl = tree.querySelector('#resultsNum');
+    if (numEl) numEl.textContent = String(uniqResults.length);
+
+    setMotherVisibility(showMotherHint);
+    pruneRemoved(__currentIds);
     toggleConnectors(tree, false);
     return;
   }
 
-  const coll = new Intl.Collator('ar', { usage:'search', sensitivity:'base', ignorePunctuation:true });
-  const hierarchyOrder = buildHierarchyIndex(fam);
-
-  uniqResults.sort((a,b)=>{
-    const ra = getHierarchyRank(hierarchyOrder, a);
-    const rb = getHierarchyRank(hierarchyOrder, b);
-    if (ra !== rb) return ra - rb;
-
-    const sa = scoreForSearch(a, tokens);
-    const sb = scoreForSearch(b, tokens);
-    if (sb !== sa) return sb - sa;
-
-    const coll2 = new Intl.Collator('ar', { usage:'search', sensitivity:'base', ignorePunctuation:true });
-    return coll2.compare(String(a.name||''), String(b.name||''));
-  });
-
-  const wrap = el('div','generation search-results');
-  const grid = el('div','children-grid');
-
-  uniqResults.forEach(p => {
-    const wrapCard = el('div','relative');
-    const cls = (p.role === 'ابن') ? 'son' : (p.role === 'بنت' ? 'daughter' : '');
-
-    const cgNorm       = normalizeAr(p?.bio?.cognomen || '');
-    const nameRoleNorm = normalizeAr(`${p?.name||''} ${p?.role||''}`);
-    const hitCogOnly =
-      tokens.some(t => cgNorm.includes(t)) &&
-      !tokens.some(t => nameRoleNorm.includes(t));
-
-    const card = upsertCard(
-      wrapCard,
-      p,
-      handlers,
-      cls,
-      {
-        showMotherHint,
-        highlightTokens: tokensRaw,
-        showCognomenHint: hitCogOnly,
-        readonlyName: !!fam.__core
-      }
-    );
-
-    // شارة صغيرة توضّح مصدر المطابقة عند كونها من اللقب فقط
-    if (hitCogOnly){
-      const badge = el('div','search-match-badge');
-      badge.textContent = 'مطابقة من: اللقب';
-      card.appendChild(badge);
-    }
-
-    // سطر المسار العائلي أسفل البطاقة
-    const pathText = buildLineagePathForSearch(p, fam, lineageCtx);
-    if (pathText){
-      const pathEl = el('div','search-lineage');
-      pathEl.textContent = pathText;
-      card.appendChild(pathEl);
-    }
-
-    const box = createCounterBoxForPerson(p);
-    if (box && !card.querySelector('.counter-box')) card.appendChild(box);
-
-    grid.appendChild(wrapCard);
-    if (p && p._id) __currentIds.add(p._id);
-  });
-
-
-  wrap.appendChild(grid);
-  tree.appendChild(wrap);
-
-  const numEl = tree.querySelector('#resultsNum');
-  if (numEl) numEl.textContent = String(uniqResults.length);
-
-  setMotherVisibility(showMotherHint);
-  pruneRemoved(__currentIds);
-  toggleConnectors(tree, false);
-  return;
-}
-
-
-  if (flt.role && !['زوجة','ابن','بنت'].includes(flt.role)){
-    if (filtersActive && _drawnTotal === 0){
-      const empty = el('div','empty-state'); 
-      empty.style.cssText='padding:2rem;text-align:center;opacity:.8';
+  if (flt.role && !['زوجة', 'ابن', 'بنت'].includes(flt.role)) {
+    if (filtersActive && _drawnTotal === 0) {
+      const empty = el('div', 'empty-state');
+      empty.style.cssText = 'padding:2rem;text-align:center;opacity:.8';
 
       const desc = describeActiveFiltersAr(flt);
       empty.append(
-        textEl('span','لا توجد نتائج مطابقة لـ '),
+        textEl('span', 'لا توجد نتائج مطابقة لـ '),
         textEl('strong', String(desc)),
-        textEl('span','.')
+        textEl('span', '.')
       );
 
       tree.appendChild(empty);
@@ -557,21 +558,29 @@ if (q){
     return;
   }
 
-  const wivesSection = el('div','generation wives-section');
+  const wivesSection = el('div', 'generation wives-section');
   const wantRole = (flt && flt.role) || '';
+
   const filteredWives = (fam.wives || []).filter(w => {
-    if (wantRole === 'ابن' || wantRole === 'بنت') return (w.children || []).some(c => match(c) && passFilters(c));
-    if (!wantRole && hasNonRoleFilters) return passFilters(w) || (w.children || []).some(c => (!match || match(c)) && passFilters(c));
-    if (!wantRole) return match(w) || (w.children || []).some(c => match(c) && passFilters(c));
+    if (wantRole === 'ابن' || wantRole === 'بنت')
+      return (w.children || []).some(c => match(c) && passFilters(c));
+
+    if (!wantRole && hasNonRoleFilters)
+      return passFilters(w) || (w.children || []).some(c => (!match || match(c)) && passFilters(c));
+
+    if (!wantRole)
+      return match(w) || (w.children || []).some(c => match(c) && passFilters(c));
+
     return passFilters(w);
   });
 
   tree.appendChild(wivesSection);
+
   runChunked(
     filteredWives,
     1,
     (w) => {
-        const sec = createWifeSection(
+      const sec = createWifeSection(
         w,
         handlers,
         match,
@@ -585,77 +594,64 @@ if (q){
         }
       );
 
-
-      if (sec){
-        // === عدّ توريث الزوجة مثل صاحب الشجرة ===
+      if (sec) {
+        // عدّ توريث الزوجة مثل صاحب الشجرة
         const wifeCard =
           sec.querySelector('.member-card.wife-card') ||
           sec.querySelector('.wife-card.member-card') ||
-          sec.querySelector('.member-card'); // احتياط: أوّل بطاقة في القسم
+          sec.querySelector('.member-card');
 
         if (wifeCard && w && w._id) {
-          // 1) الإخوة والأخوات
           const sibResolved = Lineage.resolveSiblings(w, fam, lineageCtx) || {};
           const sib = {
             brothers: (sibResolved.brothers || []).length || 0,
-            sisters:  (sibResolved.sisters  || []).length || 0
+            sisters: (sibResolved.sisters || []).length || 0
           };
 
-          // 2) الأبناء المرتبطون بهذه الزوجة
           const kids = countChildrenForPerson(w, lineageCtx);
-
-          // 3) الأعمام/العمّات/الأخوال/الخالات من جهة الزوجة
-                    const uaWife = getUnclesAuntsForPerson(w, fam, lineageCtx);
-
+          const uaWife = getUnclesAuntsForPerson(w, fam, lineageCtx);
 
           const merged = [];
+          if (sib.brothers) merged.push({ label: 'إخوة', value: sib.brothers });
+          if (sib.sisters) merged.push({ label: 'أخوات', value: sib.sisters });
 
-         if (sib.brothers) merged.push({ label: 'إخوة',  value: sib.brothers });
-if (sib.sisters)  merged.push({ label: 'أخوات', value: sib.sisters  });
+          if (kids.sons) merged.push({ label: 'أبناء', value: kids.sons });
+          if (kids.daughters) merged.push({ label: 'بنات', value: kids.daughters });
+          if (kids.total) merged.push({ label: 'المجموع', value: kids.total });
 
-          if (kids.sons)      merged.push({ label: 'أبناء',  value: kids.sons });
-          if (kids.daughters) merged.push({ label: 'بنات',   value: kids.daughters });
-          if (kids.total)     merged.push({ label: 'المجموع', value: kids.total });
-
-          if (uaWife.paternalUncles?.length)
-            merged.push({ label: 'أعمام',  value: uaWife.paternalUncles.length });
-          if (uaWife.paternalAunts?.length)
-            merged.push({ label: 'عمّات',  value: uaWife.paternalAunts.length });
-          if (uaWife.maternalUncles?.length)
-           merged.push({ label: 'أخوال',  value: uaWife.maternalUncles.length });
-          if (uaWife.maternalAunts?.length)
-           merged.push({ label: 'خالات', value: uaWife.maternalAunts.length });
+          if (uaWife.paternalUncles?.length) merged.push({ label: 'أعمام', value: uaWife.paternalUncles.length });
+          if (uaWife.paternalAunts?.length) merged.push({ label: 'عمّات', value: uaWife.paternalAunts.length });
+          if (uaWife.maternalUncles?.length) merged.push({ label: 'أخوال', value: uaWife.maternalUncles.length });
+          if (uaWife.maternalAunts?.length) merged.push({ label: 'خالات', value: uaWife.maternalAunts.length });
 
           const cbWife = createCounterBox(merged);
-
-          if (cbWife){
+          if (cbWife) {
             const old = wifeCard.querySelector('.counter-box');
             if (old) old.remove();
             wifeCard.appendChild(cbWife);
           }
         }
-        // === نهاية منطق عدّ توريث الزوجة ===
 
         wivesSection.appendChild(sec);
         _drawnTotal += sec.querySelectorAll('.member-card').length;
 
         if (w && w._id) __currentIds.add(w._id);
-        (w.children||[]).forEach(c => {
+        (w.children || []).forEach(c => {
           if ((!match || match(c)) && passFilters(c) && c?._id) __currentIds.add(c._id);
         });
       }
     },
     () => {
-      if (q){
+      if (q) {
         const anyMother = !!tree.querySelector('.mini-strip.mother-strip');
         const toggleWrap = tools ? tools.querySelector('#motherToggleWrap') : null;
 
-        if (!anyMother){
-          if (toggle){ toggle.checked = false; toggle.disabled = true; }
+        if (!anyMother) {
+          if (toggle) { toggle.checked = false; toggle.disabled = true; }
           if (toggleWrap) toggleWrap.style.display = 'none';
           setMotherVisibility(false);
         } else {
-          if (toggle){ toggle.disabled = false; toggle.checked = true; }
+          if (toggle) { toggle.disabled = false; toggle.checked = true; }
           if (toggleWrap) toggleWrap.style.display = '';
           setMotherVisibility(true);
         }
@@ -667,15 +663,15 @@ if (sib.sisters)  merged.push({ label: 'أخوات', value: sib.sisters  });
         setMotherVisibility(false);
       }
 
-      if (!q && filtersActive && _drawnTotal === 0){
-        const empty = el('div','empty-state'); 
-        empty.style.cssText='padding:2rem;text-align:center;opacity:.8';
+      if (!q && filtersActive && _drawnTotal === 0) {
+        const empty = el('div', 'empty-state');
+        empty.style.cssText = 'padding:2rem;text-align:center;opacity:.8';
 
         const desc = describeActiveFiltersAr(flt);
         empty.append(
-          textEl('span','لا توجد نتائج مطابقة لـ '),
+          textEl('span', 'لا توجد نتائج مطابقة لـ '),
           textEl('strong', String(desc)),
-          textEl('span','.')
+          textEl('span', '.')
         );
 
         tree.appendChild(empty);
@@ -688,8 +684,6 @@ if (sib.sisters)  merged.push({ label: 'أخوات', value: sib.sisters  });
   );
 }
 
-
-// إعادة تصدير الدوال/الثوابت كما كانت من قبل
 export {
   AR_DIAC,
   AR_TATWEEL,
