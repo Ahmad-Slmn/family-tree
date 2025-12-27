@@ -434,16 +434,15 @@ li.querySelector('.remove-child').addEventListener('click', async () => {
   const childNameQuoted = `«${childNameRaw}»`;
 
   try {
-    const ok = await showConfirmModal({
-      title: 'تأكيد حذف الطفل',
-      // هنا بدون HTML حتى لا يظهر الوسم في الرسالة
-      message: `هل تريد بالتأكيد حذف ${childNameQuoted} من قائمة الأبناء؟ لا يمكن التراجع عن هذه الخطوة.`,
-      confirmText: 'نعم، حذف',
-      cancelText: 'إلغاء',
-      type: 'danger',
-    });
+const res = await showConfirmModal({
+  title: 'تأكيد حذف الطفل',
+  message: `هل تريد بالتأكيد حذف ${childNameQuoted} من قائمة الأبناء؟ لا يمكن التراجع عن هذه الخطوة.`,
+  confirmText: 'نعم، حذف',
+  cancelText: 'إلغاء',
+  variant: 'danger', // بدل type
+});
 
-    if (!ok) return;
+if (res !== 'confirm') return;
 
     // إشعار الأب ليقوم فعليًا بحذف العنصر من الشجرة/المصفوفة
     li.dispatchEvent(

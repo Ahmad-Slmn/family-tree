@@ -137,7 +137,7 @@ export function textEl(tag, txt, cls) {
 }
 
 /* =======================
-   ✅ نافذة تأكيد عامة
+   نافذة تأكيد عامة
 ======================= */
 export function showConfirmModal({
   title = 'تأكيد',
@@ -155,7 +155,10 @@ export function showConfirmModal({
         yesBtn = byId('confirmYes'),
         noBtn = byId('confirmNo');
 
-  if (!modal || !titleEl || !confirmTextEl || !yesBtn || !noBtn) return Promise.resolve(false);
+  // بدل false: رجّع dismiss لأن المودال غير موجود أصلاً
+  if (!modal || !titleEl || !confirmTextEl || !yesBtn || !noBtn) {
+    return Promise.resolve('dismiss');
+  }
 
   // نصوص + حالة مظهر
   titleEl.textContent = title;
@@ -173,8 +176,8 @@ export function showConfirmModal({
   if (ariaRole === 'alertdialog') closeOnBackdrop = false;
 
   // إظهار + قفل تمرير الخلفية
-  modal.removeAttribute('aria-hidden'); // لا نترك aria-hidden="false"
-  modal.inert = false;                  // السماح بالتركيز داخل المودال
+  modal.removeAttribute('aria-hidden');
+  modal.inert = false;
   document.documentElement.style.overflow = 'hidden';
   modal.classList.add('show');
 
@@ -186,9 +189,45 @@ export function showConfirmModal({
   const getFocusables = () =>
     Array.from(modal.querySelectorAll('button,[tabindex]:not([tabindex="-1"])')).filter((el) => el.tabIndex !== -1);
 
-  function onBackdrop(e) { if (closeOnBackdrop && e.target === modal) newNo.click(); }
+  let _resolved = false;
+  let _resolve = null;
+  function resolveOnce(val) {
+    if (_resolved) return;
+    _resolved = true;
+    _resolve?.(val);
+  }
+
+  function cleanup() {
+    modal.removeEventListener('keydown', onKey);
+    modal.removeEventListener('click', onBackdrop);
+
+    const active = document.activeElement;
+    if (active && modal.contains(active)) active.blur();
+
+    modal.classList.remove('show');
+    modal.setAttribute('aria-hidden', 'true');
+    modal.inert = true;
+    document.documentElement.style.overflow = '';
+
+    try { prevFocus?.focus(); } catch {}
+  }
+
+  // التغيير الجذري: الخلفية = dismiss (إغلاق فقط)
+  function onBackdrop(e) {
+    if (closeOnBackdrop && e.target === modal) {
+      cleanup();
+      resolveOnce('dismiss');
+    }
+  }
+
+  // ESC = dismiss (إغلاق فقط)
   function onKey(e) {
-    if (e.key === 'Escape' && closeOnEsc) newNo.click();
+    if (e.key === 'Escape' && closeOnEsc) {
+      e.preventDefault();
+      cleanup();
+      resolveOnce('dismiss');
+      return;
+    }
     if (e.key === 'Tab') {
       const els = getFocusables(); if (!els.length) return;
       const first = els[0], last = els[els.length - 1];
@@ -196,36 +235,21 @@ export function showConfirmModal({
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     }
   }
+
   modal.addEventListener('click', onBackdrop);
   modal.addEventListener('keydown', onKey);
 
   // تركيز مبدئي
   setTimeout(() => (defaultFocus === 'confirm' ? newYes : newNo)?.focus(), 0);
 
-  function cleanup() {
-    modal.removeEventListener('keydown', onKey);
-    modal.removeEventListener('click', onBackdrop);
-
-    // مهم: لو كان الفوكس داخل المودال، بلِّره قبل وضع aria-hidden
-    const active = document.activeElement;
-    if (active && modal.contains(active)) {
-      active.blur();
-    }
-
-    modal.classList.remove('show');
-    modal.setAttribute('aria-hidden', 'true'); // إخفاء عن قارئات الشاشة
-    modal.inert = true;                        // منع التركيز والتفاعل
-    document.documentElement.style.overflow = '';
-
-    try { prevFocus?.focus(); } catch {}
-  }
-
-
+  // رجع 3 حالات بدل true/false
   return new Promise((resolve) => {
-    newYes.addEventListener('click', () => { cleanup(); resolve(true); });
-    newNo .addEventListener('click', () => { cleanup(); resolve(false); });
+    _resolve = resolve;
+    newYes.addEventListener('click', () => { cleanup(); resolveOnce('confirm'); });
+    newNo .addEventListener('click', () => { cleanup(); resolveOnce('cancel'); });
   });
 }
+
 
 /* =======================
    🎨 إدارة الثيم
@@ -540,10 +564,6 @@ document.addEventListener('DOMContentLoaded', () => {
   nodes.toastContainer = byId('toastContainer');
   initFontSize();
   initResetSettings();
-
-  // طباعة
-  const printBtn = byId('printBtn');
-  if (printBtn) printBtn.addEventListener('click', () => window.print());
 
   // اختصار البحث السريع
   document.addEventListener('keydown', (e) => {

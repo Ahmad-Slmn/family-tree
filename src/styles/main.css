@@ -45,6 +45,7 @@ body {
   align-items:center;
   justify-content:center;
   padding:1.5rem;
+
   background:
     linear-gradient(
       to bottom,
@@ -56,11 +57,39 @@ body {
       color-mix(in oklab,var(--modal-overlay,rgba(0,0,0,.8)) 0%,transparent) 0%,
       color-mix(in oklab,var(--modal-overlay,rgba(0,0,0,.8)) 70%,transparent) 100%
     ),
-    url("../assets/images/background-family-tree.png") center/cover no-repeat;
+    image-set(
+      url("../assets/images/background-family-tree-mobile-1x.webp") 1x,
+      url("../assets/images/background-family-tree-mobile-2x.webp") 2x
+    )
+    center / cover no-repeat;
+
   backdrop-filter:blur(7px);
   -webkit-backdrop-filter:blur(7px);
   animation:splashFadeIn .35s ease-out;
 }
+
+/* ديسكتوب: صورة أكبر */
+@media (min-width: 48rem){
+  #app-splash{
+    background:
+      linear-gradient(
+        to bottom,
+        color-mix(in oklab,var(--modal-overlay,rgba(0,0,0,.8)) 65%,transparent),
+        color-mix(in oklab,var(--modal-overlay,rgba(0,0,0,.8)) 80%,transparent)
+      ),
+      radial-gradient(
+        circle at center,
+        color-mix(in oklab,var(--modal-overlay,rgba(0,0,0,.8)) 0%,transparent) 0%,
+        color-mix(in oklab,var(--modal-overlay,rgba(0,0,0,.8)) 70%,transparent) 100%
+      ),
+      image-set(
+        url("../assets/images/background-family-tree-desktop-1x.webp") 1x,
+        url("../assets/images/background-family-tree-desktop-2x.webp") 2x
+      )
+      center / cover no-repeat;
+  }
+}
+
 
 /* خروج تدريجي للغطاء */
 #app-splash.is-hiding{
@@ -188,6 +217,26 @@ body {
   inset-inline-end:0;
   font-size:.78rem;
   color:color-mix(in oklab,var(--text-main,#111) 70%,transparent);
+}
+
+/* أزرار الـ Splash (Retry) */
+.app-splash-actions{
+  margin-top: .9rem;
+  display:flex;
+  justify-content:center;
+  gap:.6rem;
+}
+
+#app-splash.has-error .app-splash-spinner{
+  opacity:.35;
+}
+
+/* اختياري: لون الشريط/العنوان عند الخطأ */
+#app-splash.has-error .app-splash-progress-bar{
+  background: color-mix(in oklab, #ef4444 70%, var(--title-color,var(--text-main,#111)));
+}
+#app-splash.has-error .app-splash-title{
+  color: color-mix(in oklab, #ef4444 60%, var(--title-color,var(--text-main,#111)));
 }
 
 /* دوران المؤشر */

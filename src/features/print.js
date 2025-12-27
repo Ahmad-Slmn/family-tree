@@ -1,6 +1,11 @@
 // features/print.js — نظام طباعة محسَّن مع عدّة أوضاع
-import { byId, showInfo } from '../utils.js';
+import { byId, showInfo, showError, showConfirmModal } from '../utils.js';
 import { getRoleAvatar } from '../model/roles.js';
+
+import * as Model from '../model/families.js';
+import { validateFamily } from './validate.js';
+
+import { setValidationResults, getValidationSummary, openValidationModal, vcToastSummaryText} from '../ui/validationCenter.js';
 
 /* الخيارات المتاحة للطباعة */
 const PRINT_OPTIONS = [
@@ -170,10 +175,85 @@ export function init(){
     });
   }
 
-  byId('printBtn')?.addEventListener('click', () => {
+byId('printBtn')?.addEventListener('click', () => {
+  // حاول جلب العائلة الحالية
+  const all = Model.exportFamilies?.() || {};
+  const key = Model.getSelectedKey?.() || 'family1';
+  const fam = all[key];
+
+  // لو ما في عائلة واضحة، اطبع مباشرة (احتياط)
+  if (!fam) {
     syncAll();
     window.print();
+    return;
+  }
+
+  // اسم للعرض في العنوان (متوافق مع منطق io.js)
+  const treeTitle = byId('treeTitle');
+  const rawFamilyName = (treeTitle?.textContent || '').trim() || String(
+    fam.title || fam.familyName || fam.fullRootPersonName || fam.rootPerson?.name || key
+  ).trim();
+
+  // =========================
+  // VALIDATION قبل الطباعة — نفس فكرة التصدير
+  // =========================
+  const { errors, warnings } = validateFamily(fam);
+
+  setValidationResults(`print:${key}`, {
+    title: `تنبيهات التحقق — قبل الطباعة (${rawFamilyName || key})`,
+    errors,
+    warnings,
+    meta: { familyKey: key, ts: Date.now() }
   });
+
+  const sum = getValidationSummary(`print:${key}`);
+
+  // لو فيه أي تنبيهات (حتى info) => امنع الطباعة + رسالة + نافذة تأكيد
+  if (sum.counts.total > 0) {
+    const msg = vcToastSummaryText(sum);
+
+    // (2) الرسالة
+    showError(`تم منع الطباعة مؤقتًا: ${msg}`);
+
+    // (3) نافذة التأكيد
+    (async () => {
+      const res = await showConfirmModal({
+        title: 'تنبيهات قبل الطباعة',
+        message:
+          `يوجد تنبيهات في العائلة الحالية.\n\n` +
+          `${msg}\n\n` +
+          `اختر أحد الخيارين:`,
+        confirmText: 'عرض التنبيهات',
+        cancelText: 'طباعة',
+        variant: 'danger',
+        closeOnBackdrop: true,
+        closeOnEsc: true,
+        defaultFocus: 'confirm'
+      });
+
+      if (res === 'confirm') {
+        openValidationModal(`print:${key}`);
+        return;
+      }
+
+      if (res === 'cancel') {
+        // طباعة رغم التنبيهات
+        syncAll();
+        window.print();
+        return;
+      }
+
+      // res === 'dismiss' => لا شيء
+    })();
+
+    // (1) منع الطباعة الآن
+    return;
+  }
+
+  // لا توجد تنبيهات => طباعة مباشرة بدون رسالة ولا نافذة
+  syncAll();
+  window.print();
+});
 
   return {};
 }

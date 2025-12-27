@@ -68,6 +68,7 @@
     <link rel="stylesheet" href="src/styles/modal.css">
     <link rel="stylesheet" href="src/styles/photoGallery.css">
     <link rel="stylesheet" href="src/styles/print.css" media="print">
+    <link rel="stylesheet" href="src/styles/validate.css">
 
     <!-- مكتبات CSS خارجية -->
     <link rel="stylesheet" href="./src/vendor/cropper/cropper.min.css">
@@ -82,9 +83,8 @@
 
             <!-- Logo خاص بالعائلة بدلاً من أيقونة FontAwesome -->
             <div class="app-splash-logo" aria-hidden="true">
-                <img id="appSplashLogo" src="src/assets/images/default-logo-gold.png" alt="" loading="lazy">
+                <img id="appSplashLogo" src="src/assets/images/default-logo-gold.png" alt="">
             </div>
-
 
             <div class="app-splash-title">جارٍ تحميل شجرة العائلة…</div>
             <div class="app-splash-subtitle">
@@ -98,7 +98,13 @@
                 <span class="app-splash-progress-bar" id="app-splash-bar"></span>
                 <span class="app-splash-progress-text" id="app-splash-text">0%</span>
             </div>
+            <!-- زر إعادة المحاولة يظهر فقط في حالة الخطأ/المهلة -->
 
+            <div class="app-splash-actions" hidden>
+                <button type="button" class="btn small primary" id="app-splash-retry">
+                    إعادة المحاولة
+                </button>
+            </div>
         </div>
     </div>
 
@@ -131,6 +137,9 @@
             <i class="fa-solid fa-filter" aria-hidden="true"></i>
             <span class="btn-text">إظهار الفلاتر</span>
         </button>
+
+        <!-- 🔔 تنبيهات التحقق -->
+        <div id="validationCenterSlot"></div>
 
     </div>
 
@@ -405,7 +414,7 @@
     </div>
 
     <!-- ───── مودال الإحصاءات ───── -->
-    <div class="statsModal" id="statsModal" role="dialog" aria-modal="true" aria-labelledby="statsTitle" tabindex="-1">
+    <div class="statsModal" id="statsModal" role="dialog" aria-modal="true" aria-labelledby="statsTitle" tabindex="-1" hidden>
         <div class="modal-content">
             <div class="modal-header">
                 <h2 id="statsTitle">لوحة الإحصاءات</h2>

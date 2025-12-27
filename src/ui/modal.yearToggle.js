@@ -60,18 +60,18 @@ export function getLogicalDateValue(inputEl){
   const y   = (inputEl.dataset.yearOnly  || '').trim();
   const d   = (inputEl.dataset.fullDate || '').trim();
 
-  // وضع السنة فقط (type="text")
-  if (inputEl.type === 'text'){
-    //  إذا المستخدم كتب شيئًا (حتى لو غلط) اعتبره هو الحقيقة المنطقية
-    if (raw) return raw;
+// وضع السنة فقط (type="text")
+if (inputEl.type === 'text'){
+  // إذا المستخدم فرّغ الحقل: هذا "مسح" مقصود
+  if (!raw) return '';
 
-    // إذا فاضي: ارجع المخزون الصحيح
-    if (/^\d{4}$/.test(y))             return y;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d.slice(0, 4);
-    return '';
-  }
+  // إذا كتب شيء (حتى لو غلط) اعتبره هو الحقيقة المنطقية
+  return raw;
+}
+
 
   // وضع التاريخ الكامل (type="date")
+  if (!raw) return '';
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
   if (/^\d{4}-\d{2}-\d{2}$/.test(d))   return d;
   if (/^\d{4}$/.test(y))               return y;

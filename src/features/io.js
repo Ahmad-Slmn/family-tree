@@ -1,7 +1,7 @@
 // features/io.js — الاستيراد/التصدير/السحب/التفريغ/النسخ الاحتياطي
 
 import {
-  byId, showSuccess, showInfo, showError,
+  byId, showSuccess, showInfo, showError, showWarning,
   downloadJson, readJsonFile, showConfirmModal
 } from '../utils.js';
 
@@ -9,6 +9,9 @@ import * as Model from '../model/families.js';
 import { normalizeFamilyPipeline } from '../model/families.core.js';
 
 import { ensureIdsForAllFamilies } from './ids.js';
+import { validateFamily } from './validate.js';
+
+import { setValidationResults, getValidationSummary, openValidationModal, refreshValidationBadge, vcToastSummaryText} from '../ui/validationCenter.js';
 
 let bus;
 
@@ -110,6 +113,7 @@ function confirmTextOk(v) {
 
 // إغلاق مودال التأكيد مع الحفاظ على التركيز
 function closeConfirmModalSafely(modal) {
+  if (!modal) return;
   try {
     if (modal && modal.contains(document.activeElement)) {
       const fallback =
@@ -244,11 +248,14 @@ function handleImportError(err) {
     showError('هيكل الملف غير مطابق لتصدير التطبيق. تأكد أنك تستخدم ملفًا تم تصديره من هذه المنصّة.');
   } else if (msg === 'read-failed') {
     showError('حدث خطأ أثناء قراءة الملف من جهازك.');
+  } else if (msg === 'import-validation-failed') {
+    showError('فشل الاستيراد لأن بعض العائلات تحتوي دورات نسب/تعارضات أو تحذيرات عمر شديدة.');
   } else {
     console.error('Import error:', err);
     showError('فشل الاستيراد. تأكد من صحة الملف أو أعد المحاولة.');
   }
 }
+
 
 // استيراد موحّد (ذكي ومحصّن)
 async function doImport(ctx, obj) {
@@ -299,6 +306,64 @@ async function doImport(ctx, obj) {
     });
 
   } catch {}
+// =========================
+// VALIDATION بعد الاستيراد (قبل الحفظ) — مركز التنبيهات
+// =========================
+{
+  const fams = Model.getFamilies?.() || {};
+  const items = [];
+  const badKeys = [];
+
+  for (const k of importedKeys){
+    const fam = fams[k];
+    if (!fam) continue;
+
+    const { errors, warnings } = validateFamily(fam);
+
+    const title =
+      fam.title ||
+      fam.familyName ||
+      fam.fullRootPersonName ||
+      String(k);
+
+    items.push({
+      key: String(k),
+      title: `عائلة: ${title}`,
+      errors,
+      warnings
+    });
+  //  NEW: احفظ نفس النتائج تحت scopeKey الخاص بالعائلة
+  setValidationResults(`family:${k}`, {
+    title: `تنبيهات التحقق — ${title}`,
+    errors,
+    warnings,
+    meta: { familyKey: String(k), ts: Date.now(), origin: 'import' }
+  });
+const hasSevere = (warnings || []).some(w => w && w.level === 'severe');
+if (hasSevere){
+  badKeys.push(k);
+}
+
+  }
+
+  // خزّن النتائج في scope واحد للاستيراد
+  setValidationResults('import:latest', {
+    title: 'تنبيهات التحقق — آخر استيراد',
+    items,
+    meta: { importedKeys: importedKeys.map(String), ts: Date.now() }
+  });
+
+  const sum = getValidationSummary('import:latest');
+
+  // لا نمنع الاستيراد ولا نفتح المودال — فقط نبلغ المستخدم
+if (sum.counts.total > 0){
+  const msg = vcToastSummaryText(sum);
+  if (sum.hasBlockers) showError(`تم الاستيراد، لكن ${msg} راجع أيقونة التنبيهات.`);
+  else showWarning(`تم الاستيراد، لكن ${msg} راجع أيقونة التنبيهات.`);
+}
+
+}
+
 
   await Model.savePersistedFamilies?.();
 
@@ -319,6 +384,7 @@ async function doImport(ctx, obj) {
   }
 
   ctx?.bus?.emit('io:import:done');
+  try { refreshValidationBadge(); } catch {}
   ctx?.bus?.emit('families:coreFlag:refresh');
 }
 
@@ -368,30 +434,99 @@ function bindExportButton() {
   // تحديث أولي
   updateLabel();
 
-  exportBtn.addEventListener('click', () => {
-    const all = Model.exportFamilies();
-    const key = Model.getSelectedKey?.() || 'family1';
-    const fam = all[key];
+exportBtn.addEventListener('click', () => {
+  const all = Model.exportFamilies();
+  const key = Model.getSelectedKey?.() || 'family1';
+  const fam = all[key];
 
-    // إن لم توجد عائلة حالية واضحة، صدّر الكل
-    if (!fam) {
-      downloadJson(all, 'all-families.json');
+  // إن لم توجد عائلة حالية واضحة، صدّر الكل
+  if (!fam) {
+    downloadJson(all, 'all-families.json');
+    return;
+  }
+
+  // نفس الاسم الذي على الزر (متسق)
+  const rawFamilyName = stripFamilyPrefix(getCurrentFamilyDisplayName() || key);
+
+  const rawName  = `عائلة - ${rawFamilyName}`;
+  const safeName = safeFileName(rawName);
+
+  // جهّز payload ودالة التصدير الفعلية (نستدعيها فقط عند السماح)
+  const payload = {
+    [key]: fam,
+    __meta: buildExportMeta()
+  };
+
+  const doExport = () => {
+    downloadJson(payload, `${safeName}.json`);
+  };
+
+  // =========================
+  // VALIDATION قبل التصدير — نفس منطق الطباعة
+  // =========================
+  {
+    const { errors, warnings } = validateFamily(fam);
+
+    setValidationResults(`export:${key}`, {
+      title: `تنبيهات التحقق — قبل التصدير (${rawFamilyName || key})`,
+      errors,
+      warnings,
+      meta: { familyKey: key, ts: Date.now() }
+    });
+
+    const sum = getValidationSummary(`export:${key}`);
+
+    // (1) لا توجد تنبيهات => صدّر مباشرة بدون رسالة وبدون تأكيد
+    if (sum.counts.total === 0) {
+      doExport();
       return;
     }
 
-// نفس الاسم الذي على الزر (متسق)
-const rawFamilyName = stripFamilyPrefix(getCurrentFamilyDisplayName() || key);
+    // (2) توجد تنبيهات => امنع التصدير الآن + Toast + Confirm
+    const msg = vcToastSummaryText(sum);
 
-const rawName  = `عائلة - ${rawFamilyName}`;
-const safeName = safeFileName(rawName);
+    if (sum.hasBlockers) {
+      showError(`يوجد تنبيهات تمنع التصدير: ${msg}`);
+    } else {
+      showWarning(`يوجد تنبيهات قبل التصدير: ${msg}`);
+    }
 
-    const payload = {
-      [key]: fam,
-      __meta: buildExportMeta()
-    };
+    (async () => {
+      const res = await showConfirmModal({
+        title: sum.hasBlockers ? 'تنبيهات تمنع التصدير' : 'تنبيهات قبل التصدير',
+        message:
+          `يوجد تنبيهات مرتبطة بهذه العائلة.\n\n` +
+          `${msg}\n\n` +
+          `اختر أحد الخيارين:`,
+        confirmText: 'عرض التنبيهات',
+        cancelText: 'تصدير',
+        variant: sum.hasBlockers ? 'danger' : 'warning',
+        closeOnBackdrop: true,
+        closeOnEsc: true,
+        defaultFocus: 'confirm'
+      });
 
-    downloadJson(payload, `${safeName}.json`);
-  });
+      if (res === 'confirm') {
+        openValidationModal(`export:${key}`);
+        return;
+      }
+
+      if (res === 'cancel') {
+        doExport();
+        showSuccess('تم التصدير رغم وجود التنبيهات.');
+        return;
+      }
+      // dismiss => لا إجراء
+    })();
+
+    // امنع أي تنفيذ لاحق (لا نكمل)
+    return;
+  }
+
+
+  // لا توجد مانعات => صدّر مباشرة
+  doExport();
+});
 
   // اختياري (مفيد): لو تغيّر عنوان الشجرة في الواجهة بدون إعادة تهيئة io.js
   // راقب تغيّر treeTitle وحدّث الزر
@@ -569,6 +704,7 @@ function bindHardReset(ctx) {
       cancelText: 'إلغاء',
       variant: 'danger',
       closeOnBackdrop: false,
+      closeOnEsc: false,
       defaultFocus: 'cancel'
     });
 
@@ -671,16 +807,8 @@ function bindHardReset(ctx) {
       } catch {
         showError('تعذّر التفريغ الكامل. قد يكون هناك تبويب آخر مفتوح يمنع الحذف. أُكمل المسح الجزئي وإعادة التشغيل.');
       } finally {
-        try {
-          [
-            'theme', 'appTheme',
-            'familyTreeTheme',
-            'selectedFamily',
-            'siteFontSize',
-            'autoBackup',
-            'treeTaglineState', 'treeTaglineIndex'
-          ].forEach(k => { try { localStorage.removeItem(k); } catch {} });
-        } catch {}
+      // امسح كل localStorage (Reset كامل)
+try { localStorage.clear(); } catch {}
 
         try {
           document.documentElement.classList.remove(

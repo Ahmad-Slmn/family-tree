@@ -104,6 +104,7 @@ export function renderFamilyButtons(families = {}, selectedKey = null, handlers 
 
     if (f.__custom && !f.__core){
       const edit = document.createElement('button');
+      edit.id='edit-family';
       edit.className='btn tiny edit-family'; edit.title='تعديل العائلة';
       edit.innerHTML = '<i class="fa-solid fa-pen-to-square"></i>';
       edit.addEventListener('click', ev => { ev.stopPropagation(); handlers?.onEditFamily?.(k); });
@@ -115,12 +116,21 @@ export function renderFamilyButtons(families = {}, selectedKey = null, handlers 
       del.addEventListener('keydown', e => { if (e.key==='Enter') del.click(); });
       del.addEventListener('click', async ev => {
         ev.stopPropagation();
-        const ok = await showConfirmModal({
-          title: 'حذف العائلة',
-          message: `هل أنت متأكد من حذف "${(f.familyName||f.title||k)}" ؟ لا يمكن التراجع.`,
-          confirmText: 'حذف', cancelText: 'إلغاء', variant: 'danger'
-        });
-        if (ok) await handlers?.onDeleteFamily?.(k);
+        const res = await showConfirmModal({
+  title: 'حذف العائلة',
+  message: `هل أنت متأكد من حذف "${(f.familyName||f.title||k)}" ؟ لا يمكن التراجع.`,
+  confirmText: 'حذف',
+  cancelText: 'إلغاء',
+  variant: 'danger',
+  closeOnBackdrop: true,
+  closeOnEsc: true,
+  defaultFocus: 'cancel'
+});
+
+if (res === 'confirm') {
+  await handlers?.onDeleteFamily?.(k);
+}
+
       });
 
 wrap.append(edit, del);
@@ -131,12 +141,20 @@ wrap.append(edit, del);
       hideBtn.innerHTML = '<i class="fa-solid fa-eye-slash"></i>';
       hideBtn.addEventListener('click', async ev => {
         ev.stopPropagation();
-        const ok = await showConfirmModal({
-          title: 'إخفاء العائلة',
-          message: `هل تريد إخفاء "${(f.familyName||f.title||k)}" من القائمة؟ يمكن إظهارها لاحقًا من الإعدادات.`,
-          confirmText: 'إخفاء', cancelText: 'إلغاء', variant: 'warning'
-        });
-        if (ok) handlers?.onHideFamily?.(k);
+     const res = await showConfirmModal({
+  title: 'إخفاء العائلة',
+  message: `هل تريد إخفاء "${(f.familyName||f.title||k)}" من القائمة؟ يمكن إظهارها لاحقًا من الإعدادات.`,
+  confirmText: 'إخفاء',
+  cancelText: 'إلغاء',
+  variant: 'warning',
+  closeOnBackdrop: true,
+  closeOnEsc: true,
+  defaultFocus: 'cancel'
+});
+
+if (res === 'confirm') {
+  handlers?.onHideFamily?.(k);
+}
       });
       wrap.appendChild(hideBtn);
     }

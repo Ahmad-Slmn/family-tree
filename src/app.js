@@ -5,6 +5,9 @@ import { DB, ensurePersistentStorage } from './storage/db.js';
 import * as TreeUI from './ui/tree.js';
 import * as ModalUI from './ui/modal.js';
 import { ModalManager } from './ui/modalManager.js';
+import { validateFamily } from './features/validate.js';
+
+import {initValidationUI, setValidationResults, getValidationSummary, refreshValidationBadge, vcToastSummaryText} from './ui/validationCenter.js';
 
 import {
   byId, showSuccess, showInfo, showError, showWarning, highlight,
@@ -109,6 +112,36 @@ window.addEventListener("DOMContentLoaded",startRotatingTagline);
 // أدوات غطاء التحميل (Logo + Progress + حركة الشجرة)
 let currentSplashProgress = 0;
 let splashHasError        = false; // هل الغطاء في وضع خطأ حاليًا؟
+// ===== تحسينات Splash: حد أدنى للمدة + مهلة + قياس الأداء =====
+const SPLASH_MIN_MS   = 450;     // حد أدنى لعرض الغطاء (منع “فلاش”)
+const SPLASH_MAX_MS   = 15000;   // مهلة قصوى قبل عرض Retry (لو علّق شيء)
+const PERF_DEBUG = (localStorage.getItem('perfDebug') === '1');
+
+let splashShownAt     = 0;
+let splashTimeoutId   = null;
+
+window.__bootStarted  = false;
+window.__bootDone     = false;
+
+// أدوات قياس الأداء (تظهر فقط إذا PERF_DEBUG=true)
+const perf = (() => {
+  const marks = new Map();
+  const now = () => (performance?.now?.() || Date.now());
+
+  return {
+    start(label){
+      if (!PERF_DEBUG) return;
+      marks.set(label, now());
+      console.log(`[perf] ▶ ${label}`);
+    },
+    end(label){
+      if (!PERF_DEBUG) return;
+      const t0 = marks.get(label);
+      const dt = t0 ? (now() - t0) : 0;
+      console.log(`[perf] ■ ${label}: ${dt.toFixed(1)}ms`);
+    }
+  };
+})();
 
 function setSplashProgress(value, label){
   value = (typeof value === 'number') ? value : 0;
@@ -141,6 +174,49 @@ function setSplashProgress(value, label){
     const subtitle = splash.querySelector('.app-splash-subtitle');
     if (subtitle) subtitle.textContent = label;
   }
+}
+
+// رسالة ذكية حسب نوع الخطأ (بدون تغيير السلوك)
+function smartSplashMsg(raw){
+  const msg = String(raw || '');
+  const m = msg.toLowerCase();
+
+  // (1) مهلة/بطء
+  if (
+    m.includes('timeout') ||
+    m.includes('timed out') ||
+    m.includes('مهلة') ||
+    m.includes('انتهت مهلة')
+  ){
+    return 'استغرق التحميل وقتًا أطول من المتوقع. قد تكون البيانات كبيرة أو الجهاز بطيئًا أو التخزين بطيئًا. اضغط "إعادة المحاولة".';
+  }
+
+  // (2) تخزين / IndexedDB / Quota / Security
+  if (
+    m.includes('indexeddb') ||
+    m.includes('quota') ||
+    m.includes('quotaexceeded') ||
+    m.includes('quota exceeded') ||
+    m.includes('storage') ||
+    m.includes('securityerror') ||
+    (m.includes('transaction') && m.includes('failed'))
+  ){
+    return 'تعذر حفظ/قراءة البيانات من التخزين في هذا المتصفح. جرّب فتح التطبيق في نافذة خاصة، أو استخدم متصفحًا آخر، ثم اضغط "إعادة المحاولة".';
+  }
+
+  // (3) فشل تحميل ملفات / شبكة / 404
+  if (
+    m.includes('404') ||
+    m.includes('not found') ||
+    m.includes('failed to fetch') ||
+    m.includes('net::err') ||
+    m.includes('load') && m.includes('resource')
+  ){
+    return 'تعذر تحميل بعض ملفات التطبيق. تأكد من تشغيل السيرفر الصحيح وأن مسارات الملفات صحيحة، ثم اضغط "إعادة المحاولة".';
+  }
+
+  // (4) عام
+  return 'تعذر تحميل شجرة العائلة الآن. اضغط "إعادة المحاولة".';
 }
 
 /* عرض الغطاء في وضع الخطأ مع آخر نسبة معروفة */
@@ -176,7 +252,7 @@ function showSplashError(message){
   // نص الخطأ
   const subtitle = s.querySelector('.app-splash-subtitle');
   if (subtitle){
-    const baseMsg = 'حدث خطأ غير متوقع أثناء تحميل شجرة العائلة. يرجى مراجعة الكود ثم إعادة المحاولة.';
+const baseMsg = smartSplashMsg(message);
     if (message){
       // نختصر الرسالة حتى لا تفسد التصميم
       const msgStr = String(message);
@@ -185,6 +261,18 @@ function showSplashError(message){
     } else {
       subtitle.textContent = baseMsg;
     }
+  }
+  // إظهار زر إعادة المحاولة
+  const actions = s.querySelector('.app-splash-actions');
+  if (actions) actions.hidden = false;
+
+  const retryBtn = document.getElementById('app-splash-retry');
+  if (retryBtn && !retryBtn.dataset.bound){
+    retryBtn.dataset.bound = '1';
+    retryBtn.addEventListener('click', () => {
+      // إعادة تحميل الصفحة (حل آمن وبسيط)
+      location.reload();
+    });
   }
 
   // كلاس اختياري لو أردت تنسيق خاص لحالة الخطأ (يمكنك استخدامه في CSS)
@@ -196,52 +284,78 @@ function hideSplash(force = false){
   const s = document.getElementById('app-splash');
   if (!s || s.dataset.splashHidden === '1') return;
 
-  // في حال وجود خطأ، لا نخفي الغطاء إلا عند نجاح التحميل (force) أو تشغيل طبيعي
+  // في حال وجود خطأ، لا نخفي الغطاء إلا عند نجاح التحميل (force)
   if (!force && splashHasError) return;
 
-  splashHasError = false; // إعادة ضبط حالة الخطأ
+  const doHide = () => {
+    splashHasError = false;
+    s.classList.remove('has-error');
 
-  // إزالة دلالات الخطأ
-  s.classList.remove('has-error');
+    // أخفِ actions إن وُجدت
+    const actions = s.querySelector('.app-splash-actions');
+    if (actions) actions.hidden = true;
 
-  // علامة حتى لا تُستدعى الدالة مرتين
-  s.dataset.splashHidden = '1';
-  s.setAttribute('aria-busy','false');
+    s.dataset.splashHidden = '1';
+    s.setAttribute('aria-busy','false');
+    s.classList.add('is-hiding');
 
-  // بدء حركة الخروج التدريجي
-  s.classList.add('is-hiding');
+    const finishHide = () => {
+      s.removeEventListener('animationend', finishHide);
+      s.setAttribute('hidden','');
+      s.style.display = 'none';
+    };
 
-  const finishHide = () => {
-    s.removeEventListener('animationend', finishHide);
-    s.setAttribute('hidden','');
-    s.style.display = 'none';
+    s.addEventListener('animationend', finishHide);
+
+    setTimeout(() => {
+      if (!s.hasAttribute('hidden')) finishHide();
+    }, 650);
+
+    // دخول الشجرة
+    const tree = document.getElementById('familyTree');
+    if (tree){
+      tree.classList.add('family-tree-enter');
+      tree.addEventListener('animationend', () => {
+        tree.classList.remove('family-tree-enter');
+      }, { once:true });
+    }
   };
 
-  // عند انتهاء الأنيميشن أَخفِ الغطاء فعليًا
-  s.addEventListener('animationend', finishHide);
+  // حد أدنى للمدة (منع فلاش)
+  const elapsed = (performance?.now?.() || Date.now()) - (splashShownAt || 0);
+  const wait = Math.max(0, SPLASH_MIN_MS - elapsed);
 
-  // احتياط: في حال لم تعمل الحركة لأي سبب
-  setTimeout(() => {
-    if (!s.hasAttribute('hidden')) {
-      finishHide();
-    }
-  }, 650);
-
-  // حركة دخول الشجرة بالتزامن مع تلاشي الغطاء
-  const tree = document.getElementById('familyTree');
-  if (tree){
-    tree.classList.add('family-tree-enter');
-    tree.addEventListener('animationend', () => {
-      tree.classList.remove('family-tree-enter');
-    }, { once:true });
+  if (wait > 0 && !force){
+    setTimeout(doHide, wait);
+  } else {
+    doHide();
   }
 }
 
+function armSplashTimeout(){
+  clearTimeout(splashTimeoutId);
+  splashTimeoutId = setTimeout(() => {
+    if (!window.__bootDone && !splashHasError){
+      showSplashError('انتهت مهلة التحميل. قد تكون البيانات كبيرة أو التخزين بطيء. اضغط "إعادة المحاولة".');
+    }
+  }, SPLASH_MAX_MS);
+}
 
-// Fallback: أخفِ الغطاء عند load فقط إن لم نكن في وضع خطأ
+function disarmSplashTimeout(){
+  clearTimeout(splashTimeoutId);
+  splashTimeoutId = null;
+}
+
+// Fallback: لا نخفي عند load إلا إذا boot لم يكتمل خلال مدة معقولة
 window.addEventListener('load', () => {
-  if (!splashHasError){
-    hideSplash();
+  // إذا اكتمل bootstrap بالفعل -> لا تفعل شيء (مصدر واحد للإخفاء)
+  if (window.__bootDone) return;
+
+  // إذا لم يبدأ bootstrap لأي سبب (نادر) -> شغّله أو على الأقل لا تعلق
+  if (!window.__bootStarted && !splashHasError){
+    // لا نخفي هنا، لأننا لا نعرف حالة التحميل
+    // نترك مهلة الـ Splash تتكفل بإظهار retry
+    armSplashTimeout();
   }
 });
 
@@ -530,7 +644,7 @@ function onSelectFamily(key){
   Model.setSelectedKey(key);
   setState({selectedFamily:key});
   // لا حاجة لتحديث value؛ واجهة الأزرار تُعاد بناؤها عبر syncActiveFamilyUI
-
+refreshValidationBadge();
   if(typeof FeatureSearch.refreshFilterOptionsForCurrentFamily==='function'){
     FeatureSearch.refreshFilterOptionsForCurrentFamily();
   }
@@ -606,6 +720,34 @@ function onModalSave(key, familyObj) {
   const wasCore = !!Model.getFamily(key)?.__core;
   familyObj.__custom = true;
   if (wasCore) familyObj.__core = true;
+  
+// =========================
+// VALIDATION قبل الحفظ (مركز تنبيهات)
+// =========================
+{
+  const { errors, warnings } = validateFamily(familyObj);
+
+  // احفظ النتائج في المركز (scopeKey = family:${key})
+  setValidationResults(`family:${key}`, {
+    title: `تنبيهات التحقق — ${familyObj.title || familyObj.familyName || key}`,
+    errors,
+    warnings,
+    meta: { familyKey: key, ts: Date.now() }
+  });
+
+  const sum = getValidationSummary(`family:${key}`);
+
+  // لا نمنع الحفظ ولا نفتح المودال — فقط نبلغ المستخدم
+if (sum.counts.total > 0){
+  const msg = vcToastSummaryText(sum);
+  if (sum.hasBlockers) showError(`تم الحفظ، لكن ${msg} راجع أيقونة التنبيهات.`);
+  else showWarning(`تم الحفظ، لكن ${msg} راجع أيقونة التنبيهات.`);
+}
+
+}
+
+
+  // نفّذ الحفظ فقط إذا نجح التحقق
   Model.getFamilies()[key] = familyObj;
   Model.commitFamily(key);
 
@@ -754,6 +896,19 @@ async function onInlineRename(personId, patch) {
   }
 
   Model.commitFamily(famKey);
+
+  // إعادة حساب التحقق وتحديث مركز التنبيهات مباشرة بعد commit
+  try {
+    const { errors, warnings } = validateFamily(fam);
+
+    setValidationResults(`family:${famKey}`, {
+      title: `تنبيهات التحقق — ${fam.title || fam.familyName || famKey}`,
+      errors,
+      warnings,
+      meta: { familyKey: famKey, ts: Date.now(), origin: 'inlineRename' }
+    });
+
+  } catch {}
 
   // مزامنة المودال فقط لو الشخص المفتوح هو نفسه
   if (dom.currentPerson && String(dom.currentPerson._id) === targetId) {
@@ -1029,44 +1184,106 @@ handlers.onModalSave    = onModalSave;
 handlers.onShowDetails  = onShowDetails;
 handlers.onInlineRename = onInlineRename;
 
+// تقدير عدد الأشخاص داخل Family (بدون الاعتماد على شكل واحد فقط)
+function estimatePersonsInFamily(fam){
+  if (!fam) return 0;
+
+  let count = 0;
+  const seen = new Set();
+
+  const visit = (p) => {
+    if (!p || typeof p !== 'object') return;
+    const id = (p._id != null) ? String(p._id) : null;
+    if (id && seen.has(id)) return;
+    if (id) seen.add(id);
+    count++;
+
+    const children = Array.isArray(p.children) ? p.children : [];
+    for (const c of children) visit(c);
+
+    const wives = Array.isArray(p.wives) ? p.wives : [];
+    for (const w of wives){
+      visit(w);
+      const wc = Array.isArray(w.children) ? w.children : [];
+      for (const c of wc) visit(c);
+    }
+  };
+
+  // أعلى مستويات شائعة عندك
+  const tops = [
+    ...(Array.isArray(fam.ancestors) ? fam.ancestors : []),
+    fam.father,
+    fam.rootPerson,
+    ...(Array.isArray(fam.wives) ? fam.wives : [])
+  ].filter(Boolean);
+
+  for (const t of tops) visit(t);
+
+  return count;
+}
+
+// معالجة تدريجية: تحريك التقدم بناءً على حجم البيانات (30% → 60%)
+// تحسين: لا نعيد حساب estimatePersonsInFamily مرتين لكل عائلة (كاش)
+async function progressLoadFamiliesBySize(fams){
+  const keys = Object.keys(fams || {});
+  const totalFamilies = keys.length || 1;
+
+  // كاش: احسب عدد الأشخاص لكل عائلة مرة واحدة
+  const personsByKey = new Map();
+  let totalPersons = 0;
+
+  for (const k of keys){
+    const n = estimatePersonsInFamily(fams[k]);
+    const safeN = Math.max(1, n); // لا نسمح بالصفر
+    personsByKey.set(k, safeN);
+    totalPersons += safeN;
+  }
+
+  // احتياط: لا يصبح صفر (لو لم توجد عائلات أصلًا)
+  totalPersons = Math.max(totalPersons, totalFamilies);
+
+  let donePersons = 0;
+
+  // تحديثات متقطعة مع yield للواجهة
+  const yieldFrame = () => new Promise(r => requestAnimationFrame(r));
+
+  for (let i = 0; i < keys.length; i++){
+    const k = keys[i];
+    const famPersons = personsByKey.get(k) || 1;
+
+    donePersons += famPersons;
+
+    const ratio = Math.min(1, donePersons / totalPersons);
+    const p = 30 + Math.round(ratio * 30); // 30..60
+    setSplashProgress(p, `تحميل البيانات: ${(ratio*100).toFixed(0)}%`);
+
+    // yield كل 2 عائلات تقريبًا لتبقى الواجهة سلسة
+    if (i % 2 === 0) await yieldFrame();
+  }
+
+  // ضمان وصولها لـ 60
+  setSplashProgress(60,'اكتمل تجهيز بيانات العائلات.');
+}
+
 
 /* =========================
    Bootstrap
    ========================= */
 async function bootstrap(){
-  const splashEl = document.getElementById('app-splash');
-  if (splashEl) splashEl.removeAttribute('hidden');
+  window.__bootStarted=true; window.__bootDone=false;
+
+  const splashEl=document.getElementById('app-splash');
+  if(splashEl){ splashEl.removeAttribute('hidden'); splashEl.style.display='flex'; splashEl.dataset.splashHidden='0'; }
+  splashShownAt=(performance?.now?.()||Date.now()); armSplashTimeout();
   setSplashProgress(5,'بدء تهيئة التطبيق…');
 
   try{
-    try{
-      await ensurePersistentStorage();
-      setSplashProgress(20,'التحقق من حفظ البيانات…');
-    }catch{
-      setSplashProgress(15,'متابعة التهيئة بدون تخزين دائم…');
-    }
+    perf.start('bootstrap:total');
 
-    await Model.loadPersistedFamilies();
-    setSplashProgress(40,'تحميل بيانات العائلات…');
+    // ===== 1) First Paint سريع: DOM + Theme + Placeholder =====
+    perf.start('bootstrap:firstPaint');
 
-    // ضمان وجود عائلة مرئية مختارة
-    {
-      const fams = Model.getFamilies();
-      const cur  = Model.getSelectedKey();
-      const ok   = cur && fams[cur] && fams[cur].hidden !== true;
-      if (!ok){
-        const firstVisible =
-          Object.keys(fams).find(k => fams[k] && fams[k].hidden !== true) || null;
-        if (firstVisible){
-          Model.setSelectedKey(firstVisible);
-          setState({ selectedFamily:firstVisible });
-        }
-      }
-    }
-
-    setSplashProgress(55,'تحضير الواجهة…');
-
-    // مراجع DOM أساسية
+    // مراجع DOM أساسية (مبكّرًا)
     dom.familyButtons        = byId('familyButtons');
     dom.themeButtons         = byId('themeButtons');
     dom.closeModalBtn        = byId('closeModal');
@@ -1083,258 +1300,282 @@ async function bootstrap(){
     dom.suggestBox           = byId('searchSuggestions');
     dom.activeFamily         = byId('activeFamily');
 
+    // ثيم + شعار بسرعة
+    const bootTheme=
+      window.__bootTheme||
+      [...document.documentElement.classList].find(c=>c.startsWith('theme-'))?.slice(6)||
+      (localStorage.getItem('theme')||localStorage.getItem('appTheme')||'default').trim();
+
+    applySavedTheme(bootTheme);
+    setState({theme:bootTheme});
+    syncThemeColor();
+    updateSplashLogo(bootTheme);
+
+    // Placeholder بسيط للشجرة (بدون الاعتماد على البيانات)
+    if(dom.familyTree){ dom.familyTree.setAttribute('aria-busy','true'); dom.familyTree.dataset.placeholder='1'; }
+
+    setSplashProgress(12,'تهيئة الواجهة الأساسية…');
+    perf.end('bootstrap:firstPaint');
+
+    // ===== 2) التخزين (غير حاجز لعرض الواجهة) =====
+    perf.start('bootstrap:storage');
+    try{ await ensurePersistentStorage(); setSplashProgress(20,'التحقق من حفظ البيانات…'); }
+    catch{ setSplashProgress(18,'متابعة التهيئة بدون تخزين دائم…'); }
+    perf.end('bootstrap:storage');
+
+    // ===== 3) تحميل البيانات (IndexedDB) =====
+    perf.start('bootstrap:loadFamilies');
+    setSplashProgress(25,'تحميل بيانات العائلات…');
+    await Model.loadPersistedFamilies();
+    perf.end('bootstrap:loadFamilies');
+
+    // ===== 4) تقدم أقرب للحقيقة حسب حجم البيانات (30..60) =====
+    perf.start('bootstrap:progressBySize');
+    await progressLoadFamiliesBySize(Model.getFamilies());
+    perf.end('bootstrap:progressBySize');
+
+    // ضمان وجود عائلة مرئية مختارة
+    {
+      const fams=Model.getFamilies();
+      const cur=Model.getSelectedKey();
+      const ok=cur&&fams[cur]&&fams[cur].hidden!==true;
+      if(!ok){
+        const firstVisible=Object.keys(fams).find(k=>fams[k]&&fams[k].hidden!==true)||null;
+        if(firstVisible){ Model.setSelectedKey(firstVisible); setState({selectedFamily:firstVisible}); }
+      }
+    }
+
+    setSplashProgress(55,'تحضير الواجهة…');
+
     // أزرار الصعود/النزول
     initScrollButtons();
 
     // مزامنة العائلات + الفلاتر
-    const refreshFamiliesAndFilters = () => {
+    const refreshFamiliesAndFilters=()=>{
       syncActiveFamilyUI();
-      if (typeof FeatureSearch.refreshFilterOptionsForCurrentFamily === 'function'){
+      if(typeof FeatureSearch.refreshFilterOptionsForCurrentFamily==='function'){
         FeatureSearch.refreshFilterOptionsForCurrentFamily();
       }
     };
 
-    bus.on('io:import:done',          refreshFamiliesAndFilters);
+    bus.on('io:import:done',refreshFamiliesAndFilters);
     bus.on('families:coreFlag:refresh',refreshFamiliesAndFilters);
     bus.on('families:visibility:changed',refreshFamiliesAndFilters);
 
-    window.addEventListener('FT_VISIBILITY_REFRESH', () => {
-      redrawUI();
-      syncActiveFamilyUI();
-    });
+    window.addEventListener('FT_VISIBILITY_REFRESH',()=>{ redrawUI(); syncActiveFamilyUI(); });
 
     /* ===== مبدّل العائلة (القائمة المنسدلة أعلى الشجرة) ===== */
-    dom.activeFamily?.addEventListener('click', e => {
-      const box = dom.activeFamily;
-      if (!box) return;
+    dom.activeFamily?.addEventListener('click',e=>{
+      const box=dom.activeFamily; if(!box) return;
 
-      const toggleBtn = e.target.closest('.family-switcher-toggle');
-      const optionBtn = e.target.closest('.family-switcher-btn[data-family]');
+      const toggleBtn=e.target.closest('.family-switcher-toggle');
+      const optionBtn=e.target.closest('.family-switcher-btn[data-family]');
+      if(toggleBtn||optionBtn) e.stopPropagation();
 
-      if (toggleBtn || optionBtn) e.stopPropagation();
-
-      // 1) فتح/إغلاق القائمة من زر الرأس
-      if (toggleBtn){
-        const isOpen = box.classList.toggle('is-open');
-        toggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      if(toggleBtn){
+        const isOpen=box.classList.toggle('is-open');
+        toggleBtn.setAttribute('aria-expanded',isOpen?'true':'false');
         return;
       }
 
-      // 2) اختيار عائلة
-      if (optionBtn){
-        const id = optionBtn.dataset.family;
-        if (!id) return;
+      if(optionBtn){
+        const id=optionBtn.dataset.family; if(!id) return;
         onSelectFamily(id);
         box.classList.remove('is-open');
-        const headToggle = box.querySelector('.family-switcher-toggle');
-        if (headToggle) headToggle.setAttribute('aria-expanded','false');
+        const headToggle=box.querySelector('.family-switcher-toggle');
+        if(headToggle) headToggle.setAttribute('aria-expanded','false');
       }
     });
 
     // إغلاق المبدّل عند النقر خارجَه (bubble)
-    document.addEventListener('click', e => {
-      const box = dom.activeFamily;
-      if (!box || !box.classList.contains('is-open')) return;
-      if (box.contains(e.target)) return;
+    document.addEventListener('click',e=>{
+      const box=dom.activeFamily;
+      if(!box||!box.classList.contains('is-open')) return;
+      if(box.contains(e.target)) return;
       box.classList.remove('is-open');
-      const toggle = box.querySelector('.family-switcher-toggle');
-      if (toggle) toggle.setAttribute('aria-expanded','false');
+      const toggle=box.querySelector('.family-switcher-toggle');
+      if(toggle) toggle.setAttribute('aria-expanded','false');
     });
 
     // إغلاق المبدّل عند النقر خارجَه (capture + إعادة السهم النصي القديم)
-    document.addEventListener('click', e => {
-      const box = dom.activeFamily;
-      if (!box) return;
-      if (!box.contains(e.target) && box.classList.contains('is-open')){
+    document.addEventListener('click',e=>{
+      const box=dom.activeFamily;
+      if(!box) return;
+      if(!box.contains(e.target)&&box.classList.contains('is-open')){
         box.classList.remove('is-open');
-        const toggle = box.querySelector('.family-switcher-toggle');
-        const arrow  = box.querySelector('.family-switcher-arrow');
-        if (toggle) toggle.setAttribute('aria-expanded','false');
+        const toggle=box.querySelector('.family-switcher-toggle');
+        const arrow=box.querySelector('.family-switcher-arrow');
+        if(toggle) toggle.setAttribute('aria-expanded','false');
       }
-    }, true);
+    },true);
 
     /* ===== الشريط الجانبي: فتح/إغلاق + فخ تركيز ===== */
-    const panel   = byId('sidePanel');
-    const overlay = byId('sideOverlay');
-    const toggle  = byId('sideToggle');
-    let   prevFocus = null;
+    const panel=byId('sidePanel');
+    const overlay=byId('sideOverlay');
+    const toggle=byId('sideToggle');
+    let prevFocus=null;
 
     // موقع زر التبديل الأصلي
-    const toggleHomeParent = toggle ? toggle.parentNode : null;
-    const toggleHomeNext   = toggle ? toggle.nextSibling : null;
+    const toggleHomeParent=toggle?toggle.parentNode:null;
+    const toggleHomeNext=toggle?toggle.nextSibling:null;
 
-    const openPanel = () => {
-      if (!panel) return;
-      prevFocus     = document.activeElement;
-      panel.inert   = false;
+    const openPanel=()=>{
+      if(!panel) return;
+      prevFocus=document.activeElement;
+      panel.inert=false;
       panel.classList.add('open');
       panel.setAttribute('aria-hidden','false');
-      if (overlay) overlay.hidden = false;
+      if(overlay) overlay.hidden=false;
 
-      if (toggle){
-        const header = panel.querySelector('.side-header');
-        if (header && !header.contains(toggle)){
-          header.insertBefore(toggle, header.firstChild);
-        }
+      if(toggle){
+        const header=panel.querySelector('.side-header');
+        if(header&&!header.contains(toggle)) header.insertBefore(toggle,header.firstChild);
         toggle.setAttribute('aria-expanded','true');
         toggle.setAttribute('aria-label','إغلاق لوحة الإعدادات');
         toggle.classList.add('close-button');
       }
 
-      const target = panel.querySelector('.side-header h3') || panel;
-      setTimeout(() => target?.focus?.(), 0);
-      document.documentElement.style.overflow = 'hidden';
+      const target=panel.querySelector('.side-header h3')||panel;
+      setTimeout(()=>target?.focus?.(),0);
+      document.documentElement.style.overflow='hidden';
     };
 
-    const closePanel = () => {
-      if (!panel) return;
+    const closePanel=()=>{
+      if(!panel) return;
 
-      (toggle || document.body).focus?.();
+      (toggle||document.body).focus?.();
 
       panel.classList.remove('open');
       panel.setAttribute('aria-hidden','true');
-      panel.inert = true;
+      panel.inert=true;
 
-      if (overlay) overlay.hidden = false;
-      if (overlay) overlay.hidden = true;
+      if(overlay) overlay.hidden=false;
+      if(overlay) overlay.hidden=true;
 
-      if (toggle){
+      if(toggle){
         toggle.setAttribute('aria-expanded','false');
         toggle.setAttribute('aria-label','فتح لوحة الإعدادات');
         toggle.classList.remove('close-button');
 
-        if (toggleHomeParent){
-          if (toggleHomeNext && toggleHomeNext.parentNode === toggleHomeParent){
-            toggleHomeParent.insertBefore(toggle, toggleHomeNext);
-          }else{
-            toggleHomeParent.appendChild(toggle);
-          }
+        if(toggleHomeParent){
+          if(toggleHomeNext&&toggleHomeNext.parentNode===toggleHomeParent) toggleHomeParent.insertBefore(toggle,toggleHomeNext);
+          else toggleHomeParent.appendChild(toggle);
         }
       }
 
       try{ prevFocus?.focus?.(); }catch{}
-      prevFocus = null;
-      document.documentElement.style.overflow = '';
+      prevFocus=null;
+      document.documentElement.style.overflow='';
     };
 
-    const togglePanel = () => {
-      if (panel?.classList.contains('open')) closePanel();
-      else openPanel();
-    };
+    const togglePanel=()=>{ if(panel?.classList.contains('open')) closePanel(); else openPanel(); };
 
-    bus.on('side:requestClose', closePanel);
-    toggle?.addEventListener('click', togglePanel);
-    overlay?.addEventListener('click', closePanel);
+    bus.on('side:requestClose',closePanel);
+    toggle?.addEventListener('click',togglePanel);
+    overlay?.addEventListener('click',closePanel);
 
     // إغلاق بـ ESC
-    panel?.addEventListener('keydown', e => {
-      if (e.key === 'Escape') closePanel();
-    });
+    panel?.addEventListener('keydown',e=>{ if(e.key==='Escape') closePanel(); });
+
+    // إغلاق الشريط الجانبي عند الضغط على زر "تعديل العائلة" (id=edit-family)
+    document.addEventListener('click',(e)=>{
+      const btn=e.target?.closest?.('#edit-family');
+      if(!btn) return;
+      bus.emit('side:requestClose');
+    },true);
 
     // فخ التركيز داخل اللوحة
-    panel?.addEventListener('keydown', e => {
-      if (e.key !== 'Tab') return;
-      const focusables = Array.from(panel.querySelectorAll(
+    panel?.addEventListener('keydown',e=>{
+      if(e.key!=='Tab') return;
+      const focusables=Array.from(panel.querySelectorAll(
         'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
       ));
-      if (!focusables.length) return;
-      const first = focusables[0];
-      const last  = focusables[focusables.length - 1];
-      if (e.shiftKey && document.activeElement === first){
-        e.preventDefault(); last.focus();
-      }else if (!e.shiftKey && document.activeElement === last){
-        e.preventDefault(); first.focus();
-      }
+      if(!focusables.length) return;
+      const first=focusables[0];
+      const last=focusables[focusables.length-1];
+      if(e.shiftKey&&document.activeElement===first){ e.preventDefault(); last.focus(); }
+      else if(!e.shiftKey&&document.activeElement===last){ e.preventDefault(); first.focus(); }
     });
 
     // عناصر تُغلق اللوحة مباشرة
-    const shouldCloseOnClick = t => {
-      if (!t) return false;
-      if (t.closest('input[type="range"], .font-size-selector')) return false;
-      if (t.closest('label[for="importInput"], #importInput')) return false;
-      if (t.closest('input, select, textarea')) return false;
-      if (t.closest('.theme-button')) return true;
-      if (t.closest('#printBtn, #exportBtn, #statsBtn')) return true;
-      if (t.closest('#shareSiteBtn, #rateSiteBtn, #sendNoteBtn, #helpBtn')) return true;
+    const shouldCloseOnClick=t=>{
+      if(!t) return false;
+      if(t.closest('input[type="range"], .font-size-selector')) return false;
+      if(t.closest('label[for="importInput"], #importInput')) return false;
+      if(t.closest('input, select, textarea')) return false;
+      if(t.closest('.theme-button')) return true;
+      if(t.closest('#printBtn, #exportBtn, #statsBtn')) return true;
+      if(t.closest('#shareSiteBtn, #rateSiteBtn, #sendNoteBtn, #helpBtn')) return true;
       return false;
     };
 
-    panel?.addEventListener('click', e => {
-      const t = e.target;
-      if (shouldCloseOnClick(t)) closePanel();
-    });
+    panel?.addEventListener('click',e=>{ const t=e.target; if(shouldCloseOnClick(t)) closePanel(); });
 
     // اختيار/إدارة العائلات من الشريط الجانبي
-    byId('familyButtons')?.addEventListener('click', e => {
-      const item = e.target.closest('.family-item');
-      if (!item) return;
+    byId('familyButtons')?.addEventListener('click',e=>{
+      const item=e.target.closest('.family-item');
+      if(!item) return;
 
-      const pickBtn = e.target.closest('.family-item > .family-button[data-family]');
-      if (pickBtn){
-        const key = pickBtn.dataset.family;
-        if (!key) return;
-        const current = Model.getSelectedKey();
-        if (key !== current) onSelectFamily(key);
+      const pickBtn=e.target.closest('.family-item > .family-button[data-family]');
+      if(pickBtn){
+        const key=pickBtn.dataset.family; if(!key) return;
+        const current=Model.getSelectedKey();
+        if(key!==current) onSelectFamily(key);
         closePanel();
         return;
       }
 
-      if (e.target.closest('.hide-family')){
-        return; // منطق الإخفاء موجود في FeatureVisibility
-      }
+      if(e.target.closest('.hide-family')) return; // منطق الإخفاء موجود في FeatureVisibility
 
-      if (e.target.closest('.edit-family')){
-        const key = item.querySelector('.family-button[data-family]')?.dataset.family;
-        if (!key) return;
+      if(e.target.closest('.edit-family')){
+        const key=item.querySelector('.family-button[data-family]')?.dataset.family;
+        if(!key) return;
         closePanel();
         onEditFamily(key);
         return;
       }
 
-      if (e.target.closest('.del-family')){
-        const key = item.querySelector('.family-button[data-family]')?.dataset.family;
-        if (!key) return;
+      if(e.target.closest('.del-family')){
+        const key=item.querySelector('.family-button[data-family]')?.dataset.family;
+        if(!key) return;
         onDeleteFamily(key);
         return;
       }
     });
 
     // إنشاء عائلة جديدة من الشريط
-    byId('addFamilyBtn')?.addEventListener('click', () => {
+    byId('addFamilyBtn')?.addEventListener('click',()=>{
       closePanel();
-      const modal = ModalUI.createFamilyCreatorModal(null,{ onSave:onModalSave });
+      const modal=ModalUI.createFamilyCreatorModal(null,{onSave:onModalSave});
       ModalManager.open(modal);
-      setTimeout(() => modal.querySelector('#newFamilyTitle')?.focus(), 50);
+      setTimeout(()=>modal.querySelector('#newFamilyTitle')?.focus(),50);
     });
 
-    bus.on('io:import:done', () => {
-      syncActiveFamilyUI();
-      closePanel();
-    });
+    bus.on('io:import:done',()=>{ syncActiveFamilyUI(); closePanel(); });
 
     /* ===== إغلاق المودال ===== */
-    const revokeModalBlob = () => {
+    const revokeModalBlob=()=>{
       try{
-        const img = document.querySelector('#bioPhoto img[data-blob-url]');
-        const u   = img?.dataset?.blobUrl || '';
-        if (u.startsWith('blob:')) URL.revokeObjectURL(u);
+        const img=document.querySelector('#bioPhoto img[data-blob-url]');
+        const u=img?.dataset?.blobUrl||'';
+        if(u.startsWith('blob:')) URL.revokeObjectURL(u);
       }catch{}
     };
 
-    dom.closeModalBtn?.addEventListener('click', () => {
+    dom.closeModalBtn?.addEventListener('click',()=>{
       revokeModalBlob();
       ModalManager.close(dom.bioModal);
-      if (location.hash.startsWith('#person=')){
-        history.replaceState(null,'',location.pathname + location.search);
+      if(location.hash.startsWith('#person=')){
+        history.replaceState(null,'',location.pathname+location.search);
       }
     });
 
-    dom.bioModal?.addEventListener('click', e => {
-      if (e.target === dom.bioModal){
+    dom.bioModal?.addEventListener('click',e=>{
+      if(e.target===dom.bioModal){
         revokeModalBlob();
         ModalManager.close(dom.bioModal);
-        if (location.hash.startsWith('#person=')){
-          history.replaceState(null,'',location.pathname + location.search);
+        if(location.hash.startsWith('#person=')){
+          history.replaceState(null,'',location.pathname+location.search);
         }
       }
     });
@@ -1342,13 +1583,7 @@ async function bootstrap(){
     setSplashProgress(70,'ربط المزايا ومكوّنات الواجهة…');
 
     /* ===== تمرير سياق موحّد للميزات ===== */
-    const ctx = {
-      Model, DB, TreeUI, ModalUI, ModalManager,
-      state:{ getState, setState, subscribe },
-      dom, bus,
-      redrawUI,
-      findPersonByIdInFamily
-    };
+    const ctx={ Model,DB,TreeUI,ModalUI,ModalManager, state:{getState,setState,subscribe}, dom,bus, redrawUI, findPersonByIdInFamily };
 
     FeatureIDs.init(ctx);
     FeatureVisibility.init(ctx);
@@ -1363,64 +1598,60 @@ async function bootstrap(){
     setSplashProgress(85,'تهيئة البحث والإحصاءات والطباعة…');
 
     // فتح تفاصيل الشخص من البحث
-    bus.on('ui:openPersonById', ({ id }) => onShowDetails(id,{ silent:true }));
+    bus.on('ui:openPersonById',({id})=>onShowDetails(id,{silent:true}));
 
     // ثيم + شعار + رسم أولي
-    const bootTheme =
-      window.__bootTheme ||
-      [...document.documentElement.classList]
-        .find(c => c.startsWith('theme-'))?.slice(6) ||
-      (localStorage.getItem('theme') ||
-       localStorage.getItem('appTheme') ||
-       'default').trim();
-
     applySavedTheme(bootTheme);
-    setState({ theme:bootTheme });
+    setState({theme:bootTheme});
     syncThemeColor();
     updateSplashLogo(bootTheme);
     redrawUI();
     syncActiveFamilyUI();
 
+    // أزل placeholder
+    if(dom.familyTree&&dom.familyTree.dataset.placeholder==='1'){
+      dom.familyTree.removeAttribute('aria-busy');
+      delete dom.familyTree.dataset.placeholder;
+    }
+
     // توست
-    getToastNodes().toastContainer = dom.toastContainer;
+    getToastNodes().toastContainer=dom.toastContainer;
+
+    // تهيئة مركز التنبيهات (أيقونة + مودال) — الآن مرتبط بالعائلة الحالية فقط
+    initValidationUI({ byId,showInfo,showError,showWarning, ModalManager,bus, getState, Model });
 
     // منع التداخل مع تحرير الاسم inline
-    const stopIfEditableName = e => {
-      const el = e.target?.closest?.('[contenteditable="true"]');
-      if (el) e.stopPropagation();
+    const stopIfEditableName=e=>{
+      const el=e.target?.closest?.('[contenteditable="true"]');
+      if(el) e.stopPropagation();
     };
-    ['mousedown','click','dblclick','touchstart'].forEach(ev =>
-      document.addEventListener(ev, stopIfEditableName, true)
-    );
+    ['mousedown','click','dblclick','touchstart'].forEach(ev=>document.addEventListener(ev,stopIfEditableName,true));
 
     // أزرار الثيم + تحديث الشعار + الرسائل
-    dom.themeButtons?.addEventListener('click', e => {
-      const btn   = e.target.closest('.theme-button');
-      if (!btn) return;
-      const theme = btn.dataset.theme;
-      const prevTheme = getState().theme || bootTheme;
+    dom.themeButtons?.addEventListener('click',e=>{
+      const btn=e.target.closest('.theme-button');
+      if(!btn) return;
+      const theme=btn.dataset.theme;
+      const prevTheme=getState().theme||bootTheme;
 
-      if (theme === prevTheme){
-        const curLabel = btn.dataset.label || theme;
+      if(theme===prevTheme){
+        const curLabel=btn.dataset.label||theme;
         showInfo(`النمط ${highlight(curLabel)} مُفعَّل حاليًا بالفعل.`);
         return;
       }
 
-      const prevBtn   =
-        dom.themeButtons.querySelector(`.theme-button[data-theme="${prevTheme}"]`);
-      const prevLabel = prevBtn?.dataset.label || prevTheme || 'السابق';
-      const newLabel  = btn.dataset.label || theme;
+      const prevBtn=dom.themeButtons.querySelector(`.theme-button[data-theme="${prevTheme}"]`);
+      const prevLabel=prevBtn?.dataset.label||prevTheme||'السابق';
+      const newLabel=btn.dataset.label||theme;
 
-      if (theme === 'default'){
-        document.documentElement.classList.remove(
-          'theme-corporate','theme-elegant','theme-minimal','theme-royal','theme-dark'
-        );
+      if(theme==='default'){
+        document.documentElement.classList.remove('theme-corporate','theme-elegant','theme-minimal','theme-royal','theme-dark');
       }
 
-      setState({ theme });
+      setState({theme});
       applySavedTheme(theme);
-      localStorage.setItem('theme', theme);
-      localStorage.setItem('appTheme', theme);
+      localStorage.setItem('theme',theme);
+      localStorage.setItem('appTheme',theme);
       syncThemeColor();
       updateSplashLogo(theme);
 
@@ -1432,10 +1663,13 @@ async function bootstrap(){
     // إنهاء الغطاء
     setSplashProgress(95,'عرض مخطط شجرة العائلة…');
     setSplashProgress(100,'اكتمل تحميل شجرة العائلة.');
-    hideSplash();
+    window.__bootDone=true; disarmSplashTimeout(); hideSplash();
+
+    perf.end('bootstrap:total');
   }catch(err){
     console.error(err);
-    showSplashError(err?.message || 'تعذر إكمال تهيئة التطبيق.');
+    window.__bootDone=false; disarmSplashTimeout();
+    showSplashError(err?.message||'تعذر إكمال تهيئة التطبيق.');
   }
 }
 

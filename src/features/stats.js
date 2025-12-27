@@ -1774,20 +1774,28 @@ if (cvStack) ro.observe(cvStack);
 ========================= */
 function closeStatsModal() {
   const modal = byId('statsModal'); if (!modal) return;
-  // نظّف المراقبين/المستمعين عند الإغلاق الفعلي
- try { modal.__statsDetach?.(); } catch {}
- try { delete modal.__statsDetach; } catch {}
+
+  try { modal.__statsDetach?.(); } catch {}
+  try { delete modal.__statsDetach; } catch {}
 
   modal.classList.add('hide');
-  const removeClasses = () => {
+
+  const finalizeClose = () => {
     modal.classList.remove('show','hide');
-    modal.removeEventListener('animationend', removeClasses);
-    modal.removeEventListener('transitionend', removeClasses);
+
+    // رجّع hidden بعد انتهاء الإغلاق
+    modal.hidden = true;
+    modal.setAttribute('hidden', '');
+
+    modal.removeEventListener('animationend', finalizeClose);
+    modal.removeEventListener('transitionend', finalizeClose);
   };
-  modal.addEventListener('animationend', removeClasses);
-  modal.addEventListener('transitionend', removeClasses);
-  setTimeout(removeClasses, 400);
+
+  modal.addEventListener('animationend', finalizeClose);
+  modal.addEventListener('transitionend', finalizeClose);
+  setTimeout(finalizeClose, 400);
 }
+
 
 /* =========================
    8) تهيئة الأزرار والروابط
@@ -1811,10 +1819,22 @@ ctx?.bus?.on?.('families:imported',  ()=> {
   for (const k of Object.keys(fams||{})) invalidatePipeline(k);
 });
 
-  byId('statsBtn')?.addEventListener('click', ()=>{
-    renderStats();
-    byId('statsModal')?.classList.add('show');
-  });
+byId('statsBtn')?.addEventListener('click', ()=>{
+  renderStats();
+
+  const modal = byId('statsModal');
+  if (!modal) return;
+
+  // أهم سطرين
+  modal.hidden = false;
+  modal.removeAttribute('hidden');
+
+  modal.classList.add('show');
+
+  // اختياري: فوكس لتحسين الوصول
+  modal.focus?.();
+});
+
 
   byId('closeStats')?.addEventListener('click', closeStatsModal);
   byId('statsModal')?.addEventListener('click', e => { if (e.target.id === 'statsModal') closeStatsModal(); });

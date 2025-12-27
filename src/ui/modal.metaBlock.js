@@ -270,13 +270,14 @@ function createMetaEditor({
 
   async function handleCancel(){
     if (dirtyCtl.isDirty()){
-      const ok = await showConfirmModal({
-        title: 'إلغاء التعديلات؟',
-        message: 'سيتم تجاهل التعديلات غير المحفوظة.',
-        variant: 'danger',
-        defaultFocus: 'cancel'
-      });
-      if (!ok) return;
+ const res = await showConfirmModal({
+  title: 'إلغاء التعديلات؟',
+  message: 'سيتم تجاهل التعديلات غير المحفوظة.',
+  variant: 'danger',
+  defaultFocus: 'cancel'
+});
+if (res !== 'confirm') return;
+
     }
 
     for (const [k, el] of Object.entries(datasetMap)){

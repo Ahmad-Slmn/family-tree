@@ -934,10 +934,10 @@ markDirty();
       const idx = Array.from(ancList.children).indexOf(row)+1;
       const ord = getArabicOrdinal(idx);
       const nm  = (row.querySelector('.ancestor-name')?.value || '').trim() || `الجد ${ord}`;
-      showConfirmModal({ title:`حذف الجد: ${ord}`, message:`هل أنت متأكد من حذف "${nm}"؟`, variant:'danger', defaultFocus:'confirm' })
-        .then(ok=>{
-          if (!ok) return;
-          row.remove();
+showConfirmModal({ title:`حذف الجد: ${ord}`, message:`هل أنت متأكد من حذف "${nm}"؟`, variant:'danger', defaultFocus:'confirm' })
+  .then(res=>{
+    if (res !== 'confirm') return;
+    row.remove();
           renumberAncestorLabels(false); updateAddAncestorBtnText();
            showInfo(`تم حذف الجد: ${ord} «${highlight(nm)}»`);
 
@@ -1013,8 +1013,6 @@ if (e.target.closest('.save-wife-mother-btn, .save-mother-btn, .wife-mother-save
     if (childLi){
       if (e.target.closest('.child-move-up, .move-up'))   return childLi.dispatchEvent(new Event('child:moveUp', { bubbles:true }));
       if (e.target.closest('.child-move-down, .move-down'))return childLi.dispatchEvent(new Event('child:moveDown',{ bubbles:true }));
-      if (e.target.closest('.remove-child-btn, .child-remove, .remove-child'))
-        return childLi.dispatchEvent(new Event('child:remove', { bubbles:true }));
     }
 
     if (e.target.closest('.remove-wife-btn')){
@@ -1023,15 +1021,15 @@ if (e.target.closest('.save-wife-mother-btn, .save-mother-btn, .wife-mother-save
       const ord = getArabicOrdinalF(idx);
       const confirmLabel = `الزوجة ${ord}` + (nm ? ` «${nm}»` : '');
 
-      showConfirmModal({
-        title:'حذف الزوجة',
-        message:`حذف ${confirmLabel} وكل أبنائها؟`,
-        variant:'danger',
-        defaultFocus:'confirm'
-      }).then(ok=>{
-        if (!ok) return;
+showConfirmModal({
+  title:'حذف الزوجة',
+  message:`حذف ${confirmLabel} وكل أبنائها؟`,
+  variant:'danger',
+  defaultFocus:'confirm'
+}).then(res=>{
+  if (res !== 'confirm') return;
 
-        w.remove();
+  w.remove();
         wivesList.querySelectorAll('.wife-block').forEach((b,i)=>{
           const t = b.querySelector('.wife-title');
           if (t) t.innerHTML = `الزوجة ${getArabicOrdinalF(i+1)} <span class="req">*</span>`;
@@ -1056,10 +1054,10 @@ markDirty();
 
     if (e.target.closest('.remove-all-children-btn')){
       if (!list.children.length) return showInfo('لا يوجد أبناء للحذف.');
-      showConfirmModal({ title:'حذف جميع الأبناء', message:'لا يمكن التراجع.', variant:'danger', defaultFocus:'confirm' })
-        .then(ok=>{
-          if (!ok) return;
-          list.innerHTML = '';
+  showConfirmModal({ title:'حذف جميع الأبناء', message:'لا يمكن التراجع.', variant:'danger', defaultFocus:'confirm' })
+  .then(res=>{
+    if (res !== 'confirm') return;
+    list.innerHTML = '';
           editorWrap.style.display = 'none';
           updateChildrenCount(w);
           showSuccess('تم حذف جميع الأبناء.');
@@ -1285,19 +1283,20 @@ function isFormDirty(){
       onCancel?.();
       return;
     }
-    showConfirmModal({
-      title: 'إغلاق دون حفظ؟',
-      message: 'هناك تعديلات غير محفوظة.',
-      variant: 'danger',
-      defaultFocus: 'cancel',
-      _ariaRole: 'alertdialog'
-    }).then(ok => {
-      if (!ok) return;
-      disposeDirtyIndicators(modal);
-      ModalManager.close(modal);
-      openerEl?.focus();
-      onCancel?.();
-    });
+showConfirmModal({
+  title: 'إغلاق دون حفظ؟',
+  message: 'هناك تعديلات غير محفوظة.',
+  variant: 'danger',
+  defaultFocus: 'cancel',
+  _ariaRole: 'alertdialog'
+}).then(res => {
+  if (res !== 'confirm') return;
+  disposeDirtyIndicators(modal);
+  ModalManager.close(modal);
+  openerEl?.focus();
+  onCancel?.();
+});
+
   }
 
   // Hook للـ Escape داخل ModalManager: إن وُجد يُستدعى بدل الإغلاق المباشر
