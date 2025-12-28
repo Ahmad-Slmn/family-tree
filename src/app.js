@@ -7,16 +7,9 @@ import * as ModalUI from './ui/modal.js';
 import { ModalManager } from './ui/modalManager.js';
 import { validateFamily } from './features/validate.js';
 import { walkPersons, walkPersonsWithPath } from './model/families.core.js';
-
-import {initValidationUI, setValidationResults, getValidationSummary, refreshValidationBadge, vcToastSummaryText} from './ui/validationCenter.js';
-
-import {
-  byId, showSuccess, showInfo, showError, showWarning, highlight,
-  applySavedTheme, currentTheme, getToastNodes
-} from './utils.js';
-
-
-import { getState, setState, subscribeTo, subscribe } from './stateManager.js';
+import {initValidationUI, setValidationResults, getValidationSummary, refreshValidationBadge, vcToastSummaryText, clearValidation} from './ui/validationCenter.js';
+import {byId, showSuccess, showInfo, showError, showWarning, highlight, applySavedTheme, currentTheme, getToastNodes} from './utils.js';
+import { getState, setState, subscribeTo, subscribe, batch } from './stateManager.js';
 
 // الميزات
 import * as FeatureIDs from './features/ids.js';
@@ -109,8 +102,6 @@ function startRotatingTagline(){
 
   clearTimeout(taglineTimer); tick();
 }
-
-
 
 window.addEventListener("DOMContentLoaded",startRotatingTagline);
 
@@ -510,7 +501,6 @@ function redrawUI(selectedKey = Model.getSelectedKey()) {
   TreeUI.drawFamilyTree(fams, key, dom, handlers);
 }
 
-
 /* تحويل هيكل العائلات إلى entries موحّد */
 function entriesOfFamilies(fams){
   if (!fams) return [];
@@ -573,20 +563,17 @@ function syncActiveFamilyUI(){
   fillFamilySwitcher(Model.getFamilies(), active);
 }
 
-
-
-/* ربط الحالة بالرسم */
 /* ربط الحالة بالرسم (انتقائي) */
 subscribeTo(
-  s => ({ sel: s.selectedFamily, q: s.search, f: s.filters }),
+  s => ({ sel: s.selectedFamily, q: s.search, f: s.filters, uiTick: s.uiTick }),
   ({ sel }) => {
     redrawUI(sel);
     dom.suggestBox?.classList.remove('show');
     dom.searchInput?.setAttribute('aria-expanded', 'false');
     syncActiveFamilyUI();
+    refreshValidationBadge();
   }
 );
-
 
 /* =========================
    أدوات مساعدة للبحث داخل العائلة
@@ -684,40 +671,35 @@ function devAssertNoDuplicateIdsInFamily(fam, famKey) {
   }
 }
 
-
-
-
 /* =========================
    عمليات المستوى الأعلى
    ========================= */
 function onSelectFamily(key){
   if(!key) return;
 
-  const currentKey=Model.getSelectedKey();
-  const fams=Model.getFamilies?.()||{};
+  const currentKey = Model.getSelectedKey();
+  const fams = Model.getFamilies?.() || {};
 
-  // اختيار نفس العائلة: رسالة فقط بدون أي تغيير
-  if(key===currentKey){
-    const fam=fams[key]||Model.getFamily?.(key);
-    const label=fam?.title||fam?.familyName||fam?.fullRootPersonName||key;
+  if(key === currentKey){
+    const fam = fams[key] || Model.getFamily?.(key);
+    const label = fam?.title || fam?.familyName || fam?.fullRootPersonName || key;
     showInfo(`عائلة: ${highlight(String(label))} هي المختارة حاليًا بالفعل.`);
     return;
   }
 
-  // تبديل العائلة
+  // state/source-of-truth
   Model.setSelectedKey(key);
-  setState({selectedFamily:key});
-  // لا حاجة لتحديث value؛ واجهة الأزرار تُعاد بناؤها عبر syncActiveFamilyUI
-refreshValidationBadge();
-  if(typeof FeatureSearch.refreshFilterOptionsForCurrentFamily==='function'){
-    FeatureSearch.refreshFilterOptionsForCurrentFamily();
-  }
+  setState({ selectedFamily: key });
 
-  const prevFam=fams[currentKey]||Model.getFamily?.(currentKey);
-  const nextFam=fams[key]||Model.getFamily?.(key);
+  // منطق غير UI
+  FeatureSearch.refreshFilterOptionsForCurrentFamily?.();
+
+  // رسائل OK (مو UI-render)
+  const prevFam = fams[currentKey] || Model.getFamily?.(currentKey);
+  const nextFam = fams[key] || Model.getFamily?.(key);
   if(prevFam && nextFam){
-    const prevLabel=prevFam.title||prevFam.familyName||prevFam.fullRootPersonName||currentKey;
-    const nextLabel=nextFam.title||nextFam.familyName||nextFam.fullRootPersonName||key;
+    const prevLabel = prevFam.title || prevFam.familyName || prevFam.fullRootPersonName || currentKey;
+    const nextLabel = nextFam.title || nextFam.familyName || nextFam.fullRootPersonName || key;
     showSuccess(`تم تبديل العائلة من ${highlight(String(prevLabel))} إلى ${highlight(String(nextLabel))}.`);
   }
 }
@@ -729,105 +711,149 @@ function onEditFamily(key) {
   ModalManager.open(modal);
 }
 
-/* حذف العائلة مع إعادة اختيار مناسبة */
+// ===== اختيار "التالي" بعد الحذف حسب نفس ترتيب أزرار tree.familyButtons.js =====
+function pickNextFamilyKeyByButtonsOrder(families = {}, deletedKey = null) {
+  const coll = new Intl.Collator('ar', { sensitivity: 'base', numeric: true });
+
+  // 1) ابنِ نفس قائمة الأزرار المرئية (غير مخفية) وبنفس مفاتيح الفرز
+  const entries = Object.entries(families || {})
+    .filter(([k, f]) => {
+      if (!f || f.hidden) return false;     // نفس شرط renderFamilyButtons
+      return true;
+    })
+    .map(([k, f]) => {
+      const rawName = (f.familyName || f.title || f.rootPerson?.name || k || '').trim();
+      const nameKey = rawName || String(k);
+      const isCore = !!f.__core;
+      const isCustom = !!(f.__custom && !f.__core);
+      return { k, nameKey, isCore, isCustom };
+    })
+    .sort((a, b) => {
+      // ملاحظة: نحذف منطق "المختارة أولاً" لأننا نريد ترتيب ثابت للاختيار بعد الحذف
+
+      // 1) custom قبل core
+      if (a.isCustom && !b.isCustom) return -1;
+      if (!a.isCustom && b.isCustom) return 1;
+
+      if (a.isCore && !b.isCore) return 1;
+      if (!a.isCore && b.isCore) return -1;
+
+      // 2) ترتيب أبجدي عربي (مع أرقام)
+      const c = coll.compare(a.nameKey, b.nameKey);
+      if (c !== 0) return c;
+
+      // 3) كسر تعادل أخير بالمفتاح
+      return coll.compare(String(a.k), String(b.k));
+    });
+
+  const keys = entries.map(e => e.k);
+
+  // 2) إن لم يوجد شيء
+  if (!keys.length) return null;
+
+  // 3) إن لم نجد المحذوف في القائمة (احتياط)
+  const idx = deletedKey != null ? keys.indexOf(deletedKey) : -1;
+  if (idx < 0) return keys[0] || null;
+
+  // 4) التالي: إن كان موجودًا، وإلا السابقة، وإلا null
+  return keys[idx + 1] || keys[idx - 1] || null;
+}
+
 /* حذف العائلة مع إعادة اختيار مناسبة + رسالة توضيحية */
 async function onDeleteFamily(key) {
-  // 1) حفظ بيانات العائلة قبل الحذف لاستخدامها في الرسالة
   const famBefore = Model.getFamily?.(key) || (Model.getFamilies()[key] || null);
   const familyLabel =
-    (famBefore?.title ||
-     famBefore?.familyName ||
-     famBefore?.fullRootPersonName ||
-     key);
+    (famBefore?.title || famBefore?.familyName || famBefore?.fullRootPersonName || key);
 
-  // 2) تنفيذ الحذف الفعلي
   const wasSelected = (Model.getSelectedKey() === key);
+
   await Model.deleteFamily(key);
   await Model.savePersistedFamilies?.();
-  bus.emit('families:coreFlag:refresh');
 
-  // 3) اختيار عائلة أخرى إن كانت المحذوفة هي المختارة
+  clearValidation(`family:${key}`);
+
   const remaining = Model.getFamilies();
-  let next = Model.getSelectedKey() || null;
 
-  if (wasSelected) {
-    // حاول اختيار أول عائلة مرئية غير مخفية
-    next =
-      Object.keys(remaining).find(k => remaining[k] && remaining[k].hidden !== true) ||
-      Object.keys(remaining)[0] ||
-      null;
+  // اجمع تغييرات الحالة في إشعار واحد لتقليل redraw
+  batch(() => {
+    if (wasSelected) {
+      const next = pickNextFamilyKeyByButtonsOrder(remaining, key);
 
-    if (next) {
-      Model.setSelectedKey(next);
-      setState({ selectedFamily: next });
+      if (next) {
+        Model.setSelectedKey(next);
+        setState({ selectedFamily: next, uiTick: Date.now() });
+      } else {
+        setState({ selectedFamily: null, uiTick: Date.now() });
+      }
     } else {
-      setState({ selectedFamily: null });
+      setState({ uiTick: Date.now() });
     }
-  }
+  });
 
-  // 4) تحديث الواجهة والقائمة الجانبية
-  redrawUI(next);
-  syncActiveFamilyUI();
+  // بعد تثبيت الحالة (أفضل)
+  bus.emit('families:coreFlag:refresh');
   bus.emit('side:requestClose');
 
-  // 5) رسالة مناسبة باسم العائلة المحذوفة
-  if (familyLabel) {
-    showSuccess(`تم حذف العائلة ${highlight(familyLabel)} بنجاح.`);
-  } else {
-    showSuccess('تم حذف العائلة بنجاح.');
-  }
+  if (familyLabel) showSuccess(`تم حذف العائلة ${highlight(familyLabel)} بنجاح.`);
+  else showSuccess('تم حذف العائلة بنجاح.');
 }
 
 /* حفظ من المودال */
 function onModalSave(key, familyObj) {
+  const prevSelected = Model.getSelectedKey();
+  const existedBefore = !!Model.getFamily(key); // تعديل أم إنشاء؟
+
+  let vcToastAfterSave = null;
+
   // الحفاظ على أعلام core/custom كما هي
   const wasCore = !!Model.getFamily(key)?.__core;
   familyObj.__custom = true;
   if (wasCore) familyObj.__core = true;
-  
-// =========================
-// VALIDATION قبل الحفظ (مركز تنبيهات)
-// =========================
-{
-  const { errors, warnings } = validateFamily(familyObj);
 
-  // احفظ النتائج في المركز (scopeKey = family:${key})
-  setValidationResults(`family:${key}`, {
-    title: `تنبيهات التحقق — ${familyObj.title || familyObj.familyName || key}`,
-    errors,
-    warnings,
-    meta: { familyKey: key, ts: Date.now() }
-  });
+  // =========================
+  // VALIDATION قبل الحفظ (مركز تنبيهات)
+  // =========================
+  {
+    const { errors, warnings } = validateFamily(familyObj);
 
-  const sum = getValidationSummary(`family:${key}`);
+    setValidationResults(`family:${key}`, {
+      title: `تنبيهات التحقق — ${familyObj.title || familyObj.familyName || key}`,
+      errors,
+      warnings,
+      meta: { familyKey: key, ts: Date.now() }
+    });
 
-  // لا نمنع الحفظ ولا نفتح المودال — فقط نبلغ المستخدم
-if (sum.counts.total > 0){
-  const msg = vcToastSummaryText(sum);
-  if (sum.hasBlockers) showError(`تم الحفظ، لكن ${msg} راجع أيقونة التنبيهات.`);
-  else showWarning(`تم الحفظ، لكن ${msg} راجع أيقونة التنبيهات.`);
-}
+    const sum = getValidationSummary(`family:${key}`);
+    const shouldToast = (!existedBefore) || (prevSelected === key);
 
-}
+    // جهّز التوست فقط ولا تعرضه الآن
+    if (shouldToast && sum.counts.total > 0) {
+      const msg = vcToastSummaryText(sum);
+      vcToastAfterSave = sum.hasBlockers ? () => showError(`تم الحفظ، لكن ${msg} راجع أيقونة التنبيهات.`)
+        : () => showWarning(`تم الحفظ، لكن ${msg} راجع أيقونة التنبيهات.`);
+    }
+  }
 
-// قبل الحفظ: DEV guard ضد تكرار _id
-devAssertNoDuplicateIdsInFamily(familyObj, key);
+  devAssertNoDuplicateIdsInFamily(familyObj, key);
 
-  // نفّذ الحفظ فقط إذا نجح التحقق
   Model.getFamilies()[key] = familyObj;
   Model.commitFamily(key);
 
-  const prevSelected = Model.getSelectedKey();
+if (!existedBefore) {
   Model.setSelectedKey(key);
-  if (prevSelected !== key) {
-    setState({ selectedFamily: key });
-  } else {
-    redrawUI();
-  }
+  setState({ selectedFamily: key });
+} else {
+  // لا redrawUI هنا نهائيًا — خلّ التحديث يمر عبر subscribeTo
+  setState({ uiTick: Date.now() });
+}
 
+  // أولاً: رسالة الحفظ
   showSuccess(`تمت إضافة/تحديث العائلة ${highlight(familyObj.title || familyObj.familyName || key)}.`);
+
+  // ثانيًا: رسالة التنبيهات (إن وجدت)
+  if (typeof vcToastAfterSave === 'function') vcToastAfterSave();
+
   FeatureDuplicates.warnDuplicatesIfAny(key);
-  syncActiveFamilyUI();
 }
 
 /* حفظ القصص والمذكّرات لشخص معيّن */
@@ -908,7 +934,6 @@ function onUpdateSources(personId, sources) {
   // التزام العائلة وحفظها في IndexedDB
   Model.commitFamily(famKey);
 }
-
 
 /* حفظ الخط الزمني للأحداث لشخص معيّن */
 function onUpdateEvents(personWithEvents) {
@@ -1002,7 +1027,6 @@ showSuccess('تم تحديث الاسم بنجاح.');
   FeatureDuplicates.warnDuplicatesIfAny(famKey);
 }
 
-
 /* عرض السيرة وتهيئة أدوات الصورة */
 async function onShowDetails(person, opts = {}) {
   if (!dom.bioModal || !dom.modalContent) {
@@ -1074,7 +1098,6 @@ async function onShowDetails(person, opts = {}) {
     }
   }
 
-
   if (modeSelect) {
     modeSelect.innerHTML = '';
     modes.forEach(m => {
@@ -1122,8 +1145,6 @@ async function onShowDetails(person, opts = {}) {
     sources:  'sources'
   };
 
-
-  // دالة تساعد على تمرير modal-content إلى بداية القسم المطلوب
   // دالة تساعد على تمرير المودال إلى بداية القسم المطلوب
   const scrollToCurrentSection = () => {
     const sectionId = MODE_MAIN_SECTION[mode] || null;
@@ -1208,7 +1229,6 @@ async function onShowDetails(person, opts = {}) {
       }
     });
 
-
     // نؤجل التمرير لآخر فريم بعد اكتمال الرسم
     if (!skipScroll) {
       requestAnimationFrame(scrollToCurrentSection);
@@ -1237,7 +1257,6 @@ async function onShowDetails(person, opts = {}) {
     showSuccess(`تم عرض تفاصيل ${highlight(personObj.name || 'هذا الشخص')}`);
   }
 }
-
 
 /* تمرير الأحداث كواجهات للميزات */
 handlers.onHideFamily   = (key) => FeatureVisibility.onHideFamily(key, {
@@ -1331,7 +1350,6 @@ async function progressLoadFamiliesBySize(fams){
   setSplashProgress(60,'اكتمل تجهيز بيانات العائلات.');
 }
 
-
 /* =========================
    Bootstrap
    ========================= */
@@ -1423,18 +1441,22 @@ if (!IS_PROD) {
     initScrollButtons();
 
     // مزامنة العائلات + الفلاتر
-    const refreshFamiliesAndFilters=()=>{
-      syncActiveFamilyUI();
-      if(typeof FeatureSearch.refreshFilterOptionsForCurrentFamily==='function'){
-        FeatureSearch.refreshFilterOptionsForCurrentFamily();
-      }
-    };
+const refreshFamiliesAndFilters=()=>{
+  // منطق غير UI
+  if(typeof FeatureSearch.refreshFilterOptionsForCurrentFamily==='function'){
+    FeatureSearch.refreshFilterOptionsForCurrentFamily();
+  }
+  // UI عبر subscribeTo فقط
+  setState({ uiTick: Date.now() });
+};
 
     bus.on('io:import:done',refreshFamiliesAndFilters);
     bus.on('families:coreFlag:refresh',refreshFamiliesAndFilters);
     bus.on('families:visibility:changed',refreshFamiliesAndFilters);
 
-    window.addEventListener('FT_VISIBILITY_REFRESH',()=>{ redrawUI(); syncActiveFamilyUI(); });
+window.addEventListener('FT_VISIBILITY_REFRESH', () => {
+  setState({ uiTick: Date.now() });
+});
 
     /* ===== مبدّل العائلة (القائمة المنسدلة أعلى الشجرة) ===== */
     dom.activeFamily?.addEventListener('click',e=>{
@@ -1623,7 +1645,7 @@ if (!IS_PROD) {
       setTimeout(()=>modal.querySelector('#newFamilyTitle')?.focus(),50);
     });
 
-    bus.on('io:import:done',()=>{ syncActiveFamilyUI(); closePanel(); });
+bus.on('io:import:done',()=>{ setState({ uiTick: Date.now() }); closePanel(); });
 
     /* ===== إغلاق المودال ===== */
     const revokeModalBlob=()=>{
@@ -1672,13 +1694,14 @@ if (!IS_PROD) {
     // فتح تفاصيل الشخص من البحث
     bus.on('ui:openPersonById',({id})=>onShowDetails(id,{silent:true}));
 
-    // ثيم + شعار + رسم أولي
-    applySavedTheme(bootTheme);
-    setState({theme:bootTheme});
-    syncThemeColor();
-    updateSplashLogo(bootTheme);
-    redrawUI();
-    syncActiveFamilyUI();
+// ثيم + شعار + (بدون رسم يدوي)
+applySavedTheme(bootTheme);
+setState({ theme: bootTheme });
+syncThemeColor();
+updateSplashLogo(bootTheme);
+
+// إشعال الرسم عبر subscribeTo (مصدر واحد)
+setState({ uiTick: Date.now() });
 
     // أزل placeholder
     if(dom.familyTree&&dom.familyTree.dataset.placeholder==='1'){

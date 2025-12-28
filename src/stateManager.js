@@ -6,6 +6,7 @@ const DEFAULTS = {
   theme: 'default',
   fontSize: 16,
   search: '',
+  uiTick: 0,
   filters: {
     role:      localStorage.getItem('flt_role') || '',
     clan:      localStorage.getItem('flt_clan') || '',
@@ -155,6 +156,7 @@ export function setState(patch){
     prev.theme === next.theme &&
     prev.fontSize === next.fontSize &&
     prev.search === next.search &&
+        prev.uiTick === next.uiTick && 
     shallowEqual(prev.filters, next.filters);
 
   if (equal) return;

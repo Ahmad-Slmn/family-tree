@@ -212,7 +212,7 @@ export function collectPersonsForSearch(fam) {
     const looseKey = makeLooseKey(p);
     const strictKey = id ? `id:${id}` : looseKey;
 
-    // مهم: منع التكرار حتى لا يتضخم العدّ/النتائج
+    // منع التكرار حتى لا يتضخم العدّ/النتائج
     if (seenStrict.has(strictKey) || seenLoose.has(looseKey)) return;
 
     seenStrict.add(strictKey);
@@ -298,7 +298,7 @@ export function buildByIdMap(fam) {
   return byId;
 }
 
-// مهم: adjacency للأبناء عبر fatherId (مع دعم childrenIds كتعزيز)
+// adjacency للأبناء عبر fatherId (مع دعم childrenIds كتعزيز)
 function buildChildrenAdjacency(byIdMap) {
   const childByFather = new Map(); // fatherId -> Set(childIds)
 
@@ -365,7 +365,7 @@ export function buildGenerationMap(fam) {
 
   let startId = '';
 
-  // مهم: تحديد "أعلى جد" كنقطة بداية
+  // تحديد "أعلى جد" كنقطة بداية
   if (hasAnc) {
     const ancRefs = fam.ancestors
       .filter(Boolean)
@@ -388,7 +388,7 @@ export function buildGenerationMap(fam) {
   }
 
   if (!startId && fam.father && getPid(fam.father)) {
-    // مهم: اصعد من الأب للأعلى عبر fatherId
+    // اصعد من الأب للأعلى عبر fatherId
     let cur = resolveRef(fam.father);
     const seenUp = new Set();
 
@@ -413,7 +413,7 @@ export function buildGenerationMap(fam) {
 
   if (!startId) return { genMap, byIdMap, maxGen: 0 };
 
-  // مهم: BFS نزولًا من أعلى جد عبر adjacency
+  // BFS نزولًا من أعلى جد عبر adjacency
   const q = [startId];
   genMap.set(startId, 0);
 
@@ -431,7 +431,7 @@ export function buildGenerationMap(fam) {
     }
   }
 
-  // مهم عمليًا: الزوجات نفس جيل الزوج
+  // الزوجات نفس جيل الزوج
   for (const p of byIdMap.values()) {
     const pid = getPid(p);
     if (!pid) continue;
@@ -484,10 +484,10 @@ export function buildDescendantsSet(startId, byIdMap) {
 export function makePassFilters(flt, fam, lineageCtx) {
   const filters = flt || {};
 
-  // مهم: تجهيز خرائط الجيل مرة واحدة
+  // تجهيز خرائط الجيل مرة واحدة
   const { genMap, byIdMap } = buildGenerationMap(fam);
 
-  // مهم: تفعيل فلتر الجيل (انتبه: "0" صحيح)
+  // تفعيل فلتر الجيل (انتبه: "0" صحيح)
   const hasGen = (filters.gen != null && String(filters.gen).trim() !== '');
   const wantGen = hasGen ? Number(String(filters.gen).trim()) : null;
 

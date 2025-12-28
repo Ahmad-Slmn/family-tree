@@ -710,7 +710,7 @@ export function refreshValidationBadge(){
     const activeKey = getActiveFamilyKey();
     const scopeKey  = activeKey ? `family:${activeKey}` : null;
 
-    if (activeKey && scopeKey && !store.has(scopeKey)) {
+    if (activeKey && scopeKey) {
       const fam =
         _ui.ctx?.Model?.getFamily?.(activeKey) ||
         _ui.ctx?.Model?.getFamilies?.()?.[activeKey];
@@ -721,7 +721,7 @@ export function refreshValidationBadge(){
           title: `تنبيهات التحقق — ${fam.title || fam.familyName || activeKey}`,
           errors,
           warnings,
-          meta: { familyKey: activeKey, ts: Date.now(), origin: 'switch' }
+          meta: { familyKey: activeKey, ts: Date.now(), origin: 'refresh' }
         });
       }
     }
@@ -729,6 +729,7 @@ export function refreshValidationBadge(){
 
   updateIconBadge();
 }
+
 
 export function setValidationResults(scopeKey, payload){
   const key = String(scopeKey || '').trim();
