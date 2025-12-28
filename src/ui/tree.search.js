@@ -115,7 +115,7 @@ export function isDeceasedPerson(p) {
     return s;
   };
 
-  // مهم: تحقق "بسيط" للمدى (شهر 1-12 + يوم 1-31)
+  // تحقق "بسيط" للمدى (شهر 1-12 + يوم 1-31)
   const isValidYMD = (s) => {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || '').trim());
     if (!m) return false;
