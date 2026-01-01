@@ -28,6 +28,46 @@ body {
   overflow-x: hidden;
 }
 
+:root{
+  /* ===== z-index scale (من الأقل للأعلى) ===== */
+  --z-base: 1;
+
+  /* عناصر فوق المحتوى */
+  --z-content: 10;
+
+  /* قوائم/اقتراحات */
+  --z-dropdown: 30;
+
+  /* أزرار عائمة */
+  --z-fab: 200;
+
+  /* Scroll buttons */
+  --z-scroll: 300;
+
+  /* Overlay للشريط الجانبي */
+  --z-side-overlay: 1098;
+  --z-side-panel: 1099;
+  --z-side-toggle: 1100;
+
+  /* مودالات عامة/نماذج */
+  --z-modal: 1100;
+  --z-modal-inner: 1120;
+
+  /* Splash loading */
+  --z-splash: 1300;
+
+  /* Toast أعلى شيء (بدون 99999) */
+  --z-toast: 1400;
+
+  /* Confirm modal لازم يكون فوق المودالات */
+  --z-confirm: 2000;
+
+  /* PIN lock أعلى شيء */
+  --z-pin-lock: 3000;
+  --z-pin-manage: 2990;
+}
+
+
 .container {
   max-width: 87.5rem;
   margin: 0 auto;
@@ -40,7 +80,7 @@ body {
 #app-splash{
   position:fixed;
   inset:0;
-  z-index:1300;
+ z-index:var(--z-splash);
   display:flex;
   align-items:center;
   justify-content:center;
@@ -279,7 +319,7 @@ body {
 /* الأساس */
 #toastContainer{
   position:fixed;top:.75rem;left:50%;transform:translateX(-50%);
-  z-index:99999;display:flex;flex-direction:column;gap:.625rem;
+  z-index:var(--z-toast);display:flex;flex-direction:column;gap:.625rem;
   pointer-events:none;
 }
 .toast{

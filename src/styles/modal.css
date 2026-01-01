@@ -42,7 +42,7 @@
   opacity:.45;
   background:color-mix(in oklab,var(--modal-primary) 12%,transparent);
   border-color:color-mix(in oklab,var(--modal-primary) 40%,transparent);
-  z-index:9999
+  z-index:var(--z-toast);
 }
 .dnd-chosen{
   box-shadow:0 0 0 .125rem color-mix(in oklab,var(--modal-primary) 20%,transparent);
@@ -79,7 +79,7 @@
 ========================================================= */
 .form-modal{
   position:fixed;inset:0;background:var(--modal-overlay);
-  display:flex;justify-content:center;align-items:center;z-index:1100;
+  display:flex;justify-content:center;align-items:center;z-index:var(--z-modal);
   opacity:0;visibility:hidden;transition:all .35s;overflow:hidden
 }
 .form-modal.active{opacity:1;visibility:visible}
@@ -93,7 +93,7 @@
   contain:content
 }
 .form-modal.active .modal-inner{transform:translateY(0) scale(1);opacity:1}
-.modal-inner .close-btn{position:absolute;inset-block-start:.6rem;inset-inline-end:.6rem; z-index: 20}
+.modal-inner .close-btn{position:absolute;inset-block-start:.6rem;inset-inline-end:.6rem; z-index: var(--z-modal-inner);}
 .form-modal-header{
   grid-column:1/-1;display:flex;justify-content:center;align-items:center;
   position:relative;padding-block-end:.75rem;border-block-end:.0625rem solid color-mix(in oklab,var(--modal-fg) 10%,transparent)
@@ -456,7 +456,7 @@ display:inline-block;min-inline-size:2ch;padding:.15rem .55rem;border-radius:999
   display:flex;
   flex-direction:column;
   gap:.15rem;
-  z-index:1300;
+ z-index:var(--z-dropdown);
 }
 .photo-menu[hidden]{display:none;}
 
@@ -481,7 +481,7 @@ display:inline-block;min-inline-size:2ch;padding:.15rem .55rem;border-radius:999
 /* =========================================================
    8) نافذة التأكيد
 ========================================================= */
-.confirm-modal{display:none;position:fixed;inset:0;background:var(--modal-overlay);align-items:center;justify-content:center;z-index:2000}
+.confirm-modal{display:none;position:fixed;inset:0;background:var(--modal-overlay);align-items:center;justify-content:center;z-index:var(--z-confirm);}
 .confirm-modal.show{display:flex}
 .confirm-modal[aria-hidden="true"]{display:none}
 .modal-box{
@@ -526,7 +526,7 @@ display:inline-block;min-inline-size:2ch;padding:.15rem .55rem;border-radius:999
    9) نافذة الإحصاءات + الأدوات
 ========================================================= */
 
-.statsModal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:var(--modal-overlay);z-index:1000;padding:1.25rem;overflow:hidden}
+.statsModal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:var(--modal-overlay);z-index:var(--z-modal);padding:1.25rem;overflow:hidden}
 .statsModal.show{display:flex}
 
 .statsModal .modal-content{
@@ -688,7 +688,7 @@ display:inline-block;min-inline-size:2ch;padding:.15rem .55rem;border-radius:999
 
 /* dup-panel داخل modal-content */
 .statsModal .modal-content{position:relative}
-.dup-panel{position:absolute;inset:5%;inline-size:90%;block-size:90%;max-inline-size:100%;background:var(--card-bg,#fff);border:1px solid color-mix(in oklab,var(--surface-border,#d1d5db)75%,transparent);border-radius:.9rem;box-shadow:0 .8rem 2.4rem rgba(0,0,0,.16);display:flex;flex-direction:column;z-index:40;overflow:hidden}
+.dup-panel{position:absolute;inset:5%;inline-size:90%;block-size:90%;max-inline-size:100%;background:var(--card-bg,#fff);border:1px solid color-mix(in oklab,var(--surface-border,#d1d5db)75%,transparent);border-radius:.9rem;box-shadow:0 .8rem 2.4rem rgba(0,0,0,.16);display:flex;flex-direction:column;z-index:var(--z-modal-inner);overflow:hidden}
 .dup-panel-header{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.7rem 1rem;background:color-mix(in oklab,var(--panel-bg,#f3f4f6)92%,#fff);border-bottom:1px solid color-mix(in oklab,var(--surface-border,#d1d5db)80%,transparent)}
 .dup-panel-header h3{margin:0;font-size:.98rem;font-weight:600;color:var(--title-color)}
 .dup-panel-body{padding:.75rem 1rem 1rem;overflow-y:auto;overflow-x:hidden}

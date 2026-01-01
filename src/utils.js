@@ -145,7 +145,7 @@ export function showConfirmModal({
   confirmText = 'تأكيد',
   cancelText = 'إلغاء',
   variant = 'default',
-  closeOnBackdrop = true,
+  closeOnBackdrop = false,
   defaultFocus = 'confirm',
   closeOnEsc = true
 } = {}) {
@@ -704,6 +704,40 @@ export function attachHorizontalSortable({
       }
     }
   });
+}
+
+/* =======================
+   🔐 PIN Hashing (SHA-256 + Salt)
+   - بدون تشفير بيانات IndexedDB
+======================= */
+
+export function genSalt(bytesLen = 16){
+  const a = new Uint8Array(bytesLen);
+  crypto.getRandomValues(a);
+  // base64
+  let s = '';
+  for (let i = 0; i < a.length; i++) s += String.fromCharCode(a[i]);
+  return btoa(s);
+}
+
+function _toBase64FromBytes(bytes){
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s);
+}
+
+export async function sha256Base64(text){
+  const enc = new TextEncoder();
+  const data = enc.encode(String(text || ''));
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return _toBase64FromBytes(new Uint8Array(hash));
+}
+
+export async function hashPin(pin, saltBase64){
+  const salt = String(saltBase64 || '');
+  const normalized = String(pin || '').trim();
+  // صيغة ثابتة وواضحة
+  return sha256Base64(`pin:${salt}:${normalized}`);
 }
 
 // عارض صور منبثق يدعم التنقّل والحركات والسحب باللمس

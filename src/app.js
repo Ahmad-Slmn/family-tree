@@ -10,6 +10,7 @@ import { walkPersons, walkPersonsWithPath } from './model/families.core.js';
 import {initValidationUI, setValidationResults, getValidationSummary, refreshValidationBadge, vcToastSummaryText, clearValidation} from './ui/validationCenter.js';
 import {byId, showSuccess, showInfo, showError, showWarning, highlight, applySavedTheme, currentTheme, getToastNodes} from './utils.js';
 import { getState, setState, subscribeTo, subscribe, batch } from './stateManager.js';
+import { PinStore } from './storage/pinStore.js';
 
 // الميزات
 import * as FeatureIDs from './features/ids.js';
@@ -21,6 +22,7 @@ import * as FeatureStats from './features/stats.js';
 import * as FeatureIO from './features/io.js';
 import * as FeaturePrint from './features/print.js';
 import * as FeatureEngage from './features/engage.js';
+import * as FeatureSecurity from './features/security.js';
 
 const IS_PROD =
   (typeof process !== 'undefined' && process?.env?.NODE_ENV === 'production') ||
@@ -217,6 +219,11 @@ function smartSplashMsg(raw){
 
 /* عرض الغطاء في وضع الخطأ مع آخر نسبة معروفة */
 function showSplashError(message){
+  if (document.documentElement.classList.contains('is-locked')) {
+    // اختياري: اعرض الرسالة داخل pinLock بدل splash
+    return;
+  }
+
   const s = document.getElementById('app-splash');
   if (!s) return;
 
@@ -361,11 +368,37 @@ window.addEventListener('load', () => {
    ========================= */
 const bus = (() => {
   const m = new Map();
-  return {
-    on: (t, f) => { m.set(t, (m.get(t) || []).concat(f)); },
-    emit: (t, p) => { (m.get(t) || []).forEach(f => f(p)); }
+
+  const on = (t, f) => {
+    const arr = m.get(t) || [];
+    arr.push(f);
+    m.set(t, arr);
+    return () => off(t, f); // مفيد كـ unsubscribe
   };
+
+  const off = (t, f) => {
+    const arr = m.get(t);
+    if (!arr || !arr.length) return;
+    const next = arr.filter(fn => fn !== f);
+    if (next.length) m.set(t, next);
+    else m.delete(t);
+  };
+
+  const once = (t, f) => {
+    const w = (p) => { off(t, w); f(p); };
+    on(t, w);
+    return () => off(t, w);
+  };
+
+  const emit = (t, p) => {
+    const arr = m.get(t) || [];
+    // نسخة snapshot عشان لو listener شال نفسه ما يخرب اللوب
+    arr.slice().forEach(fn => fn(p));
+  };
+
+  return { on, off, once, emit };
 })();
+
 
 /* =========================
    DOM مشترك
@@ -378,6 +411,758 @@ const dom = {
    bioModeSelect: null,
   bioSectionsContainer: null
 };
+
+/*
+نموذج ذهني لقفل واجهة الـ PIN (بالأولوية):
+
+1) القفل اليدوي دائمًا له الأولوية.
+2) الجلسة المفتوحة تعطل قفل الخمول وقفل ترك التبويب.
+3) القفل بسبب ترك التبويب لا يُفتح تلقائيًا أبدًا.
+4) فتح القفل يتطلب إدخال كلمة المرور دائمًا (باستثناء "الجلسة المفتوحة").
+5) قد تصل أحداث التخزين بين التبويبات بترتيب غير مضمون → لذلك نؤجل بعض القرارات Tick صغير.
+*/
+
+/* =========================
+   🔒 PIN Lock (UI-only)
+   ========================= */
+
+const PIN_KEYS = {
+  enabled: 'pin_enabled',              // "1"|"0"
+  salt: 'pin_salt',
+  hash: 'pin_hash',
+  hint: 'pin_hint',
+  idleMin: 'pin_idle_minutes',         // default 3
+  tries: 'pin_tries',
+  lockUntil: 'pin_lock_until',
+  lastActivity: 'pin_last_activity',
+  sessionUntil: 'pin_session_until',
+  lockOnVis: 'pin_lock_on_visibility',  // default "0"
+  lastTryAt: 'pin_last_try_at'
+};
+
+
+// ✅ Session-only lock state (يبقى بعد refresh، يختفي عند إغلاق التبويب)
+const PIN_SESSION_KEYS = {
+  locked: 'pin_ui_locked'
+};
+
+function _ssGet(k, def=null){
+  try{ const v = sessionStorage.getItem(k); return v == null ? def : v; }catch{ return def; }
+}
+function _ssSet(k, v){
+  try{ sessionStorage.setItem(k, String(v)); }catch{}
+}
+
+
+let _pin = {
+  el: null,
+  input: null,
+  unlockBtn: null,
+  msg: null,
+  hint: null,
+
+  eyeBtn: null,
+
+  locked: false,
+  intervalId: null,
+  trapHandler: null,
+
+  // للعد التنازلي
+  cooldownTimer: null,
+
+  // لإرجاع التركيز بعد الفتح
+  prevFocus: null
+};
+
+
+function _lsGet(k, def = null){
+  // مفاتيح PIN الأساسية من IDB (sync من cache)
+  if (PinStore.PERSISTED_KEYS?.has?.(k)) {
+    return PinStore.getSync(k, def);
+  }
+  try{
+    const v = localStorage.getItem(k);
+    return (v == null) ? def : v;
+  }catch{ return def; }
+}
+
+function _lsSet(k, v){
+  if (PinStore.PERSISTED_KEYS?.has?.(k)) {
+    PinStore.set(k, v);
+    return;
+  }
+  try{ localStorage.setItem(k, String(v)); }catch{}
+}
+
+function _now(){ return Date.now(); }
+
+function _hasPinConfigured(){
+  const salt = _lsGet(PIN_KEYS.salt, '');
+  const hash = _lsGet(PIN_KEYS.hash, '');
+  return !!(salt && hash);
+}
+function _isPinEnabled(){
+  return _lsGet(PIN_KEYS.enabled, '0') === '1' && _hasPinConfigured();
+}
+
+function _idleMinutes(){
+  const v = parseInt(_lsGet(PIN_KEYS.idleMin, '3'), 10);
+  if (isNaN(v) || v <= 0) return 3;
+  return v;
+}
+function _lockOnVisibility(){
+  // افتراضيًا غير مفعّل
+return _lsGet(PIN_KEYS.lockOnVis, '0') === '1'; // ✅ default OFF
+}
+
+function hardHideSplashForLock(){
+  const s = document.getElementById('app-splash');
+  if (!s) return;
+
+  // تذكّر أنه كان ظاهرًا (اختياري)
+  s.dataset.hiddenByPin = '1';
+
+  s.classList.remove('is-hiding');
+  s.setAttribute('hidden', '');
+  s.style.display = 'none';
+  s.setAttribute('aria-busy','false');
+}
+
+function hardShowSplashAfterUnlock(){
+  const s = document.getElementById('app-splash');
+  if (!s) return;
+
+  // لا نعيده إذا التطبيق خلص إقلاعه أساسًا
+  if (window.__bootDone) return;
+
+  // نعيده فقط لو كان تم إخفاؤه بسبب القفل
+  if (s.dataset.hiddenByPin !== '1') return;
+  s.dataset.hiddenByPin = '0';
+
+  s.removeAttribute('hidden');
+  s.style.display = 'flex';
+  s.setAttribute('aria-busy','true');
+  s.dataset.splashHidden = '0';
+}
+
+
+function initPinLockUI(){
+  _pin.el = document.getElementById('pinLock');
+  _pin.input = document.getElementById('pinInput');
+  _pin.unlockBtn = document.getElementById('pinUnlockBtn');
+  _pin.msg = document.getElementById('pinLockMsg');
+  _pin.hint = document.getElementById('pinLockHint');
+_pin.eyeBtn = document.getElementById('pinToggleVisBtn');
+
+  if (!_pin.el || !_pin.input || !_pin.unlockBtn || !_pin.msg) return;
+function _syncEyeIcon(btn, input){
+  if (!btn || !input) return;
+  const icon = btn.querySelector('i');
+  const isShown = (input.type === 'text');
+  btn.setAttribute('aria-pressed', isShown ? 'true' : 'false');
+  btn.setAttribute('aria-label', isShown ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور');
+  if (icon){
+    icon.classList.toggle('fa-eye', !isShown);
+    icon.classList.toggle('fa-eye-slash', isShown);
+  }
+}
+
+_pin.eyeBtn?.addEventListener('click', () => {
+  const isHidden = (_pin.input.type === 'password');
+  _pin.input.type = isHidden ? 'text' : 'password';
+  _syncEyeIcon(_pin.eyeBtn, _pin.input);
+  _pin.input.focus();
+});
+
+// تهيئة أولية للأيقونة
+_syncEyeIcon(_pin.eyeBtn, _pin.input);
+
+
+  _pin.unlockBtn.addEventListener('click', () => {
+    verifyAndUnlockFromUI();
+  });
+
+  _pin.input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      verifyAndUnlockFromUI();
+    }
+  });
+
+// سياسة موحّدة: حروف/أرقام فقط (Alnum) + طول أقصى 12
+_pin.input?.addEventListener('input', () => {
+  const v = String(_pin.input.value || '');
+const cleaned = v.replace(/[^\p{L}\p{N}]+/gu, '').slice(0, 12);
+  if (cleaned !== v) _pin.input.value = cleaned;
+});
+
+// منع لصق افتراضيًا (يمكنك تغييره)
+_pin.input?.addEventListener('paste', (e) => {
+  // ✅ السماح باللصق (مع فلترة digits الموجودة أصلًا في input listener)
+  const ALLOW_PASTE = true;
+  if (!ALLOW_PASTE) { e.preventDefault(); return; }
+});
+
+  // تلميح PIN (اختياري)
+  const hint = _lsGet(PIN_KEYS.hint, '');
+  if (_pin.hint){
+    if (hint) {
+      _pin.hint.hidden = false;
+      _pin.hint.textContent = `تلميح: ${hint}`;
+    } else {
+      _pin.hint.hidden = true;
+      _pin.hint.textContent = '';
+    }
+  }
+
+}
+
+function _setMsg(text, type){
+  if (!_pin.msg) return;
+  _pin.msg.textContent = String(text || '');
+  _pin.msg.dataset.type = type || 'info';
+}
+
+function _secondsLeft(ms){
+  const s = Math.ceil(ms / 1000);
+  return s < 0 ? 0 : s;
+}
+
+// 🔒 Visibility-lock flags (module scope)
+let __pinEverVisible = (document.visibilityState === 'visible');
+let __pinLockedByVisibility = false;
+
+function lockUI(reason = '', opts = {}){
+    console.log('[PIN LOCK]', { reason, opts, t: Date.now(), vis: document.visibilityState });
+
+  const { persist = true } = (opts || {});
+
+  if (!_pin.el) initPinLockUI();
+  if (!_pin.el) return;
+_pin.prevFocus = document.activeElement;
+  _pin.locked = true;
+  // احفظ حالة القفل للجلسة الحالية
+if (persist) _ssSet(PIN_SESSION_KEYS.locked, '1');
+
+  document.documentElement.classList.add('is-locked');
+  document.body.classList.add('is-locked');
+
+  // تعطيل الخلفية
+  const main = document.querySelector('.container');
+  if (main) main.inert = true;
+  if (main){
+    main.setAttribute('aria-hidden', 'true');
+    main.style.visibility = 'hidden';   // ✅ يمنع رؤية الشجرة خلف القفل
+  }
+
+  _pin.el.hidden = false;
+hardHideSplashForLock();
+disarmSplashTimeout();
+
+  // reset input
+  if (_pin.input){
+    _pin.input.value = '';
+    setTimeout(() => _pin.input.focus(), 0);
+  }
+
+  // رسالة
+  if (reason) _setMsg(reason, 'info');
+else _setMsg('أدخل كلمة المرور لفتح الواجهة.', 'info');
+
+  // فخ تركيز بسيط داخل overlay
+  if (!_pin.trapHandler){
+    _pin.trapHandler = (e) => {
+      if (!_pin.locked) return;
+      if (e.key !== 'Tab') return;
+
+      const focusables = Array.from(_pin.el.querySelectorAll('button,input,[tabindex]:not([tabindex="-1"])'))
+        .filter(el => !el.disabled && el.offsetParent !== null);
+
+      if (!focusables.length) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', _pin.trapHandler, true);
+  }
+}
+
+function unlockUI(){
+  if (!_pin.el) return;
+
+  _pin.locked = false;
+  __pinLockedByVisibility = false;
+
+  // الغِ حالة القفل للجلسة الحالية
+  _ssSet(PIN_SESSION_KEYS.locked, '0');
+  
+  _pin.el.hidden = true;
+hardShowSplashAfterUnlock();
+if (!window.__bootDone && !splashHasError) armSplashTimeout();
+
+  document.documentElement.classList.remove('is-locked');
+  document.body.classList.remove('is-locked');
+
+  const main = document.querySelector('.container');
+  if (main) main.inert = false;
+if (main){
+  main.removeAttribute('aria-hidden');
+  main.style.visibility = '';
+}
+
+try{ _pin.prevFocus?.focus?.(); }catch{}
+_pin.prevFocus = null;
+
+
+  _setMsg('', 'info');
+  
+  // إزالة focus trap الخاص بالقفل لأنه مربوط بـ document
+if (_pin.trapHandler) {
+  document.removeEventListener('keydown', _pin.trapHandler, true);
+  _pin.trapHandler = null;
+}
+
+  // حدث: تم فتح القفل
+  bus.emit('pin:unlocked');
+   //  بعد فك القفل: أعد الرسم
+  setState({ uiTick: Date.now() });
+}
+
+async function verifyAndUnlockFromUI(){
+  if (!_isPinEnabled()){
+    // لو غير مفعّل، لا تقفل أصلاً
+    unlockUI();
+    return;
+  }
+
+  const until = parseInt(_lsGet(PIN_KEYS.lockUntil, '0'), 10) || 0;
+  const now = _now();
+if (until > now){
+  // ✅ عدّاد تنازلي يتحدث كل ثانية
+  if (_pin.cooldownTimer) clearInterval(_pin.cooldownTimer);
+
+  const tick = () => {
+    const left = Math.max(0, until - _now());
+    _setMsg(`⏳ انتظر ${_secondsLeft(left)} ثانية ثم حاول مرة أخرى.`, 'warning');
+    if (left <= 0){
+      clearInterval(_pin.cooldownTimer);
+      _pin.cooldownTimer = null;
+      _setMsg('يمكنك المحاولة الآن.', 'info');
+    }
+  };
+
+  tick();
+  _pin.cooldownTimer = setInterval(tick, 1000);
+  return;
+}
+
+  const salt = _lsGet(PIN_KEYS.salt, '');
+  const storedHash = _lsGet(PIN_KEYS.hash, '');
+
+  if (!salt || !storedHash){
+    _setMsg('⚠️ لا يوجد كلمة مرور مضبوط. فعّل القفل واضبط كلمة المرور من الإعدادات.', 'error');
+    return;
+  }
+
+  const pin = (_pin.input?.value || '').trim();
+  if (!pin){
+_setMsg('أدخل كلمة المرور أولاً.', 'warning');
+    _pin.input?.focus?.();
+    return;
+  }
+
+    // (ز) UX helper: النقطة القادمة للتجميد حسب tries
+  const nextFreezePoint = (t) => {
+    if (t < 3) return 3;
+    if (t < 6) return 6;
+    if (t < 10) return 10;
+    if (t < 15) return 15;
+    return 15;
+  };
+
+  try{
+    const { hashPin } = await import('./utils.js');
+    const h = await hashPin(pin, salt);
+
+    if (h === storedHash){
+      // success: reset tries/lock
+      _lsSet(PIN_KEYS.tries, '0');
+      _lsSet(PIN_KEYS.lockUntil, '0');
+      _lsSet(PIN_KEYS.lastTryAt, '0');
+      _lsSet(PIN_KEYS.lastActivity, String(_now()));
+      if (_pin.cooldownTimer) { clearInterval(_pin.cooldownTimer); _pin.cooldownTimer = null; }
+      unlockUI();
+      return;
+    }
+
+    // reset tries لو مر وقت طويل (مثلاً 30 دقيقة) حتى ما يتراكم للأبد
+const lastTryAt = parseInt(_lsGet(PIN_KEYS.lastTryAt, '0'), 10) || 0;
+if (lastTryAt && (_now() - lastTryAt) > (30 * 60 * 1000)) {
+  _lsSet(PIN_KEYS.tries, '0');
+  _lsSet(PIN_KEYS.lockUntil, '0');
+}
+
+    // fail
+    let tries = parseInt(_lsGet(PIN_KEYS.tries, '0'), 10) || 0;
+    tries += 1;
+    _lsSet(PIN_KEYS.tries, String(tries));
+_lsSet(PIN_KEYS.lastTryAt, String(_now()));
+
+// ✅ cooldown progressive (أقوى)
+let cooldownMs = 0;
+if (tries >= 15) cooldownMs = 5 * 60 * 1000;      // 5 دقائق
+else if (tries >= 10) cooldownMs = 2 * 60 * 1000; // دقيقتان
+else if (tries >= 6) cooldownMs = 30 * 1000;      // 30 ثانية
+else if (tries >= 3) cooldownMs = 10 * 1000;      // 10 ثواني
+
+const freezeAt = nextFreezePoint(tries);
+const remaining = Math.max(0, freezeAt - tries);
+
+if (cooldownMs > 0){
+  const lockUntil = _now() + cooldownMs;
+  _lsSet(PIN_KEYS.lockUntil, String(lockUntil));
+
+  const secs = _secondsLeft(cooldownMs);
+  _setMsg(`❌ محاولة خاطئة (${tries}/${freezeAt}). انتظر ${secs} ثانية ثم حاول مرة أخرى.`, 'error');
+
+  // (ح) مسح الحقل عند التجميد
+  if (_pin.input) _pin.input.value = '';
+} else {
+  _setMsg(`❌ محاولة خاطئة (${tries}/${freezeAt}) قبل الانتظار.`, 'error');
+
+  _pin.input?.focus?.();
+  _pin.input?.select?.();
+}
+
+  }catch{
+    _setMsg('⚠️ تعذر التحقق من كلمة المرور (WebCrypto).', 'error');
+  }
+}
+
+function _isSessionOpen(){
+  const until = parseInt(_lsGet(PIN_KEYS.sessionUntil, '0'), 10) || 0;
+  return until > _now();
+}
+
+let __pinSessionCountdownTimer = null;
+
+function _fmtMMSS(ms){
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2,'0')}`;
+}
+
+function _syncTopBarSessionCountdown(){
+  var el = document.getElementById('pinSessionCountdown');
+  if (!el) return;
+
+  var until = parseInt(_lsGet(PIN_KEYS.sessionUntil, '0'), 10) || 0;
+  var left = until - _now();
+
+  if (left > 0){
+    el.hidden = false;
+
+    // ✅ أقل من دقيقة = تأثير تحذيري
+    el.classList.toggle('is-urgent', left <= 60000);
+
+    el.textContent = 'جلسة مفتوحة — متبقّي ' + _fmtMMSS(left);
+  } else {
+    el.hidden = true;
+    el.classList.remove('is-urgent');
+    el.textContent = '';
+  }
+
+  // ✅ مزامنة زر القفل في الشريط العلوي
+  _syncTopBarLockNowBtn();
+}
+
+function _syncTopBarLockNowBtn(){
+  var btn = document.getElementById('pinTopLockNowBtn');
+  if (!btn) return;
+
+  // يظهر فقط إذا PIN جاهز والواجهة ليست مقفولة
+  var show = _isPinEnabled() && !_pin.locked;
+
+  btn.hidden = !show;
+  btn.disabled = !show;
+}
+
+
+function _syncPinSessionLabelCountdown(){
+  var live = document.querySelector('.pin-session-label .pin-session-live');
+  var time = document.querySelector('.pin-session-label .pin-session-time');
+  var title = document.querySelector('.pin-session-label .pin-session-title');
+  if (!live || !time) return;
+
+  var until = parseInt(_lsGet(PIN_KEYS.sessionUntil, '0'), 10) || 0;
+  var left = until - _now();
+
+  var open = left > 0;
+
+  // النص عندما تكون الجلسة مفعّلة
+  if (title){
+    title.textContent = open ? 'الجلسة المفتوحة مفعّلة' : 'مدة الجلسة المفتوحة';
+  }
+
+  if (open){
+    live.hidden = false;
+    time.textContent = _fmtMMSS(left);
+
+    // أقل من دقيقة
+    live.classList.toggle('is-urgent', left <= 60000);
+  } else {
+    live.hidden = true;
+    live.classList.remove('is-urgent');
+    time.textContent = '0:00';
+  }
+}
+
+function _endOpenSessionAndLock(reason){
+  // 1) امسح الجلسة فورًا
+  try{ _lsDel(PIN_KEYS.sessionUntil); }catch{}
+
+  // 2) حدّث واجهة العدادات فورًا
+  _syncTopBarSessionCountdown();
+  _syncPinSessionLabelCountdown();
+
+  // 3) اقفل فورًا في نفس التبويب إن كان PIN مفعّل
+  if (_isPinEnabled() && !_pin.locked) {
+    lockUI(reason || '🔒 انتهت الجلسة المفتوحة. أدخل كلمة المرور لفتح الواجهة.');
+  }
+}
+
+
+function _startTopBarSessionCountdown(){
+  if (__pinSessionCountdownTimer) clearInterval(__pinSessionCountdownTimer);
+  __pinSessionCountdownTimer = null;
+
+  _syncTopBarSessionCountdown();
+  _syncPinSessionLabelCountdown();
+
+  // ✅ إذا لا توجد جلسة فعلًا، لا تشغّل مؤقت ولا تعتبرها "انتهت"
+  var until = parseInt(_lsGet(PIN_KEYS.sessionUntil, '0'), 10) || 0;
+  if (!until || until <= _now()) {
+    return;
+  }
+
+  __pinSessionCountdownTimer = setInterval(() => {
+    _syncTopBarSessionCountdown();
+    _syncPinSessionLabelCountdown();
+
+    var until = parseInt(_lsGet(PIN_KEYS.sessionUntil, '0'), 10) || 0;
+
+    // ✅ فقط إذا كانت الجلسة كانت موجودة ثم انتهت
+    if (until && until <= _now()){
+      clearInterval(__pinSessionCountdownTimer);
+      __pinSessionCountdownTimer = null;
+      _endOpenSessionAndLock('🔒 انتهت الجلسة المفتوحة. أدخل كلمة المرور لفتح الواجهة.');
+    }
+  }, 1000);
+}
+
+
+function _shouldAutoLockByIdle(){
+  if (!_isPinEnabled()) return false;
+  if (_isSessionOpen()) return false;
+
+  const last = parseInt(_lsGet(PIN_KEYS.lastActivity, '0'), 10) || 0;
+  const idleMs = _idleMinutes() * 60 * 1000;
+  return (_now() - last) >= idleMs;
+}
+
+function _markActivity(){
+  if (!_isPinEnabled()) return;
+  if (_pin.locked) return;
+  _lsSet(PIN_KEYS.lastActivity, String(_now()));
+}
+
+function startPinAutoLockMonitors(){
+  // نشاط المستخدم
+  const events = ['click','keydown','mousemove','touchstart','scroll'];
+  events.forEach(ev => document.addEventListener(ev, _markActivity, { passive: true }));
+
+  // فحص دوري ذكي
+  if (_pin.intervalId) clearInterval(_pin.intervalId);
+  _pin.intervalId = setInterval(() => {
+    if (_pin.locked) return;
+    if (_shouldAutoLockByIdle()){
+lockUI('🔒 تم قفل الواجهة بسبب الخمول.', { persist: false });
+    }
+  }, 15000);
+__pinEverVisible = (document.visibilityState === 'visible');
+__pinLockedByVisibility = false;
+
+document.addEventListener('visibilitychange', () => {
+  if (!_isPinEnabled()) return;
+
+  // ✅ عند الرجوع للتبويب
+if (document.visibilityState === 'visible') {
+  __pinEverVisible = true;
+
+  if (!_lockOnVisibility() && _shouldAutoLockByIdle()) {
+    lockUI('🔒 تم قفل الواجهة بسبب الخمول أثناء غياب التبويب.');
+    return;
+  }
+
+  if (_lockOnVisibility() && __pinLockedByVisibility) {
+    if (_pin.locked) _setMsg('أدخل كلمة المرور لفتح الواجهة.', 'info');
+    return;
+  }
+
+  return;
+}
+
+  // ✅ hidden
+  if (!__pinEverVisible) {
+    // تجاهل hidden الذي يحدث أثناء بدء التحميل/الريلود
+    return;
+  }
+
+  if (_lockOnVisibility() && !_isSessionOpen()) {
+    __pinLockedByVisibility = true; // ✅ سجّل السبب
+    lockUI('🔒 تم قفل الواجهة عند ترك التبويب.', { persist: false });
+  }
+});
+
+
+if ('BroadcastChannel' in window) {
+  const bc = new BroadcastChannel('pin_channel');
+  bc.addEventListener('message', (e) => {
+    const msg = e?.data || null;
+    const key = msg?.key;
+    if (!key) return;
+
+    // 1) enabled
+if (key === PIN_KEYS.enabled) {
+  const v = _lsGet(PIN_KEYS.enabled, '0');
+
+  if (v === '0') {
+    // تعطيل الحماية: افتح فورًا
+    unlockUI();
+    _syncTopBarLockNowBtn();
+    return;
+  }
+
+  if (v === '1') {
+    // ✅ تفعيل/إرجاع التفعيل: لا تقفل تلقائيًا
+    // فقط حدّث زر القفل والعدادات
+    _syncTopBarLockNowBtn();
+    _startTopBarSessionCountdown();
+
+    // لو في جلسة مفتوحة وكان مقفول افتحه
+    if (_isSessionOpen() && _pin.locked) unlockUI();
+    return;
+  }
+}
+
+
+    // 2) hash/salt
+    if (key === PIN_KEYS.hash || key === PIN_KEYS.salt) {
+      if (_isPinEnabled()) {
+        lockUI('🔒 تغيّر كلمة المرور في تبويب آخر. أدخل كلمة المرور الجديدة لفتح الواجهة.');
+      } else {
+        unlockUI();
+      }
+      return;
+    }
+
+// 3) sessionUntil
+if (key === PIN_KEYS.sessionUntil) {
+  // حدّث العدادات فقط
+  _startTopBarSessionCountdown();
+
+  // لو PIN غير مفعّل، افتح احتياط
+  if (!_isPinEnabled()) { unlockUI(); return; }
+
+  // ✅ لا تقفل هنا إطلاقًا (إلغاء الجلسة اليدوي لا يقفل)
+  // القفل عند انتهاء الجلسة يتم حصريًا عبر المؤقت: _endOpenSessionAndLock()
+  if (_isSessionOpen()) {
+    if (_pin.locked) unlockUI();
+  }
+
+  return;
+}
+
+  });
+}
+
+}
+
+async function ensureUnlockedBeforeRender(){
+  initPinLockUI();
+  startPinAutoLockMonitors();
+
+  // helper: انتظر حدث الفتح
+const waitUnlocked = () => new Promise((resolve) => {
+  bus.once('pin:unlocked', () => resolve());
+});
+
+  // لو كان مقفول قبل refresh، لازم يبقى مقفول
+  if (_ssGet(PIN_SESSION_KEYS.locked, '0') === '1'){
+    lockUI('أدخل كلمة المرور لفتح الواجهة.');
+    await waitUnlocked();
+    return;
+  }
+
+  if (!_isPinEnabled()){
+    unlockUI();
+    return;
+  }
+
+  // لو جلسة مفتوحة: افتح حتى بعد refresh
+  if (_isSessionOpen()){
+    unlockUI();
+    return;
+  }
+
+  // لو آخر نشاط حديث (ضمن idleMinutes) افتح بعد refresh
+  const last = parseInt(_lsGet(PIN_KEYS.lastActivity, '0'), 10) || 0;
+  const idleMs = _idleMinutes() * 60 * 1000;
+
+  if (last && (_now() - last) < idleMs){
+    unlockUI();
+    return;
+  }
+
+  // غير ذلك: اقفل وانتظر فعليًا
+  lockUI('أدخل كلمة المرور لفتح الواجهة.');
+  await waitUnlocked();
+}
+
+
+bus.on('pin:lockNow', () => {
+  // ✅ B) الأكثر أمانًا: أنهِ أي جلسة مفتوحة ثم اقفل فورًا
+  if (_isPinEnabled()) _endOpenSessionAndLock('🔒 تم قفل الواجهة الآن.');
+});
+
+
+
+bus.on('pin:disabled', () => {
+  // لو PIN انطفأ من الإعدادات، افتح فورًا حتى لا تعلق شاشة القفل
+  unlockUI();
+});
+
+bus.on('pin:openSession', ({ minutes }) => {
+  const min = parseInt(minutes, 10);
+  const safe = [5, 15, 30, 60].includes(min) ? min : 15;
+
+  const until = _now() + (safe * 60 * 1000);
+  _lsSet(PIN_KEYS.sessionUntil, String(until));
+  _lsSet(PIN_KEYS.lastActivity, String(_now()));
+
+  showSuccess(`تم تفعيل جلسة مفتوحة لمدة ${safe} دقيقة.`);
+  _startTopBarSessionCountdown();
+
+});
+
+bus.on('pin:settingsChanged', () => {
+  _syncTopBarLockNowBtn();
+  _startTopBarSessionCountdown();
+});
+
 
 /* =========================
    تبديل شعار الغطاء حسب الثيم
@@ -485,6 +1270,7 @@ const handlers = {
    رسم الواجهة
    ========================= */
 function redrawUI(selectedKey = Model.getSelectedKey()) {
+    if (_pin?.locked) return; // لا ترسم الشجرة طالما مقفول
   const fams = Model.getFamilies();
   let key = selectedKey;
 
@@ -1384,6 +2170,12 @@ async function bootstrap(){
     dom.suggestBox           = byId('searchSuggestions');
     dom.activeFamily         = byId('activeFamily');
 
+    // 🔒 زر قفل الآن في الشريط العلوي
+const topLockBtn = byId('pinTopLockNowBtn');
+topLockBtn?.addEventListener('click', () => {
+  bus.emit('pin:lockNow');
+});
+
     // ثيم + شعار بسرعة
     const bootTheme=
       window.__bootTheme||
@@ -1406,34 +2198,6 @@ async function bootstrap(){
     try{ await ensurePersistentStorage(); setSplashProgress(20,'التحقق من حفظ البيانات…'); }
     catch{ setSplashProgress(18,'متابعة التهيئة بدون تخزين دائم…'); }
     perf.end('bootstrap:storage');
-
-    // ===== 3) تحميل البيانات (IndexedDB) =====
-    perf.start('bootstrap:loadFamilies');
-    setSplashProgress(25,'تحميل بيانات العائلات…');
-    await Model.loadPersistedFamilies();
-    // DEV: افحص تكرار _id بعد التحميل مباشرة
-if (!IS_PROD) {
-  const fams = Model.getFamilies?.() || {};
-  Object.keys(fams).forEach(k => devAssertNoDuplicateIdsInFamily(fams[k], k));
-}
-
-    perf.end('bootstrap:loadFamilies');
-
-    // ===== 4) تقدم أقرب للحقيقة حسب حجم البيانات (30..60) =====
-    perf.start('bootstrap:progressBySize');
-    await progressLoadFamiliesBySize(Model.getFamilies());
-    perf.end('bootstrap:progressBySize');
-
-    // ضمان وجود عائلة مرئية مختارة
-    {
-      const fams=Model.getFamilies();
-      const cur=Model.getSelectedKey();
-      const ok=cur&&fams[cur]&&fams[cur].hidden!==true;
-      if(!ok){
-        const firstVisible=Object.keys(fams).find(k=>fams[k]&&fams[k].hidden!==true)||null;
-        if(firstVisible){ Model.setSelectedKey(firstVisible); setState({selectedFamily:firstVisible}); }
-      }
-    }
 
     setSplashProgress(55,'تحضير الواجهة…');
 
@@ -1664,16 +2428,6 @@ bus.on('io:import:done',()=>{ setState({ uiTick: Date.now() }); closePanel(); })
       }
     });
 
-    dom.bioModal?.addEventListener('click',e=>{
-      if(e.target===dom.bioModal){
-        revokeModalBlob();
-        ModalManager.close(dom.bioModal);
-        if(location.hash.startsWith('#person=')){
-          history.replaceState(null,'',location.pathname+location.search);
-        }
-      }
-    });
-
     setSplashProgress(70,'ربط المزايا ومكوّنات الواجهة…');
 
     /* ===== تمرير سياق موحّد للميزات ===== */
@@ -1688,6 +2442,7 @@ bus.on('io:import:done',()=>{ setState({ uiTick: Date.now() }); closePanel(); })
     FeatureIO.init(ctx);
     FeaturePrint.init(ctx);
     FeatureEngage.init(ctx);
+FeatureSecurity.init(ctx);
 
     setSplashProgress(85,'تهيئة البحث والإحصاءات والطباعة…');
 
@@ -1699,6 +2454,45 @@ applySavedTheme(bootTheme);
 setState({ theme: bootTheme });
 syncThemeColor();
 updateSplashLogo(bootTheme);
+// 🔒 تحميل إعدادات PIN من IndexedDB (لازم قبل أي _isPinEnabled/_idleMinutes)
+try { await PinStore.init(); } catch {}
+   
+// 🔒 تأكد من فتح القفل قبل تحميل البيانات (قفل حقيقي)
+await ensureUnlockedBeforeRender();
+_startTopBarSessionCountdown();
+_syncTopBarLockNowBtn();
+
+// ===== 3) تحميل البيانات (IndexedDB) AFTER UNLOCK =====
+perf.start('bootstrap:loadFamilies');
+setSplashProgress(25,'تحميل بيانات العائلات…');
+await Model.loadPersistedFamilies();
+
+// DEV: افحص تكرار _id بعد التحميل مباشرة
+if (!IS_PROD) {
+  const fams = Model.getFamilies?.() || {};
+  Object.keys(fams).forEach(k => devAssertNoDuplicateIdsInFamily(fams[k], k));
+}
+perf.end('bootstrap:loadFamilies');
+
+// ===== 4) تقدم أقرب للحقيقة حسب حجم البيانات (30..60) =====
+perf.start('bootstrap:progressBySize');
+await progressLoadFamiliesBySize(Model.getFamilies());
+perf.end('bootstrap:progressBySize');
+
+// (مهم) ضمان وجود عائلة مرئية مختارة بعد التحميل
+{
+  const fams = Model.getFamilies();
+  const cur  = Model.getSelectedKey();
+  const ok   = cur && fams[cur] && fams[cur].hidden !== true;
+  if (!ok) {
+    const firstVisible =
+      Object.keys(fams).find(k => fams[k] && fams[k].hidden !== true) || null;
+    if (firstVisible) {
+      Model.setSelectedKey(firstVisible);
+      setState({ selectedFamily: firstVisible });
+    }
+  }
+}
 
 // إشعال الرسم عبر subscribeTo (مصدر واحد)
 setState({ uiTick: Date.now() });
@@ -1753,14 +2547,19 @@ setState({ uiTick: Date.now() });
       showSuccess(`تم تغيير النمط من ${highlight(prevLabel)} إلى ${highlight(newLabel)}.`);
     });
 
-    bus.emit('app:ready');
+bus.emit('app:ready');
 
-    // إنهاء الغطاء
-    setSplashProgress(95,'عرض مخطط شجرة العائلة…');
-    setSplashProgress(100,'اكتمل تحميل شجرة العائلة.');
-    window.__bootDone=true; disarmSplashTimeout(); hideSplash();
+// إنهاء الغطاء
+setSplashProgress(95,'عرض مخطط شجرة العائلة…');
+setSplashProgress(100,'اكتمل تحميل شجرة العائلة.');
 
-    perf.end('bootstrap:total');
+// أخفِ splash أولاً (القفل سيكون فوقه)
+window.__bootDone = true;
+disarmSplashTimeout();
+hideSplash(true);
+
+perf.end('bootstrap:total');
+
   }catch(err){
     console.error(err);
     window.__bootDone=false; disarmSplashTimeout();

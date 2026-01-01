@@ -55,20 +55,35 @@
         })();
     </script>
 
-    <!-- CSS الأساسي للتطبيق -->
+    <!-- 1) الثيم والمتغيّرات -->
     <link rel="stylesheet" href="src/styles/theme.css">
+
+    <!-- 2) الأساسيات العامة -->
     <link rel="stylesheet" href="src/styles/main.css">
+
+    <!-- 3) الهيكل (التوب بار + الشريط الجانبي) -->
     <link rel="stylesheet" href="src/styles/layout.shell.css">
+
+    <!-- 4) صفحات/مناطق كبيرة -->
     <link rel="stylesheet" href="src/styles/tree.css">
+
+    <!-- 5) أقسام السيرة -->
     <link rel="stylesheet" href="src/styles/bio.css">
     <link rel="stylesheet" href="src/styles/bio-events.css">
     <link rel="stylesheet" href="src/styles/bio-stories.css">
     <link rel="stylesheet" href="src/styles/bio-timeline.css">
     <link rel="stylesheet" href="src/styles/bio-sources.css">
+
+    <!-- 6) المكوّنات الخاصة (خليها بعد الهيكل) -->
     <link rel="stylesheet" href="src/styles/modal.css">
     <link rel="stylesheet" href="src/styles/photoGallery.css">
-    <link rel="stylesheet" href="src/styles/print.css" media="print">
+    <link rel="stylesheet" href="src/styles/security.css">
+
+    <!-- 7) أشياء مساعدة/تحقق -->
     <link rel="stylesheet" href="src/styles/validate.css">
+
+    <!-- 8) الطباعة -->
+    <link rel="stylesheet" href="src/styles/print.css" media="print">
 
     <!-- مكتبات CSS خارجية -->
     <link rel="stylesheet" href="./src/vendor/cropper/cropper.min.css">
@@ -77,33 +92,53 @@
 </head>
 
 <body>
-    <!-- 🌳 غطاء تحميل التطبيق (Splash) -->
+
+    <!-- 🔐 قفل الواجهة -->
+    <div id="pinLock" class="pin-lock" role="dialog" aria-modal="true" aria-labelledby="pinLockTitle" aria-describedby="pinLockDesc" hidden>
+        <div class="pin-lock-card" role="document">
+            <h2 id="pinLockTitle"> <i class="fa-solid fa-lock" aria-hidden="true"></i> الواجهة مقفلة</h2>
+
+            <p id="pinLockDesc" class="pin-lock-desc"> أدخل كلمة المرور لفتح شجرة العائلة.</p>
+
+            <div class="pin-lock-form">
+                <label class="pin-lock-label" for="pinInput">كلمة المرور</label>
+
+                <div class="pin-lock-input-wrap">
+                    <input id="pinInput" class="pin-lock-input" type="password" inputmode="text" autocomplete="current-password" maxlength="12" placeholder="••••" aria-label="إدخال كلمة المرور" aria-describedby="pinLockDesc">
+
+                    <button id="pinToggleVisBtn" type="button" class="pin-lock-eye" aria-label="إظهار/إخفاء كلمة المرور" aria-pressed="false">
+                        <i class="fa-solid fa-eye" aria-hidden="true"></i>
+                    </button>
+                </div>
+
+                <button id="pinUnlockBtn" type="button" class="btn primary pin-lock-btn"> فتح </button>
+            </div>
+
+            <div id="pinLockMsg" class="pin-lock-msg" aria-live="polite"></div>
+            <div id="pinLockHint" class="pin-lock-hint" hidden></div>
+        </div>
+    </div>
+
+    <!-- 🌳 غطاء تحميل التطبيق -->
     <div id="app-splash" role="status" aria-live="polite" aria-busy="true" hidden>
         <div class="app-splash-card">
 
-            <!-- Logo خاص بالعائلة بدلاً من أيقونة FontAwesome -->
             <div class="app-splash-logo" aria-hidden="true">
                 <img id="appSplashLogo" src="src/assets/images/default-logo-gold.png" alt="">
             </div>
 
             <div class="app-splash-title">جارٍ تحميل شجرة العائلة…</div>
-            <div class="app-splash-subtitle">
-                يتم تجهيز بيانات الأسرة وترتيب الأشخاص على المخطط.
-            </div>
+            <div class="app-splash-subtitle"> يتم تجهيز بيانات الأسرة وترتيب الأشخاص على المخطط. </div>
 
             <div class="app-splash-spinner" aria-hidden="true"></div>
 
-            <!-- شريط تقدّم + نسبة مئوية حقيقية -->
             <div class="app-splash-progress" id="app-splash-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
                 <span class="app-splash-progress-bar" id="app-splash-bar"></span>
                 <span class="app-splash-progress-text" id="app-splash-text">0%</span>
             </div>
-            <!-- زر إعادة المحاولة يظهر فقط في حالة الخطأ/المهلة -->
 
             <div class="app-splash-actions" hidden>
-                <button type="button" class="btn small primary" id="app-splash-retry">
-                    إعادة المحاولة
-                </button>
+                <button type="button" class="btn small primary" id="app-splash-retry">إعادة المحاولة</button>
             </div>
         </div>
     </div>
@@ -140,6 +175,13 @@
 
         <!-- 🔔 تنبيهات التحقق -->
         <div id="validationCenterSlot"></div>
+        <!-- ⏳ عداد الجلسة المفتوحة -->
+        <div id="pinSessionCountdown" class="pin-session-countdown" hidden title="الوقت المتبقي للجلسة المفتوحة" aria-live="polite"></div>
+
+        <!-- 🔐 قفل الآن -->
+        <button id="pinTopLockNowBtn" class="top-lock-btn" type="button" title="قفل الآن" aria-label="قفل الآن" hidden>
+            <i class="fa-solid fa-lock" aria-hidden="true"></i>
+        </button>
 
     </div>
 
@@ -232,6 +274,79 @@
             <button id="resetSettingsBtn" type="button" title="إعادة تفضيلات الواجهة">
                 <i class="fa-solid fa-rotate-left" aria-hidden="true"></i> إعادة تفضيلات الواجهة
             </button>
+        </section>
+
+        <!-- 🔐 الخصوصية (إعدادات قفل كلمة المرور) -->
+        <section id="privacySection" class="side-section">
+            <h4>الخصوصية</h4>
+
+            <div class="side-grid pin-privacy-grid">
+
+                <!-- أزرار القفل -->
+                <div class="pin-privacy-actions">
+                    <button id="pinLockNowBtn" class="family-button" type="button" title="قفل الواجهة الآن" hidden>
+                        <i class="fa-solid fa-lock" aria-hidden="true"></i> قفل الآن
+                    </button>
+
+                    <label class="family-button pin-toggle-row">
+                        <span id="pinEnabledLabel">
+                            <i class="fa-solid fa-key" aria-hidden="true"></i>
+                            حماية الخصوصية
+                        </span>
+                        <input id="pinEnabledToggle" type="checkbox" aria-label="تفعيل القفل">
+                    </label>
+
+                    <button id="pinChangeBtn" class="family-button" type="button" hidden>
+                        <i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>
+                        تغيير كلمة المرور
+                    </button>
+                </div>
+
+                <!-- الجلسة المفتوحة -->
+                <div class="pin-session-box">
+                    <label for="pinSessionSelect" class="pin-session-label">
+                        <i class="fa-solid fa-hourglass-half" aria-hidden="true"></i>
+                        <span class="pin-session-title">مدة الجلسة المفتوحة</span>
+
+                        <span class="pin-session-live" hidden aria-live="polite">
+                            <span class="pin-session-live-text">متبقّي</span>
+                            <span class="pin-session-time" dir="ltr">0:00</span>
+                        </span>
+                    </label>
+
+                    <select id="pinSessionSelect">
+                        <option value="5">5 دقائق</option>
+                        <option value="15">15 دقيقة</option>
+                        <option value="30">30 دقيقة</option>
+                        <option value="60">60 دقيقة</option>
+                    </select>
+
+                    <button id="pinOpenSessionBtn" class="family-button" type="button">تفعيل جلسة مفتوحة</button>
+                </div>
+
+            </div>
+
+            <!-- القفل بالخمول -->
+            <div class="pin-idle-box">
+                <label for="pinIdleSelect">مدة الخمول قبل القفل</label>
+                <select id="pinIdleSelect">
+                    <option value="2">2 دقائق</option>
+                    <option value="3">3 دقائق</option>
+                    <option value="5">5 دقائق</option>
+                    <option value="10">10 دقائق</option>
+                </select>
+            </div>
+
+            <!-- القفل عند ترك التبويب -->
+            <div class="pin-vis-box">
+                <label class="pin-toggle-row">
+                    <span>
+                        <i class="fa-solid fa-eye-slash" aria-hidden="true"></i>
+                        قفل عند ترك التبويب/الخروج من التطبيق
+                    </span>
+                    <input id="pinLockOnVisToggle" type="checkbox" aria-label="قفل عند ترك التبويب">
+                </label>
+            </div>
         </section>
 
         <!-- ⭐️ تفاعل ومساعدة -->

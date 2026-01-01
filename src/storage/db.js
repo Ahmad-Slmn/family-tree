@@ -9,6 +9,8 @@ const PHOTO_STORE = 'photos';
 const STORY_PHOTO_STORE = 'storyPhotos';
 const EVENT_PHOTO_STORE = 'eventPhotos';
 const SOURCE_PHOTO_STORE = 'sourcePhotos';
+const PIN_STORE = 'pin';
+
 if (!('indexedDB' in window)) {
   console.warn('IndexedDB not supported');
 }
@@ -45,69 +47,41 @@ function withTx(stores, mode, fn){
 ========================= */
 function open() {
   if (dbp) return dbp;
+
   dbp = new Promise((res, rej) => {
-        const req = indexedDB.open(DB_NAME, 5);
+    // رفع نسخة قاعدة البيانات إلى 7
+    const DB_VERSION = 7;
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
 
-
-    req.onupgradeneeded = (e) => {
+    // إنشاء/ترميم الـ stores دائمًا (تصحيحي) بدون الاعتماد على v < ...
+    req.onupgradeneeded = () => {
       const db = req.result;
-      const v  = e.oldVersion | 0;
 
-      // v=0 → إنشاء جديد
-      if (v < 1) {
-        if (!db.objectStoreNames.contains(STORE)) {
-          db.createObjectStore(STORE);
+      const ensure = (name) => {
+        if (!db.objectStoreNames.contains(name)) {
+          db.createObjectStore(name);
         }
-      }
+      };
 
-      // v=1 → إضافة مخزن صور الأشخاص
-      if (v < 2) {
-        if (!db.objectStoreNames.contains(PHOTO_STORE)) {
-          db.createObjectStore(PHOTO_STORE);
-        }
-      }
-
-      // v=2 → إضافة مخزن صور القصص
-      if (v < 3) {
-        if (!db.objectStoreNames.contains(STORY_PHOTO_STORE)) {
-          db.createObjectStore(STORY_PHOTO_STORE);
-        }
-      }
-
-      // v=3 → إضافة مخزن صور الأحداث
-      if (v < 4) {
-        if (!db.objectStoreNames.contains(EVENT_PHOTO_STORE)) {
-          db.createObjectStore(EVENT_PHOTO_STORE);
-        }
-      }
-      
-            // v=4 → إضافة مخزن مرفقات المصادر/الوثائق
-      if (v < 5) {
-        if (!db.objectStoreNames.contains(SOURCE_PHOTO_STORE)) {
-          db.createObjectStore(SOURCE_PHOTO_STORE);
-        }
-      }
-
+      ensure(STORE);
+      ensure(PHOTO_STORE);
+      ensure(STORY_PHOTO_STORE);
+      ensure(EVENT_PHOTO_STORE);
+      ensure(SOURCE_PHOTO_STORE);
+      ensure(PIN_STORE);
     };
 
     req.onsuccess = () => {
       const db = req.result;
-      // إغلاق آمن عند ترقية من تبويب آخر
       db.onversionchange = () => { try { db.close(); } catch {} };
-      try {
-        db.addEventListener('versionchange', () => {
-          try { db.close(); } catch {}
-        });
-      } catch {}
+      try { db.addEventListener('versionchange', () => { try { db.close(); } catch {} }); } catch {}
       res(db);
     };
 
     req.onerror = () => rej(req.error);
-    req.onblocked = () => {
-  console.warn('IndexedDB open blocked: close other tabs using the DB');
-};
-
+    req.onblocked = () => console.warn('IndexedDB open blocked: close other tabs using the DB');
   });
+
   return dbp;
 }
 
@@ -226,6 +200,7 @@ async function _clearStores() {
     tx.objectStore(PHOTO_STORE).clear();
     tx.objectStore(STORY_PHOTO_STORE).clear(); // مسح صور القصص
     tx.objectStore(EVENT_PHOTO_STORE).clear(); // مسح صور الأحداث
+    tx.objectStore(SOURCE_PHOTO_STORE).clear();
     tx.oncomplete = res;
     tx.onerror    = () => rej(tx.error);
     tx.onabort    = () => rej(tx.error);
@@ -554,6 +529,48 @@ async function has(key) {
   });
 }
 
+async function pinPut(key, val) {
+  return withTx(PIN_STORE, 'readwrite', (tx) => {
+    tx.objectStore(PIN_STORE).put(val, key);
+  });
+}
+
+async function pinGet(key) {
+  return withTx(PIN_STORE, 'readonly', (tx) => {
+    return new Promise((resolve, reject) => {
+      const r = tx.objectStore(PIN_STORE).get(key);
+      r.onsuccess = () => resolve(r.result);
+      r.onerror   = () => reject(r.error);
+    });
+  });
+}
+
+async function pinDel(key) {
+  return withTx(PIN_STORE, 'readwrite', (tx) => {
+    tx.objectStore(PIN_STORE).delete(key);
+  });
+}
+
+async function pinGetAll() {
+  const db = await open();
+  return new Promise((res, rej)=> {
+    const tx = db.transaction(PIN_STORE,'readonly');
+    const st = tx.objectStore(PIN_STORE);
+    const reqKeys = st.getAllKeys();
+    const reqVals = st.getAll();
+    let keys=null, vals=null;
+    reqKeys.onsuccess = () => { keys = reqKeys.result || []; if (vals) finish(); };
+    reqVals.onsuccess = () => { vals = reqVals.result || []; if (keys) finish(); };
+    function finish(){
+      const out = {};
+      for(let i=0;i<keys.length;i++) out[keys[i]] = vals[i];
+      res(out);
+    }
+    tx.onerror = () => rej(tx.error);
+    tx.onabort = () => rej(tx.error);
+  });
+}
+
 
 async function getAllFamilies(){
   const db = await open();
@@ -641,6 +658,9 @@ async function nuke() {
    تصدير الواجهة
 ========================= */
 export const DB = {
+    // PIN store
+  pinPut, pinGet, pinDel, pinGetAll,
+
   // KV
   put, get, del, has, getAllFamilies,
 

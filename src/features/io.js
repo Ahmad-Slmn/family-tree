@@ -693,20 +693,22 @@ function bindHardReset(ctx) {
       return;
     }
 
-    showConfirmModal({
-      title: 'تفريغ جميع البيانات',
-      message: `سيتم تنفيذ تفريغ كامل للبيانات:
+showConfirmModal({
+  title: 'تفريغ جميع البيانات',
+  message: `سيتم تنفيذ تفريغ كامل للبيانات:
 1) حذف الصور الشخصية المحمّلة
 2) حذف جميع العائلات المضافة
 3) إعادة تفضيلات الواجهة إلى الوضع الافتراضي
-4) إعادة تشغيل التطبيق`,
-      confirmText: 'تفريغ الآن',
-      cancelText: 'إلغاء',
-      variant: 'danger',
-      closeOnBackdrop: false,
-      closeOnEsc: false,
-      defaultFocus: 'cancel'
-    });
+4) حذف بيانات قفل الخصوصية (كلمة المرور) وإزالة واجهة القفل
+5) إعادة تشغيل التطبيق`,
+  confirmText: 'تفريغ الآن',
+  cancelText: 'إلغاء',
+  variant: 'danger',
+  closeOnBackdrop: false,
+  closeOnEsc: false,
+  defaultFocus: 'cancel'
+});
+
 
     const modal  = byId('confirmModal');
     const textEl = byId('confirmText');
@@ -714,13 +716,14 @@ function bindHardReset(ctx) {
     const noEl   = byId('confirmNo');
     if (!modal || !textEl || !yesEl || !noEl) return;
 
-    textEl.innerHTML = `
+textEl.innerHTML = `
   <div class="danger-box">
     <p>سيتم تنفيذ العمليات التالية:</p>
     <ol class="list-nums">
       <li>حذف الصور الشخصية المحمّلة</li>
       <li>حذف جميع العائلات المضافة</li>
       <li>إعادة تفضيلات الواجهة إلى الوضع الافتراضي</li>
+      <li>حذف بيانات قفل الخصوصية (كلمة المرور) وإزالة واجهة القفل</li>
       <li>إعادة تشغيل التطبيق</li>
     </ol>
 
@@ -735,6 +738,7 @@ function bindHardReset(ctx) {
     </div>
   </div>
 `;
+
 
     const replace = (btnNode) => {
       const c = btnNode.cloneNode(true);
