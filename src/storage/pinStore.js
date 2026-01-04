@@ -14,7 +14,11 @@ const PERSISTED_KEYS = new Set([
   'pin_hint',
 
   // also persisted
-  'pin_session_until'
+  'pin_session_until',
+  
+  // C) force lock (persisted)
+  'pin_force_locked',
+  'pin_lock_reason'
 ]);
 
 const bc = ('BroadcastChannel' in window) ? new BroadcastChannel('pin_channel') : null;

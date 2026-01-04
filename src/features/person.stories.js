@@ -2,33 +2,110 @@
 // إدارة "القصص والمذكّرات" لكل شخص (منطق + واجهة القسم داخل نافذة السيرة)
 
 import {
-    el,
-    textEl,
-    showConfirmModal,
-    showWarning,
-    showSuccess,
-    showInfo,
-    showError,
-    arraysShallowEqual,
-    formatShortDateBadge,
+  el,
+  textEl,
+  showConfirmModal,
+  showWarning,
+  showSuccess,
+  showInfo,
+  showError,
+  arraysShallowEqual,
+  formatShortDateBadge,
   formatFullDateTime,
   attachHorizontalSortable,
   createImageViewerOverlay
 } from '../utils.js';
 import { DB } from '../storage/db.js';
 
-// ====================== صور القصص عبر IndexedDB ======================
+// ============================================================================
+// 1) أدوات مساعدة عامة
+// ============================================================================
 
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function safeStr(v) {
+  return String(v || '').trim();
+}
+
+function shallowArr(v) {
+  return Array.isArray(v) ? v.slice() : [];
+}
+
+function splitCommaTags(s) {
+  return String(s || '')
+    .split(',')
+    .map(t => String(t).trim())
+    .filter(Boolean);
+}
+
+function isReadyUrl(ref) {
+  return /^(data:|blob:|https?:)/.test(String(ref || ''));
+}
+
+function isTmpRef(ref) {
+  return String(ref || '').startsWith('tmp:');
+}
+
+function isIdbRef(ref) {
+  return String(ref || '').startsWith('idb:');
+}
+
+// تنظيف صور tmp: من الكاش (يُستخدم فقط حيث كان موجودًا بالفعل)
+function cleanupTmpRefs(refs, revokeFn) {
+  (refs || []).forEach(r => {
+    if (isTmpRef(r)) revokeFn(String(r));
+  });
+}
+
+// ============================================================================
+// 2) كاش مؤقت لصور القصص قبل الحفظ (tmp:...)
+// لازم يكون على مستوى الملف لأن resolveStoryImageUrl خارج createStoriesSection
+// ============================================================================
+
+const tempStoryImagesCache = new Map(); // tmpRef -> { file, url }
+
+function genTmpRef() {
+  if (window.crypto?.randomUUID) return 'tmp:' + window.crypto.randomUUID();
+  return 'tmp:' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+function addTempStoryImage(file) {
+  const tmpRef = genTmpRef();
+  const url = URL.createObjectURL(file);
+  tempStoryImagesCache.set(tmpRef, { file, url });
+  return tmpRef;
+}
+
+function revokeTempStoryRef(tmpRef) {
+  const rec = tempStoryImagesCache.get(tmpRef);
+  if (rec?.url) {
+    try { URL.revokeObjectURL(rec.url); } catch {}
+  }
+  tempStoryImagesCache.delete(tmpRef);
+}
+
+// ============================================================================
+// 3) صور القصص عبر IndexedDB
 // ref هو ما سيُخزَّن داخل story.images (مثل: 'idb:story_123')
 // هذه الدالة تعطي URL صالح للعرض (blob: أو http أو data:)
+// ============================================================================
+
 async function resolveStoryImageUrl(ref) {
   if (!ref) return null;
   const s = String(ref);
 
-  // بيانات جاهزة أصلاً (قديمة أو مستوردة)
-  if (/^(data:|blob:|https?:)/.test(s)) return s;
+  // روابط جاهزة
+  if (isReadyUrl(s)) return s;
 
-  // صيغة idb:... نمررها لـ DB
+  // tmp:... (قبل الحفظ)
+  if (isTmpRef(s)) {
+    const rec = tempStoryImagesCache.get(s);
+    return rec?.url || null;
+  }
+
+  // idb:...
   if (typeof DB?.getStoryImageURL === 'function') {
     try {
       const url = await DB.getStoryImageURL(s);
@@ -39,53 +116,30 @@ async function resolveStoryImageUrl(ref) {
     }
   }
 
-  // في حال لم تُنفَّذ في DB بعد
   return s;
 }
 
-// تخزين ملف صورة في IndexedDB وإرجاع المرجع الذي سيُحفَظ في story.images
-async function storeStoryImageFile(file, personId, storyId) {
-  if (!file) return null;
+// ============================================================================
+// 4) منطق البيانات (Normalize + CRUD) — بدون تغيير سلوك
+// ============================================================================
 
-  // مطلوب منك في db.js: دالة DB.putStoryImage تتولى الضغط + الحفظ
-  if (typeof DB?.putStoryImage === 'function') {
-    try {
-      const ref = await DB.putStoryImage({ file, personId, storyId });
-      // يُفضَّل أن ترجع الدالة مرجعًا من نوع 'idb:story_...'
-      return ref || null;
-    } catch (e) {
-      console.error('storeStoryImageFile failed', e);
-      return null;
-    }
-  }
-
-  //Fallback اختياري (مؤقت): لو DB.putStoryImage غير جاهزة، نستعمل DataURL كما كان
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = err => reject(err);
-    reader.onload = ev => resolve(String(ev.target?.result || ''));
-    reader.readAsDataURL(file);
-  });
-}
-
-// ====================== منطق البيانات ======================
 function normalizeStory(raw) {
-  const now = new Date().toISOString();
+  const now = nowIso();
   if (!raw || typeof raw !== 'object') raw = {};
   return {
     id: String(raw.id || 's_' + Math.random().toString(36).slice(2)),
-    title: String(raw.title || '').trim(),
-    text: String(raw.text || '').trim(),
+    title: safeStr(raw.title),
+    text: safeStr(raw.text),
     images: Array.isArray(raw.images) ? raw.images.map(String) : [],
-    type: (raw.type || '').trim(),
+    type: safeStr(raw.type),
     eventDate: raw.eventDate || null,
-    place: (raw.place || '').trim(),
-    tags: Array.isArray(raw.tags) ? raw.tags.map(t => String(t).trim()).filter(Boolean)
+    place: safeStr(raw.place),
+    tags: Array.isArray(raw.tags)  ? raw.tags.map(t => String(t).trim()).filter(Boolean)
       : [],
     relatedPersonIds: Array.isArray(raw.relatedPersonIds) ? raw.relatedPersonIds.map(String)
       : [],
     pinned: !!raw.pinned,
-    note: (raw.note || '').trim(),
+    note: safeStr(raw.note),
     createdAt: raw.createdAt || now,
     updatedAt: raw.updatedAt || now
   };
@@ -100,7 +154,7 @@ export function ensureStories(person) {
 export function addStory(person, data = {}, { onChange } = {}) {
   ensureStories(person);
   const story = normalizeStory(data);
-  story.createdAt = new Date().toISOString();
+  story.createdAt = nowIso();
   story.updatedAt = story.createdAt;
   person.stories.unshift(story);
   if (typeof onChange === 'function') onChange(person.stories, story);
@@ -115,7 +169,7 @@ export function updateStory(person, storyId, data = {}, { onChange } = {}) {
   const old = person.stories[idx];
   const merged = normalizeStory({ ...old, ...data, id: old.id });
   merged.createdAt = old.createdAt || merged.createdAt;
-  merged.updatedAt = new Date().toISOString();
+  merged.updatedAt = nowIso();
 
   person.stories[idx] = merged;
   if (typeof onChange === 'function') onChange(person.stories, merged);
@@ -141,7 +195,9 @@ export function sortStories(person, mode = 'latest') {
   });
 }
 
-// ====================== واجهة القسم داخل نافذة السيرة ======================
+// ============================================================================
+// 5) ثوابت واجهة القصص + أدوات العرض
+// ============================================================================
 
 const STORY_TYPE_LABELS = {
   general: 'عام',
@@ -181,8 +237,11 @@ function formatStoryDate(iso, prefix = 'أضيفت') {
   if (!body) return '';
   return `${prefix} في ${body}`;
 }
- 
-// عارض الصور المشترك لكل القصص (باستخدام الدالة العامة من utils)
+
+// ============================================================================
+// 6) عارض الصور للقصص (Overlay مشترك)
+// ============================================================================
+
 const storyImageViewer = createImageViewerOverlay({
   overlayClass: 'story-image-viewer-overlay',
   backdropClass: 'story-image-viewer-backdrop',
@@ -206,7 +265,8 @@ async function openImageSlider(refs, startIndex = 0) {
   storyImageViewer.open(urls, startIndex);
 }
 
-function autoResizeStoryTextareas(root){
+// ضبط ارتفاع textarea تلقائيًا (نفس السلوك)
+function autoResizeStoryTextareas(root) {
   const areas = root.querySelectorAll('.story-textarea, .story-note-input');
   areas.forEach(ta => {
     const resize = () => {
@@ -214,49 +274,57 @@ function autoResizeStoryTextareas(root){
       ta.style.height = ta.scrollHeight + 'px';
     };
     resize();
-    ta.removeEventListener('input', ta._autoResizeHandler || (()=>{}));
+    ta.removeEventListener('input', ta._autoResizeHandler || (() => {}));
     ta._autoResizeHandler = resize;
     ta.addEventListener('input', resize);
   });
 }
 
-
-// ====================== بناء القسم ======================
+// ============================================================================
+// 7) createStoriesSection — بناء واجهة القصص بالكامل
+// ============================================================================
 
 export function createStoriesSection(person, handlers = {}) {
   ensureStories(person);
 
   const personId = person && person._id ? String(person._id) : null;
+
+  // حالة الفلاتر/البحث/المحرر
   let currentTypeFilter = 'all';
   let currentTagFilter = '';
   let lastEditedId = null;
-let currentSearchQuery = '';
+  let currentSearchQuery = '';
 
+  // إرسال القصص للـ Host (نفس البيانات السابقة)
   function emitStoriesToHost() {
     if (!personId || typeof handlers.onUpdateStories !== 'function') return;
+
     const stories = Array.isArray(person.stories) ? person.stories.map(s => ({
           id: s.id,
-          title: String(s.title || '').trim(),
-          text: String(s.text || '').trim(),
-          images: Array.isArray(s.images) ? s.images.slice() : [],
-          type: (s.type || '').trim(),
+          title: safeStr(s.title),
+          text: safeStr(s.text),
+          images: shallowArr(s.images),
+          type: safeStr(s.type),
           eventDate: s.eventDate || null,
-          place: (s.place || '').trim(),
-          tags: Array.isArray(s.tags) ? s.tags.slice() : [],
-          relatedPersonIds: Array.isArray(s.relatedPersonIds)  ? s.relatedPersonIds.slice()
-            : [],
+          place: safeStr(s.place),
+          tags: shallowArr(s.tags),
+          relatedPersonIds: Array.isArray(s.relatedPersonIds) ? s.relatedPersonIds.slice() : [],
           pinned: !!s.pinned,
-          note: (s.note || '').trim(),
+          note: safeStr(s.note),
           createdAt: s.createdAt,
           updatedAt: s.updatedAt
         }))
       : [];
+
     handlers.onUpdateStories(personId, stories);
   }
 
-  const sortMode =
-    (handlers.getSortMode && handlers.getSortMode()) || 'latest';
+  const sortMode = (handlers.getSortMode && handlers.getSortMode()) || 'latest';
   sortStories(person, sortMode);
+
+  // ----------------------------
+  // 7.1) الهيكل العام للقسم
+  // ----------------------------
 
   const root = el('section', 'bio-section bio-section-stories');
 
@@ -267,21 +335,22 @@ let currentSearchQuery = '';
 
   const titleText = textEl('span', 'القصص والمذكّرات');
   const countBadge = el('span', 'stories-count-badge');
-
   titleEl.append(iconEl, ' ', titleText, ' ', countBadge);
   root.appendChild(titleEl);
 
-  // الوصف مباشرة بعد العنوان
   const metaEl = el('div', 'stories-meta');
-metaEl.textContent =
-  'حوِّل الذكريات إلى قصص حيّة تحفظ أثره للأبناء والأحفاد؛ دوّن المواقف المؤثّرة والطرائف والنجاحات والتحوّلات المهمّة، ثم أرفق الصور المناسبة ليبقى تاريخاً واضحًا وملهمًا لكل من يطالع هذه السيرة.';
-
+  metaEl.textContent =
+    'حوِّل الذكريات إلى قصص حيّة تحفظ أثره للأبناء والأحفاد؛ دوّن المواقف المؤثّرة والطرائف والنجاحات والتحوّلات المهمّة، ثم أرفق الصور المناسبة ليبقى تاريخاً واضحًا وملهمًا لكل من يطالع هذه السيرة.';
   root.appendChild(metaEl);
 
   function updateStoriesCountBadge() {
     const n = (person.stories || []).length;
     countBadge.textContent = n ? `(${n})` : '(لا توجد قصص بعد)';
   }
+
+  // ----------------------------
+  // 7.2) أدوات القسم (فلتر/ترتيب/بحث/إضافة)
+  // ----------------------------
 
   const header = el('div', 'stories-header');
   const tools = el('div', 'stories-tools');
@@ -290,46 +359,49 @@ metaEl.textContent =
 
   const typeFilterSelect = el('select', 'stories-type-filter');
   typeFilterSelect.name = 'stories_type_filter';
-  STORY_TYPE_OPTIONS.forEach(([value, label]) => {
-    const opt = el('option');
-    opt.value = value;
-    opt.textContent = label;
-    typeFilterSelect.appendChild(opt);
-  });
+
+  function fillTypeFilterSelect(options) {
+    typeFilterSelect.innerHTML = '';
+    options.forEach(([value, label]) => {
+      const opt = el('option');
+      opt.value = value;
+      opt.textContent = label;
+      typeFilterSelect.appendChild(opt);
+    });
+  }
+  fillTypeFilterSelect(STORY_TYPE_OPTIONS);
   typeFilterSelect.value = 'all';
 
   const sortSelect = el('select', 'stories-sort');
   sortSelect.name = 'stories_sort';
-  const optLatest = el('option');
-  optLatest.value = 'latest';
-  optLatest.textContent = 'الأحدث أولاً';
-  const optOldest = el('option');
-  optOldest.value = 'oldest';
-  optOldest.textContent = 'الأقدم أولاً';
-  sortSelect.append(optLatest, optOldest);
+  {
+    const optLatest = el('option');
+    optLatest.value = 'latest';
+    optLatest.textContent = 'الأحدث أولاً';
+    const optOldest = el('option');
+    optOldest.value = 'oldest';
+    optOldest.textContent = 'الأقدم أولاً';
+    sortSelect.append(optLatest, optOldest);
+  }
   sortSelect.value = sortMode;
 
   const addBtn = el('button', 'stories-add-btn');
   addBtn.type = 'button';
 
-  toolsLeft.append(typeFilterSelect, sortSelect);
-  // ===== حقل البحث في العناوين =====
-const searchWrap = el('div', 'stories-search-wrap');
-
-const searchInput = el('input', 'stories-search-input');
-searchInput.type = 'search';
+  // بحث العناوين
+  const searchWrap = el('div', 'stories-search-wrap');
+  const searchInput = el('input', 'stories-search-input');
+  searchInput.type = 'search';
   searchInput.name = 'stories-search-input';
-searchInput.placeholder = 'ابحث في عناوين القصص…';
-searchInput.value = '';
+  searchInput.placeholder = 'ابحث في عناوين القصص…';
+  searchInput.value = '';
+  searchInput.addEventListener('input', () => {
+    currentSearchQuery = searchInput.value.trim().toLowerCase();
+    renderList();
+  });
+  searchWrap.append(searchInput);
 
-searchInput.addEventListener('input', () => {
-  currentSearchQuery = searchInput.value.trim().toLowerCase();
-  renderList();
-});
-
-searchWrap.append(searchInput);
-toolsLeft.appendChild(searchWrap);
-
+  toolsLeft.append(typeFilterSelect, sortSelect, searchWrap);
   toolsRight.append(addBtn);
   tools.append(toolsLeft, toolsRight);
   header.appendChild(tools);
@@ -360,30 +432,25 @@ toolsLeft.appendChild(searchWrap);
     }
   }
 
-  function rebuildStoryTypeFilterOptions(){
+  // إعادة بناء خيارات فلتر النوع بحسب الأنواع المستخدمة فعليًا
+  function rebuildStoryTypeFilterOptions() {
     ensureStories(person);
     const stories = person.stories || [];
 
-    // الأنواع المستخدمة فعليًا في القصص
     const usedTypesSet = new Set();
-    for (const s of stories){
-      const t = (s.type || '').trim();
+    for (const s of stories) {
+      const t = safeStr(s.type);
       if (t) usedTypesSet.add(t);
     }
 
-    // حفظ الاختيار السابق
     const prevValue = typeFilterSelect.value || currentTypeFilter || 'all';
 
-    // تنظيف القائمة
     typeFilterSelect.innerHTML = '';
-
-    // خيار "كل الأنواع"
     const optAll = el('option');
     optAll.value = 'all';
     optAll.textContent = 'كل الأنواع';
     typeFilterSelect.appendChild(optAll);
 
-    // ترتيب الأنواع وفق STORY_TYPE_OPTIONS ثم أبجديًا للباقي (لو وُجِد كود غير معروف)
     const order = Object.fromEntries(
       STORY_TYPE_OPTIONS
         .filter(([val]) => val && val !== 'all')
@@ -405,101 +472,102 @@ toolsLeft.appendChild(searchWrap);
       typeFilterSelect.appendChild(opt);
     });
 
-    const canKeepPrev =
-      prevValue &&
-      prevValue !== 'all' &&
-      usedTypes.includes(prevValue);
-
+    const canKeepPrev = prevValue && prevValue !== 'all' && usedTypes.includes(prevValue);
     const nextValue = canKeepPrev ? prevValue : 'all';
     typeFilterSelect.value = nextValue;
     currentTypeFilter = nextValue;
   }
 
+  // ----------------------------
+  // 7.3) رسم القائمة بالكامل (Cards)
+  // ----------------------------
+
   function renderList() {
- list.innerHTML = '';
-ensureStories(person);
-updateStoriesCountBadge();
-updateAddButtonLabel();
-rebuildStoryTypeFilterOptions(); // إعادة بناء خيارات الفلتر حسب الأنواع الحالية
+    list.innerHTML = '';
+    ensureStories(person);
 
-const filteredStories = person.stories.filter(story => {
-  const typeOk =
-    currentTypeFilter === 'all' ||
-    !currentTypeFilter ||
-    (story.type || '') === currentTypeFilter;
+    updateStoriesCountBadge();
+    updateAddButtonLabel();
+    rebuildStoryTypeFilterOptions();
 
-  const tagOk =
-    !currentTagFilter ||
-    (Array.isArray(story.tags) && story.tags.includes(currentTagFilter));
+    const filteredStories = person.stories.filter(story => {
+      const typeOk =
+        currentTypeFilter === 'all' ||
+        !currentTypeFilter ||
+        (story.type || '') === currentTypeFilter;
 
-  const searchOk =
-    !currentSearchQuery ||
-    String(story.title || '')
-      .toLowerCase()
-      .includes(currentSearchQuery);
+      const tagOk =
+        !currentTagFilter ||
+        (Array.isArray(story.tags) && story.tags.includes(currentTagFilter));
 
-  return typeOk && tagOk && searchOk;
-});
+      const searchOk =
+        !currentSearchQuery ||
+        String(story.title || '').toLowerCase().includes(currentSearchQuery);
+
+      return typeOk && tagOk && searchOk;
+    });
 
     if (!filteredStories.length) {
       const empty = el('div', 'stories-empty');
-empty.textContent = person.stories.length ? 'لا توجد قصص مطابقة لخيارات التصفية أو البحث الحالي.'
-  : 'ابدأ بإضافة أول قصة (مثلاً: موقف جميل، أو وصف مختصر لصفات هذا الشخص).';
-
+      empty.textContent = person.stories.length ? 'لا توجد قصص مطابقة لخيارات التصفية أو البحث الحالي.'
+        : 'ابدأ بإضافة أول قصة (مثلاً: موقف جميل، أو وصف مختصر لصفات هذا الشخص).';
       list.appendChild(empty);
       return;
     }
 
     filteredStories.forEach((story, index) => {
-    const serial = index + 1;
-    const card = el('article', 'story-card');
-    card.dataset.storyId = story.id;
+      const serial = index + 1;
 
-    const indexBadge = el('div', 'story-card-index');
-    indexBadge.textContent = `القصة ${serial}`;
+      const card = el('article', 'story-card');
+      card.dataset.storyId = story.id;
 
-    let pinnedBadge = null;
-    if (story.pinned) {
-      pinnedBadge = el('div', 'story-pinned-badge');
-      pinnedBadge.textContent = 'قصة مميّزة';
-    }
-if (story.pinned) {
-  card.classList.add('story-card--pinned');
-}
+      // ===== شريط علوي: رقم + مميّزة =====
+      const indexBadge = el('div', 'story-card-index');
+      indexBadge.textContent = `القصة ${serial}`;
 
-    const topRow = el('div', 'story-card-top');
-    topRow.appendChild(indexBadge);
-    if (pinnedBadge) topRow.appendChild(pinnedBadge);
-    card.appendChild(topRow);
+      let pinnedBadge = null;
+      if (story.pinned) {
+        pinnedBadge = el('div', 'story-pinned-badge');
+        pinnedBadge.textContent = 'قصة مميّزة';
+      }
+      if (story.pinned) card.classList.add('story-card--pinned');
 
+      const topRow = el('div', 'story-card-top');
+      topRow.appendChild(indexBadge);
+      if (pinnedBadge) topRow.appendChild(pinnedBadge);
+      card.appendChild(topRow);
+
+      // Snapshot "الأصل" للمقارنة (كما كان)
       const original = {
         title: story.title || '',
-        text: (story.text || '').trim(),
-        images: Array.isArray(story.images) ? [...story.images] : [],
-        type: (story.type || '').trim(),
+        text: safeStr(story.text),
+        images: shallowArr(story.images),
+        type: safeStr(story.type),
         eventDate: story.eventDate || null,
-        place: (story.place || '').trim(),
-        tags: Array.isArray(story.tags) ? [...story.tags] : [],
+        place: safeStr(story.place),
+        tags: shallowArr(story.tags),
         pinned: !!story.pinned,
-        note: (story.note || '').trim()
+        note: safeStr(story.note)
       };
+
       const eventDateLabel = formatShortDateBadge(original.eventDate);
 
-
-      let currentImages = Array.isArray(original.images) ? [...original.images]
-        : [];
+      let currentImages = shallowArr(original.images);
       let isEditing =
         lastEditedId === story.id ||
         (!story.title && !story.text && lastEditedId === story.id);
       let isDirty = false;
+      let pendingDeletedImages = [];
 
-      // ===== المعاينة =====
+      // ======================================================================
+      // (A) وضع المعاينة Preview
+      // ======================================================================
+
       const previewBox = el('div', 'story-preview');
       const previewMeta = el('div', 'story-preview-meta');
 
       const dateLabel = el('span', 'story-preview-date');
-      dateLabel.textContent = story.createdAt ? formatStoryDate(story.createdAt)
-        : '';
+      dateLabel.textContent = story.createdAt ? formatStoryDate(story.createdAt) : '';
 
       const lengthLabel = el('span', 'story-preview-length story-length-chip');
       const lenInfo = getLengthInfo(original.text.length);
@@ -519,42 +587,40 @@ if (story.pinned) {
       previewMeta.append(dateLabel, lengthLabel);
 
       const badgesWrap = el('div', 'story-preview-badges');
+
       if (original.place) {
         const placeBadge = el('span', 'story-badge story-badge--place');
         placeBadge.textContent = original.place;
         badgesWrap.appendChild(placeBadge);
       }
-   const isDated = !!eventDateLabel;
-if (eventDateLabel) {
-  const yearBadge = el('span', 'story-badge story-badge--year');
-  yearBadge.textContent = eventDateLabel;
-  badgesWrap.appendChild(yearBadge);
-}
-if (!isDated){
-  const undatedBadge = el('span', 'story-badge story-badge--undated');
-  undatedBadge.textContent = 'بدون تاريخ محدّد';
-  badgesWrap.appendChild(undatedBadge);
-}
 
+      if (eventDateLabel) {
+        const yearBadge = el('span', 'story-badge story-badge--year');
+        yearBadge.textContent = eventDateLabel;
+        badgesWrap.appendChild(yearBadge);
+      } else {
+        const undatedBadge = el('span', 'story-badge story-badge--undated');
+        undatedBadge.textContent = 'بدون تاريخ محدّد';
+        badgesWrap.appendChild(undatedBadge);
+      }
 
       let typeBadge = null;
       const typeLabel = getTypeLabel(original.type);
       if (typeLabel) {
         typeBadge = el('span', 'story-badge story-badge--type');
-        typeBadge.dataset.storyId = story.id;                     // ربط البادج بالقصة
-        typeBadge.dataset.type = original.type || 'general';      // مهم للأيقونة
+        typeBadge.dataset.storyId = story.id;
+        typeBadge.dataset.type = original.type || 'general';
         typeBadge.textContent = typeLabel;
         badgesWrap.appendChild(typeBadge);
       }
 
-const previewTitle = el('div', 'story-preview-title');
-previewTitle.textContent = original.title || 'قصة بدون عنوان';
+      const previewTitle = el('div', 'story-preview-title');
+      previewTitle.textContent = original.title || 'قصة بدون عنوان';
 
-const previewText = el('p', 'story-preview-text');
-previewText.textContent =
-  original.text ||
-  'لم تتم إضافة نص لهذه القصة حتى الآن. يمكنك فتح وضع التحرير لكتابته.';
-
+      const previewText = el('p', 'story-preview-text');
+      previewText.textContent =
+        original.text ||
+        'لم تتم إضافة نص لهذه القصة حتى الآن. يمكنك فتح وضع التحرير لكتابته.';
 
       const tagsWrap = el('div', 'story-tags-list');
       if (original.tags && original.tags.length) {
@@ -585,73 +651,69 @@ previewText.textContent =
             })()
           : null;
 
-const previewImagesWrap = el('div', 'story-preview-images');
+      const previewImagesWrap = el('div', 'story-preview-images');
 
-const sliderBtn = el('button', 'story-images-slider-btn');
-sliderBtn.type = 'button';
-sliderBtn.innerHTML =
-  '<i class="fa-solid fa-images" aria-hidden="true"></i> ' +
-  '<span>عرض الصور كشرائح</span>';
+      const sliderBtn = el('button', 'story-images-slider-btn');
+      sliderBtn.type = 'button';
+      sliderBtn.innerHTML =
+        '<i class="fa-solid fa-images" aria-hidden="true"></i> ' +
+        '<span>عرض الصور كشرائح</span>';
 
       sliderBtn.addEventListener('click', () => {
         if (!original.images || original.images.length < 2) return;
         openImageSlider(original.images, 0);
       });
 
- function renderPreviewImages() {
-  previewImagesWrap.innerHTML = '';
-  sliderBtn.style.display =
-    !original.images.length || original.images.length < 2 ? 'none' : '';
+      function renderPreviewImages() {
+        previewImagesWrap.innerHTML = '';
+        sliderBtn.style.display =
+          !original.images.length || original.images.length < 2 ? 'none' : '';
 
-  original.images.forEach((ref, imgIndex) => {
-    const thumb = el(
-      'div',
-      'story-image-thumb story-image-thumb--preview'
-    );
-    const imgEl = el('img');
-    imgEl.alt = 'صورة مرفقة بالقصة';
+        original.images.forEach((ref, imgIndex) => {
+          const thumb = el('div', 'story-image-thumb story-image-thumb--preview');
+          const imgEl = el('img');
+          imgEl.alt = 'صورة مرفقة بالقصة';
 
-    // نحل المرجع إلى URL حقيقي
-    resolveStoryImageUrl(ref).then(url => {
-      if (url) imgEl.src = url;
-    });
+          resolveStoryImageUrl(ref).then(url => {
+            if (url) imgEl.src = url;
+          });
 
-    const viewBtn = el('button', 'story-image-thumb-view');
-    viewBtn.type = 'button';
-    viewBtn.title = 'معاينة الصورة بحجم أكبر';
-    viewBtn.textContent = 'معاينة';
+          const viewBtn = el('button', 'story-image-thumb-view');
+          viewBtn.type = 'button';
+          viewBtn.title = 'معاينة الصورة بحجم أكبر';
+          viewBtn.textContent = 'معاينة';
 
-    viewBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      openImageSlider(original.images, imgIndex);
-    });
+          viewBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            openImageSlider(original.images, imgIndex);
+          });
 
-    imgEl.addEventListener('click', () =>
-      openImageSlider(original.images, imgIndex)
-    );
+          imgEl.addEventListener('click', () =>
+            openImageSlider(original.images, imgIndex)
+          );
 
-    thumb.append(imgEl, viewBtn);
-    previewImagesWrap.appendChild(thumb);
-  });
-
-}
-
+          thumb.append(imgEl, viewBtn);
+          previewImagesWrap.appendChild(thumb);
+        });
+      }
 
       renderPreviewImages();
 
- previewBox.append(
-  previewTitle,
-  previewMeta,
-  badgesWrap,
-  previewText,
-  tagsWrap
-);
-if (notePreview) previewBox.appendChild(notePreview);
-previewBox.append(previewImagesWrap, sliderBtn);
+      previewBox.append(
+        previewTitle,
+        previewMeta,
+        badgesWrap,
+        previewText,
+        tagsWrap
+      );
+      if (notePreview) previewBox.appendChild(notePreview);
+      previewBox.append(previewImagesWrap, sliderBtn);
+      card.appendChild(previewBox);
 
-            card.appendChild(previewBox);
+      // ======================================================================
+      // (B) وضع التحرير Edit
+      // ======================================================================
 
-      // ===== التحرير =====
       const editBox = el('div', 'story-edit');
       const head = el('div', 'story-head');
 
@@ -662,20 +724,18 @@ previewBox.append(previewImagesWrap, sliderBtn);
       titleInput.value = original.title;
 
       const dates = el('div', 'story-dates');
-      dates.textContent = story.createdAt ? formatStoryDate(story.createdAt)
-        : '';
+      dates.textContent = story.createdAt ? formatStoryDate(story.createdAt) : '';
 
       head.append(titleInput, dates);
       editBox.appendChild(head);
 
-         const body = el('div', 'story-body');
+      const body = el('div', 'story-body');
       const metaRow = el('div', 'story-meta-row');
 
-      // حقل نوع القصة
+      // نوع القصة
       const typeSelect = el('select', 'story-type-select');
       typeSelect.name = `story_type_${story.id}`;
 
-      // نضيف كل الأنواع ما عدا "كل الأنواع"
       STORY_TYPE_OPTIONS
         .filter(([val]) => val && val !== 'all')
         .forEach(([val, label]) => {
@@ -685,16 +745,15 @@ previewBox.append(previewImagesWrap, sliderBtn);
           typeSelect.appendChild(opt);
         });
 
-      // إذا لا يوجد نوع مخزَّن نعتبره "عام"
       typeSelect.value = original.type || 'general';
 
-
-          const typeField = el('div', 'story-meta-field');
+      const typeField = el('div', 'story-meta-field');
       const typeLabelBox = el('div', 'story-meta-label');
-      typeLabelBox.innerHTML =   '<span class="story-meta-icon"><i class="fa-solid fa-tag" aria-hidden="true"></i></span> نوع القصة';
+      typeLabelBox.innerHTML =
+        '<span class="story-meta-icon"><i class="fa-solid fa-tag" aria-hidden="true"></i></span> نوع القصة';
       typeField.append(typeLabelBox, typeSelect);
 
-      // حقل تاريخ الحدث
+      // تاريخ الحدث
       const eventInput = el('input');
       eventInput.type = 'date';
       eventInput.name = `story_event_${story.id}`;
@@ -702,10 +761,11 @@ previewBox.append(previewImagesWrap, sliderBtn);
 
       const eventField = el('div', 'story-meta-field');
       const eventLabel = el('div', 'story-meta-label');
-      eventLabel.innerHTML =   '<span class="story-meta-icon"><i class="fa-solid fa-calendar-day" aria-hidden="true"></i></span> تاريخ الحدث';
+      eventLabel.innerHTML =
+        '<span class="story-meta-icon"><i class="fa-solid fa-calendar-day" aria-hidden="true"></i></span> تاريخ الحدث';
       eventField.append(eventLabel, eventInput);
 
-      // حقل المكان
+      // المكان
       const placeInput = el('input');
       placeInput.type = 'text';
       placeInput.name = `story_place_${story.id}`;
@@ -714,11 +774,11 @@ previewBox.append(previewImagesWrap, sliderBtn);
 
       const placeField = el('div', 'story-meta-field');
       const placeLabel = el('div', 'story-meta-label');
-      placeLabel.innerHTML =   '<span class="story-meta-icon"><i class="fa-solid fa-location-dot" aria-hidden="true"></i></span> المكان';
+      placeLabel.innerHTML =
+        '<span class="story-meta-icon"><i class="fa-solid fa-location-dot" aria-hidden="true"></i></span> المكان';
       placeField.append(placeLabel, placeInput);
 
       metaRow.append(typeField, eventField, placeField);
-
 
       const textArea = el('textarea', 'story-textarea');
       textArea.rows = 5;
@@ -734,29 +794,19 @@ previewBox.append(previewImagesWrap, sliderBtn);
       const tagsInput = el('input');
       tagsInput.type = 'text';
       tagsInput.name = `story_tags_${story.id}`;
-            tagsInput.placeholder =
-        'وسوم القصة (افصل بينها بفواصل مثل: عام, الطفولة, الدراسة, طرائف)';
-
+      tagsInput.placeholder = 'وسوم القصة (افصل بينها بفواصل مثل: عام, الطفولة, الدراسة, طرائف)';
       tagsInput.value = original.tags.join(', ');
 
-        // كتلة الصور العامة
+      // ===== كتلة الصور =====
       const imagesBlock = el('div', 'story-images-block');
-
-      // نص التلميح (يظهر عند عدم وجود صور)
       const emptyImagesHint = el('div', 'story-images-empty-hint');
-
-      // صف خارجي يدفع المصغّرات لليمين
       const imagesRow = el('div', 'story-images-row');
-
-      // الحاوية الداخلية التي يشتغل عليها Sortable
       const imagesThumbs = el('div', 'story-images-thumbs');
 
-      // زر إضافة الصور + حقل الملف
-const addImageLabel = el('label', 'story-image-add-btn');
-const addImageIcon = el('span', 'story-image-add-icon');
-addImageIcon.innerHTML =
-  '<i class="fa-solid fa-camera" aria-hidden="true"></i>';
-const addImageText = el('span', 'story-image-add-text');
+      const addImageLabel = el('label', 'story-image-add-btn');
+      const addImageIcon = el('span', 'story-image-add-icon');
+      addImageIcon.innerHTML = '<i class="fa-solid fa-camera" aria-hidden="true"></i>';
+      const addImageText = el('span', 'story-image-add-text');
 
       const fileInput = el('input');
       fileInput.type = 'file';
@@ -766,16 +816,8 @@ const addImageText = el('span', 'story-image-add-text');
 
       addImageLabel.append(addImageIcon, addImageText, fileInput);
 
-      // تركيب الهيكل:
-      // emptyImagesHint
-      // ثم صف يمين يحتوي على thumbs
-      // ثم زر الإضافة
       imagesRow.appendChild(imagesThumbs);
-      imagesBlock.append(
-        emptyImagesHint,
-        imagesRow,
-        addImageLabel
-      );
+      imagesBlock.append(emptyImagesHint, imagesRow, addImageLabel);
 
       const pinWrap = el('label', 'story-pin-toggle');
       const pinCheckbox = el('input');
@@ -792,41 +834,41 @@ const addImageText = el('span', 'story-image-add-text');
           addImageLabel.title = 'أرفق أول صورة لتوثيق هذه القصة';
         } else if (count === 1) {
           addImageText.textContent = 'إضافة صورة أخرى';
-          addImageLabel.title =
-            'أضف صورة ثانية لتغطية جوانب أخرى من القصة';
+          addImageLabel.title = 'أضف صورة ثانية لتغطية جوانب أخرى من القصة';
         } else {
           addImageText.textContent = 'إضافة مزيد من الصور';
           addImageLabel.title = `هناك ${count} صور مرفقة حاليًا`;
         }
       }
 
-function setupImagesSortable() {
-  attachHorizontalSortable({
-    container: imagesThumbs,
-    itemSelector: '.story-image-thumb',
-    ghostClass: 'story-image-thumb--ghost',
-    dragClass: 'story-image-thumb--drag',
-    onSorted(orderedRefs) {
-      currentImages = orderedRefs.slice();
-      renderThumbs();
-      recomputeDirty();
-    }
-  });
-}
+      function setupImagesSortable() {
+        attachHorizontalSortable({
+          container: imagesThumbs,
+          itemSelector: '.story-image-thumb',
+          ghostClass: 'story-image-thumb--ghost',
+          dragClass: 'story-image-thumb--drag',
+          onSorted(orderedRefs) {
+            currentImages = orderedRefs.slice();
+            renderThumbs();
+            recomputeDirty();
+          }
+        });
+      }
 
       function renderThumbs() {
         imagesThumbs.innerHTML = '';
+
         if (!currentImages.length) {
           emptyImagesHint.textContent = 'لم تُرفق صور بعد لهذه القصة.';
           emptyImagesHint.style.display = '';
           updateAddImageLabel();
           return;
         }
+
         emptyImagesHint.style.display = 'none';
 
         currentImages.forEach((ref, idxImg) => {
           const thumb = el('div', 'story-image-thumb');
-          // مهم: نربط الـ ref بالعنصر حتى نسترجع الترتيب بعد السحب
           thumb.dataset.ref = ref;
 
           const imgEl = el('img');
@@ -843,6 +885,14 @@ function setupImagesSortable() {
 
           removeBtn.addEventListener('click', e => {
             e.stopPropagation();
+            const ref = currentImages[idxImg];
+
+            // إذا كانت tmp احذفها فورًا من الكاش
+            if (ref && isTmpRef(ref)) revokeTempStoryRef(ref);
+
+            // إذا كانت idb سجّلها للحذف لاحقًا بعد الحفظ
+            if (ref && isIdbRef(ref)) pendingDeletedImages.push(ref);
+
             currentImages.splice(idxImg, 1);
             renderThumbs();
             recomputeDirty();
@@ -867,95 +917,86 @@ function setupImagesSortable() {
         });
 
         updateAddImageLabel();
-        setupImagesSortable(); // تفعيل Sortable بعد بناء المصغّرات
+        setupImagesSortable();
       }
-
 
       renderThumbs();
 
- fileInput.addEventListener('change', async () => {
-  const files = Array.from(fileInput.files || []);
-  if (!files.length) return;
+      fileInput.addEventListener('change', () => {
+        const files = Array.from(fileInput.files || []);
+        if (!files.length) return;
 
-  for (const file of files) {
-    try {
-      const ref = await storeStoryImageFile(file, personId, story.id);
-      if (ref) {
-        currentImages.push(ref);
-      }
-    } catch (e) {
-      console.error('failed to add story image', e);
-      showError?.('تعذّر حفظ إحدى الصور المرفقة. حاول مرة أخرى.');
-    }
-  }
+        for (const file of files) {
+          try {
+            const tmpRef = addTempStoryImage(file);
+            currentImages.push(tmpRef);
+          } catch (e) {
+            console.error('failed to add temp story image', e);
+            showError?.('تعذّر تجهيز إحدى الصور للمعاينة. حاول مرة أخرى.');
+          }
+        }
 
-  renderThumbs();
-  recomputeDirty();
-  fileInput.value = '';
-});
+        renderThumbs();
+        recomputeDirty();
+        fileInput.value = '';
+      });
 
-      body.append(
-        metaRow,
-        textArea,
-        noteInput,
-        tagsInput,
-        imagesBlock,
-        pinWrap
-      );
+      body.append(metaRow, textArea, noteInput, tagsInput, imagesBlock, pinWrap);
       editBox.appendChild(body);
       card.appendChild(editBox);
 
-const footer = el('div', 'story-footer');
-const saveBtn = el('button', 'story-save-btn');
-saveBtn.type = 'button';
+      // ======================================================================
+      // (C) الأزرار Footer (تعديل/حفظ/إلغاء/حذف)
+      // ======================================================================
 
-const cancelBtn = el('button', 'story-cancel-btn');
-cancelBtn.type = 'button';
-cancelBtn.innerHTML =
-  '<i class="fa-solid fa-arrow-rotate-left" aria-hidden="true"></i> ' +
-  '<span>إلغاء التعديل</span>';
+      const footer = el('div', 'story-footer');
 
-const delBtn = el('button', 'story-delete-btn');
-delBtn.type = 'button';
-delBtn.innerHTML =
-  '<i class="fa-solid fa-trash-can" aria-hidden="true"></i> ' +
-  '<span>حذف القصة</span>';
+      const saveBtn = el('button', 'story-save-btn');
+      saveBtn.type = 'button';
 
-footer.append(saveBtn, cancelBtn, delBtn);
-card.appendChild(footer);
+      const cancelBtn = el('button', 'story-cancel-btn');
+      cancelBtn.type = 'button';
+      cancelBtn.innerHTML =
+        '<i class="fa-solid fa-arrow-rotate-left" aria-hidden="true"></i> ' +
+        '<span>إلغاء التعديل</span>';
 
-// دالة مساعدة لتغيير نص/أيقونة زر الحفظ حسب الحالة
-function setSaveBtnLabel(state) {
-  if (!state || state === 'edit') {
-    saveBtn.innerHTML =
-      '<i class="fa-solid fa-pen-to-square" aria-hidden="true"></i> ' +
-      '<span>تعديل</span>';
-  } else if (state === 'close') {
-    saveBtn.innerHTML =
-      '<i class="fa-solid fa-circle-xmark" aria-hidden="true"></i> ' +
-      '<span>إغلاق</span>';
-  } else if (state === 'save') {
-    saveBtn.innerHTML =
-      '<i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> ' +
-      '<span>حفظ</span>';
-  }
-}
+      const delBtn = el('button', 'story-delete-btn');
+      delBtn.type = 'button';
+      delBtn.innerHTML =
+        '<i class="fa-solid fa-trash-can" aria-hidden="true"></i> ' +
+        '<span>حذف القصة</span>';
 
-  function applyMode() {
-  card.classList.toggle('story-card--edit', isEditing);
-  card.classList.toggle('story-card--preview', !isEditing);
-  if (dates) dates.style.display = isEditing ? 'none' : '';
+      footer.append(saveBtn, cancelBtn, delBtn);
+      card.appendChild(footer);
 
-  if (!isEditing) {
-    setSaveBtnLabel('edit');
-  } else if (!isDirty) {
-    setSaveBtnLabel('close');
-  } else {
-    setSaveBtnLabel('save');
-  }
+      // تغيير نص زر الحفظ حسب الحالة (نفس السلوك)
+      function setSaveBtnLabel(state) {
+        if (!state || state === 'edit') {
+          saveBtn.innerHTML =
+            '<i class="fa-solid fa-pen-to-square" aria-hidden="true"></i> ' +
+            '<span>تعديل</span>';
+        } else if (state === 'close') {
+          saveBtn.innerHTML =
+            '<i class="fa-solid fa-circle-xmark" aria-hidden="true"></i> ' +
+            '<span>إغلاق</span>';
+        } else if (state === 'save') {
+          saveBtn.innerHTML =
+            '<i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> ' +
+            '<span>حفظ</span>';
+        }
+      }
 
-  cancelBtn.style.display = isEditing && isDirty ? '' : 'none';
-}
+      function applyMode() {
+        card.classList.toggle('story-card--edit', isEditing);
+        card.classList.toggle('story-card--preview', !isEditing);
+        if (dates) dates.style.display = isEditing ? 'none' : '';
+
+        if (!isEditing) setSaveBtnLabel('edit');
+        else if (!isDirty) setSaveBtnLabel('close');
+        else setSaveBtnLabel('save');
+
+        cancelBtn.style.display = isEditing && isDirty ? '' : 'none';
+      }
 
       function recomputeDirty() {
         const curTitle = titleInput.value.trim();
@@ -963,10 +1004,7 @@ function setSaveBtnLabel(state) {
         const curType = typeSelect.value.trim();
         const curEvent = eventInput.value || null;
         const curPlace = placeInput.value.trim();
-        const curTags = tagsInput.value
-          .split(',')
-          .map(t => t.trim())
-          .filter(Boolean);
+        const curTags = splitCommaTags(tagsInput.value);
         const curNote = noteInput.value.trim();
         const curPinned = !!pinCheckbox.checked;
 
@@ -978,7 +1016,7 @@ function setSaveBtnLabel(state) {
           curPlace !== original.place ||
           curPinned !== original.pinned ||
           curNote !== original.note ||
-          curTags.join('|') !== original.tags.join('|') ||
+          curTags.join('|') !== (original.tags || []).join('|') ||
           !arraysShallowEqual(currentImages, original.images);
 
         applyMode();
@@ -986,6 +1024,7 @@ function setSaveBtnLabel(state) {
 
       applyMode();
 
+      // مراقبة التغييرات
       titleInput.addEventListener('input', recomputeDirty);
       textArea.addEventListener('input', recomputeDirty);
       typeSelect.addEventListener('change', recomputeDirty);
@@ -995,24 +1034,24 @@ function setSaveBtnLabel(state) {
       noteInput.addEventListener('input', recomputeDirty);
       pinCheckbox.addEventListener('change', recomputeDirty);
 
-      saveBtn.addEventListener('click', () => {
+      // ----------------------------
+      // حفظ/إغلاق/فتح تحرير
+      // ----------------------------
+      saveBtn.addEventListener('click', async () => {
         if (!isEditing) {
           isEditing = true;
           lastEditedId = story.id;
           applyMode();
-          showInfo?.(
-            'يمكنك الآن تعديل القصة ثم الضغط على "حفظ" لتثبيت التعديلات.'
-          );
+          showInfo?.('يمكنك الآن تعديل القصة ثم الضغط على "حفظ" لتثبيت التعديلات.');
           return;
         }
 
         if (isEditing && !isDirty) {
+          // (نفس السلوك السابق) إغلاق بدون حفظ — لا تنظيف إضافي هنا
           isEditing = false;
           lastEditedId = null;
           applyMode();
-          showInfo?.(
-            'لا توجد تعديلات جديدة لحفظها. تم إغلاق محرّر القصة.'
-          );
+          showInfo?.('لا توجد تعديلات جديدة لحفظها. تم إغلاق محرّر القصة.');
           return;
         }
 
@@ -1021,12 +1060,50 @@ function setSaveBtnLabel(state) {
         const newType = typeSelect.value.trim();
         const newEventDate = eventInput.value || null;
         const newPlace = placeInput.value.trim();
-        const newTags = tagsInput.value
-          .split(',')
-          .map(t => t.trim())
-          .filter(Boolean);
+        const newTags = splitCommaTags(tagsInput.value);
         const newNote = noteInput.value.trim();
         const newPinned = !!pinCheckbox.checked;
+
+        // حفظ الصور: ترقية tmp إلى idb قبل تثبيت البيانات
+        const hasTmp = currentImages.some(r => isTmpRef(r));
+        if (hasTmp && typeof DB?.putStoryImage !== 'function') {
+          showError?.('ميزة حفظ الصور غير متاحة حالياً (DB.putStoryImage غير موجود).');
+          return;
+        }
+
+        const upgradedImages = [];
+        for (const r of currentImages) {
+          const ref = String(r || '');
+
+          if (!isTmpRef(ref)) {
+            upgradedImages.push(ref);
+            continue;
+          }
+
+          const rec = tempStoryImagesCache.get(ref);
+          if (!rec?.file) {
+            showError?.('تعذّر الوصول لملف إحدى الصور المؤقتة. لم يتم حفظ التعديلات.');
+            return;
+          }
+
+          try {
+            const idbRef = await DB.putStoryImage({
+              file: rec.file,
+              personId,
+              storyId: story.id
+            });
+
+            if (idbRef) upgradedImages.push(String(idbRef));
+          } catch (e) {
+            console.error('Failed to store temp story image', ref, e);
+            showError?.('تعذّر حفظ إحدى الصور. لم يتم حفظ التعديلات.');
+            return;
+          } finally {
+            revokeTempStoryRef(ref);
+          }
+        }
+
+        currentImages = upgradedImages;
 
         const updated = updateStory(
           person,
@@ -1054,25 +1131,36 @@ function setSaveBtnLabel(state) {
 
         const effective = updated || story;
 
+        // تحديث snapshot الأصل بعد الحفظ (كما كان)
         original.title = effective.title || '';
-        original.text = (effective.text || '').trim();
-        original.images = Array.isArray(effective.images)  ? [...effective.images]
-          : [];
-        original.type = (effective.type || '').trim();
+        original.text = safeStr(effective.text);
+        original.images = shallowArr(effective.images);
+        original.type = safeStr(effective.type);
         original.eventDate = effective.eventDate || null;
-        original.place = (effective.place || '').trim();
-        original.tags = Array.isArray(effective.tags) ? [...effective.tags]
-          : [];
-        original.note = (effective.note || '').trim();
+        original.place = safeStr(effective.place);
+        original.tags = shallowArr(effective.tags);
+        original.note = safeStr(effective.note);
         original.pinned = !!effective.pinned;
 
-        currentImages = [...original.images];
+        currentImages = shallowArr(original.images);
 
-        // تحديث العنوان
-        previewTitle.textContent =
-          original.title || 'قصة بدون عنوان';
+        // حذف صور IndexedDB المؤجلة بعد تثبيت التعديلات (كما كان)
+        for (const ref of pendingDeletedImages) {
+          try {
+            if (typeof DB?.deleteStoryImage === 'function') {
+              await DB.deleteStoryImage(ref);
+            } else if (typeof DB?.deleteEventImage === 'function') {
+              await DB.deleteEventImage(ref);
+            }
+          } catch (e) {
+            console.error('Failed to delete story image from DB', ref, e);
+          }
+        }
+        pendingDeletedImages = [];
 
-        // تحديث شريحة طول النص
+        // تحديث المعاينة
+        previewTitle.textContent = original.title || 'قصة بدون عنوان';
+
         const trimmedText = original.text;
         const info2 = getLengthInfo(trimmedText.length);
         if (info2.level === 0) {
@@ -1088,20 +1176,18 @@ function setSaveBtnLabel(state) {
           lengthLabel.append(meter2, txtSpan2);
         }
 
-// تحديث نص المعاينة
-previewText.textContent =
-  trimmedText ||
-  'لم تتم إضافة نص لهذه القصة حتى الآن. يمكنك فتح وضع التحرير لكتابته.';
+        previewText.textContent =
+          trimmedText ||
+          'لم تتم إضافة نص لهذه القصة حتى الآن. يمكنك فتح وضع التحرير لكتابته.';
 
-        // تحديث تاريخ الإضافة في الرأس والمعاينة
         if (effective.createdAt) {
           const labelText = formatStoryDate(effective.createdAt);
           dates.textContent = labelText;
           dateLabel.textContent = labelText;
         }
 
-        // NEW: تحديث بادج نوع القصة في هذه البطاقة + أي بادجات أخرى لنفس القصة
-        const effectiveType = (effective.type || '').trim() || 'general';
+        // تحديث بادج النوع
+        const effectiveType = safeStr(effective.type) || 'general';
         const newTypeLabel = getTypeLabel(effectiveType) || '';
 
         if (typeBadge) {
@@ -1120,18 +1206,24 @@ previewText.textContent =
         lastEditedId = null;
         isDirty = false;
 
-        // NEW: إعادة بناء القائمة كلها (ستُحدّث الفلتر + البادجات من البيانات المحدثة)
         renderList();
         showSuccess?.('تم حفظ تعديلات القصة بنجاح');
-
       });
 
+      // ----------------------------
+      // إلغاء التعديل (الرجوع للأصل)
+      // ----------------------------
       cancelBtn.addEventListener('click', () => {
         if (!isEditing) return;
 
+        pendingDeletedImages = [];
+
         titleInput.value = original.title;
         textArea.value = original.text;
-        currentImages = [...original.images];
+
+        cleanupTmpRefs(currentImages, revokeTempStoryRef);
+
+        currentImages = shallowArr(original.images);
         renderThumbs();
         renderPreviewImages();
 
@@ -1144,7 +1236,7 @@ previewText.textContent =
         typeSelect.value = original.type || '';
         eventInput.value = original.eventDate || '';
         placeInput.value = original.place;
-        tagsInput.value = original.tags.join(', ');
+        tagsInput.value = (original.tags || []).join(', ');
         noteInput.value = original.note;
         pinCheckbox.checked = original.pinned;
 
@@ -1153,51 +1245,86 @@ previewText.textContent =
         isDirty = false;
         applyMode();
 
-        showInfo?.(
-          'تم تجاهل التعديلات والرجوع لآخر نسخة محفوظة من القصة.'
-        );
+        showInfo?.('تم تجاهل التعديلات والرجوع لآخر نسخة محفوظة من القصة.');
       });
 
-      delBtn.addEventListener('click', async () => {
-        const ok = await showConfirmModal?.(
-          'حذف القصة',
-          'هل تريد بالتأكيد حذف هذه القصة؟ لا يمكن التراجع عن هذا الإجراء.'
-        );
-        if (!ok) {
-          showInfo?.('تم إلغاء حذف القصة.');
-          return;
-        }
+      // ----------------------------
+      // حذف القصة
+      // ----------------------------
+ delBtn.addEventListener('click', async () => {
+  const res = await showConfirmModal?.({
+    title: 'حذف القصة',
+    message: 'هل تريد بالتأكيد حذف هذه القصة؟ لا يمكن التراجع عن هذا الإجراء.',
+    variant: 'danger',
+    confirmText: 'حذف',
+    cancelText: 'إلغاء'
+  });
 
-        const success = deleteStory(person, story.id, {
-          onChange: (stories, removed) => {
-            if (typeof handlers.onDirty === 'function') {
-              handlers.onDirty(stories, removed);
-            }
-            emitStoriesToHost();
-          }
-        });
+  if (res !== 'confirm') {
+    showInfo?.('تم إلغاء حذف القصة.');
+    return;
+  }
 
-        if (!success) {
-          showError?.('تعذر حذف القصة. حاول مرة أخرى.');
-          return;
-        }
+  cleanupTmpRefs(currentImages, revokeTempStoryRef);
 
-        if (lastEditedId === story.id) lastEditedId = null;
-        renderList();
-        showSuccess?.('تم حذف القصة بنجاح.');
-      });
+  // احذف كل صور القصة من IndexedDB (إن كانت idb) قبل حذف القصة
+  const refs = Array.isArray(original.images) ? original.images : [];
+
+  for (const ref of refs) {
+    if (!isIdbRef(ref)) continue;
+    try {
+      await DB?.deleteStoryImage?.(ref);
+    } catch (e) {
+      console.error('deleteStoryImage failed', ref, e);
+    }
+  }
+
+  // أيضًا: صور مؤجلة للحذف
+  for (const ref of pendingDeletedImages) {
+    if (!isIdbRef(ref)) continue;
+    try {
+      await DB?.deleteStoryImage?.(ref);
+    } catch (e) {
+      console.error('deleteStoryImage (pending) failed', ref, e);
+    }
+  }
+  pendingDeletedImages = [];
+
+  const success = deleteStory(person, story.id, {
+    onChange: (stories, removed) => {
+      if (typeof handlers.onDirty === 'function') {
+        handlers.onDirty(stories, removed);
+      }
+      emitStoriesToHost();
+    }
+  });
+
+  if (!success) {
+    showError?.('تعذر حذف القصة. حاول مرة أخرى.');
+    return;
+  }
+
+  if (lastEditedId === story.id) lastEditedId = null;
+  renderList();
+  showSuccess?.('تم حذف القصة بنجاح.');
+});
 
       list.appendChild(card);
     });
-    autoResizeStoryTextareas(list);
 
+    autoResizeStoryTextareas(list);
   }
+
+  // ========================================================================
+  // 7.4) أحداث الأدوات (إضافة/ترتيب/فلتر)
+  // ========================================================================
 
   addBtn.addEventListener('click', () => {
     ensureStories(person);
+
     const draft = person.stories.find(s => {
-      const t = String(s.title || '').trim();
-      const txt = String(s.text || '').trim();
+      const t = safeStr(s.title);
+      const txt = safeStr(s.text);
       const imgs = Array.isArray(s.images) ? s.images : [];
       return !t && !txt && imgs.length === 0;
     });
@@ -1205,14 +1332,10 @@ previewText.textContent =
     if (draft) {
       lastEditedId = draft.id;
       renderList();
-      const card = list.querySelector(
-        `.story-card[data-story-id="${draft.id}"]`
-      );
+      const card = list.querySelector(`.story-card[data-story-id="${draft.id}"]`);
       const textarea = card?.querySelector('.story-textarea');
       if (textarea) textarea.focus();
-      showWarning?.(
-        'لديك مسودة قصة مفتوحة بالفعل. أكمل كتابتها أولاً قبل إضافة قصة جديدة.'
-      );
+      showWarning?.('لديك مسودة قصة مفتوحة بالفعل. أكمل كتابتها أولاً قبل إضافة قصة جديدة.');
       return;
     }
 
@@ -1236,9 +1359,7 @@ previewText.textContent =
 
     lastEditedId = story.id;
     renderList();
-    showSuccess?.(
-      'تمت إضافة قصة جديدة. اكتب تفاصيلها ثم اضغط "حفظ" لتثبيتها.'
-    );
+    showSuccess?.('تمت إضافة قصة جديدة. اكتب تفاصيلها ثم اضغط "حفظ" لتثبيتها.');
   });
 
   sortSelect.addEventListener('change', () => {
@@ -1250,7 +1371,7 @@ previewText.textContent =
     emitStoriesToHost();
     renderList();
     showInfo?.(
-      mode === 'latest' ? 'تم ترتيب القصص من الأحدث إلى الأقدم.'
+      mode === 'latest'  ? 'تم ترتيب القصص من الأحدث إلى الأقدم.'
         : 'تم ترتيب القصص من الأقدم إلى الأحدث.'
     );
   });
@@ -1261,7 +1382,9 @@ previewText.textContent =
     renderList();
   });
 
+  // أول رسم
   renderList();
   emitStoriesToHost();
+
   return root;
 }

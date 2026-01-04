@@ -435,15 +435,17 @@ async function handleRemovePhotoClick(e, ctx){
   }
 
   // تأكيد الحذف
-  const ok = await showConfirmModal({
-    title: 'تأكيد حذف الصورة',
-    message: 'سيتم حذف الصورة والرجوع للصورة الافتراضية. هل أنت متأكد؟',
-    confirmText: 'حذف',
-    cancelText: 'إلغاء',
-    variant: 'danger',
-    _ariaRole: 'alertdialog'
-  });
-  if (!ok) return;
+const res = await showConfirmModal({
+  title: 'تأكيد حذف الصورة',
+  message: 'سيتم حذف الصورة والرجوع للصورة الافتراضية. هل أنت متأكد؟',
+  confirmText: 'حذف',
+  cancelText: 'إلغاء',
+  variant: 'danger',
+  _ariaRole: 'alertdialog'
+});
+
+if (res !== 'confirm') return;
+
 
   const famKey = Model.getSelectedKey();
   const fam    = Model.getFamilies()[famKey];
@@ -930,18 +932,21 @@ async function handleNewCandidate(ctx, dataUrl, photoBox){
   // 2) نفس الصورة الأصلية ⇒ اعرض مربع حوار لاستعادة الأصل
   if (kind === 'same-original'){
     document.activeElement?.blur();
-    const ok = await showConfirmModal({
-      title: 'استعادة الأصل',
-      message: 'هذه هي الصورة الأصلية. هل تريد استعادتها؟',
-      confirmText: 'استعادة',
-      cancelText: 'إلغاء'
-    });
-    if (ok){
-      const pid = ctx?.dom?.currentPerson?._id;
-      if (!pid) return false;
-      await restoreOriginalIfAny(ctx, byId('bioPhoto'), pid);
-    }
-    return false;
+const res = await showConfirmModal({
+  title: 'استعادة الأصل',
+  message: 'هذه هي الصورة الأصلية. هل تريد استعادتها؟',
+  confirmText: 'استعادة',
+  cancelText: 'إلغاء'
+});
+
+if (res === 'confirm') {
+  const pid = ctx?.dom?.currentPerson?._id;
+  if (!pid) return false;
+  await restoreOriginalIfAny(ctx, byId('bioPhoto'), pid);
+}
+
+return false;
+
   }
 
   // 3) صورة مختلفة تمامًا ⇒ نعتبرها "صورة جديدة" ونصفّر أعلام القص/التدوير + الأصل القديم
@@ -1534,21 +1539,22 @@ menuGalleryBtn?.addEventListener('click', async () => {
       if (prevBlob){
         document.activeElement?.blur();
 
-        const undo = await showConfirmModal({
-          title: 'تراجع عن الحفظ',
-          message: 'هل تريد التراجع واستعادة الحالة السابقة؟',
-          confirmText: 'تراجع',
-          cancelText: 'إغلاق'
-        });
+  const res = await showConfirmModal({
+  title: 'تراجع عن الحفظ',
+  message: 'هل تريد التراجع واستعادة الحالة السابقة؟',
+  confirmText: 'تراجع',
+  cancelText: 'إغلاق'
+});
 
-        if (undo){
-          await ctx.DB.putPhoto(pid, prevBlob);
-          await renderPersonPhoto(byId('bioPhoto'), ctx.dom.currentPerson, undefined, ctx.DB);
-          ctx.syncPhotoUI?.();
-          showInfo('تم التراجع عن آخر حفظ.');
-        } else {
-          ctx.syncPhotoUI?.();
-        }
+if (res === 'confirm') {
+  await ctx.DB.putPhoto(pid, prevBlob);
+  await renderPersonPhoto(byId('bioPhoto'), ctx.dom.currentPerson, undefined, ctx.DB);
+  ctx.syncPhotoUI?.();
+  showInfo('تم التراجع عن آخر حفظ.');
+} else {
+  ctx.syncPhotoUI?.();
+}
+
       }
 
     } catch {

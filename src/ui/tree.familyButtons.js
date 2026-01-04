@@ -122,7 +122,7 @@ export function renderFamilyButtons(families = {}, selectedKey = null, handlers 
   confirmText: 'حذف',
   cancelText: 'إلغاء',
   variant: 'danger',
-  closeOnBackdrop: true,
+  closeOnBackdrop: false,
   closeOnEsc: true,
   defaultFocus: 'cancel'
 });
@@ -147,7 +147,7 @@ wrap.append(edit, del);
   confirmText: 'إخفاء',
   cancelText: 'إلغاء',
   variant: 'warning',
-  closeOnBackdrop: true,
+  closeOnBackdrop: false,
   closeOnEsc: true,
   defaultFocus: 'cancel'
 });

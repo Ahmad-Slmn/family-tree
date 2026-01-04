@@ -74,7 +74,7 @@
     <link rel="stylesheet" href="src/styles/bio-timeline.css">
     <link rel="stylesheet" href="src/styles/bio-sources.css">
 
-    <!-- 6) المكوّنات الخاصة (خليها بعد الهيكل) -->
+    <!-- 6) المكوّنات الخاصة -->
     <link rel="stylesheet" href="src/styles/modal.css">
     <link rel="stylesheet" href="src/styles/photoGallery.css">
     <link rel="stylesheet" href="src/styles/security.css">
@@ -104,7 +104,7 @@
                 <label class="pin-lock-label" for="pinInput">كلمة المرور</label>
 
                 <div class="pin-lock-input-wrap">
-                    <input id="pinInput" class="pin-lock-input" type="password" inputmode="text" autocomplete="current-password" maxlength="12" placeholder="••••" aria-label="إدخال كلمة المرور" aria-describedby="pinLockDesc">
+                    <input id="pinInput" class="pin-lock-input" type="password" inputmode="text" autocomplete="current-password" maxlength="12" placeholder="أدخل كلمة المرور" aria-label="إدخال كلمة المرور" aria-describedby="pinLockDesc">
 
                     <button id="pinToggleVisBtn" type="button" class="pin-lock-eye" aria-label="إظهار/إخفاء كلمة المرور" aria-pressed="false">
                         <i class="fa-solid fa-eye" aria-hidden="true"></i>
@@ -314,12 +314,8 @@
                         </span>
                     </label>
 
-                    <select id="pinSessionSelect">
-                        <option value="5">5 دقائق</option>
-                        <option value="15">15 دقيقة</option>
-                        <option value="30">30 دقيقة</option>
-                        <option value="60">60 دقيقة</option>
-                    </select>
+                    <select id="pinSessionSelect"></select>
+
 
                     <button id="pinOpenSessionBtn" class="family-button" type="button">تفعيل جلسة مفتوحة</button>
                 </div>
@@ -329,12 +325,7 @@
             <!-- القفل بالخمول -->
             <div class="pin-idle-box">
                 <label for="pinIdleSelect">مدة الخمول قبل القفل</label>
-                <select id="pinIdleSelect">
-                    <option value="2">2 دقائق</option>
-                    <option value="3">3 دقائق</option>
-                    <option value="5">5 دقائق</option>
-                    <option value="10">10 دقائق</option>
-                </select>
+                <select id="pinIdleSelect"></select>
             </div>
 
             <!-- القفل عند ترك التبويب -->

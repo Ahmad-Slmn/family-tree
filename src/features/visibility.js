@@ -73,16 +73,17 @@ const visibleKeys = Object.keys(fams).filter(k => !fams[k]?.hidden);
 const isLastVisible = visibleKeys.length === 1 && visibleKeys[0] === key;
 if (isLastVisible && !opts.force){
   const famLabel = fam.familyName || fam.title || fam.rootPerson?.name || key;
-  const ok = await (showConfirmModal?.({
-    title: 'إخفاء العائلة',
-    message: `هذه آخر عائلة مرئية. هل تريد إخفاء "${famLabel}"؟ يمكن إظهارها لاحقًا من الإعدادات.`,
-    confirmText: 'إخفاء',
-    cancelText: 'إلغاء',
-    variant: 'danger',
-    _ariaRole: 'alertdialog'
-  }) || Promise.resolve(false));
+const res = await (showConfirmModal?.({
+  title: 'إخفاء العائلة',
+  message: `هذه آخر عائلة مرئية. هل تريد إخفاء "${famLabel}"؟ يمكن إظهارها لاحقًا من الإعدادات.`,
+  confirmText: 'إخفاء',
+  cancelText: 'إلغاء',
+  variant: 'danger',
+  _ariaRole: 'alertdialog'
+}) || Promise.resolve('dismiss'));
 
-  if (!ok) return;
+if (res !== 'confirm') return;
+
   // أعد الاستدعاء مع force:true بعد الموافقة
   return onHideFamily(
     key,

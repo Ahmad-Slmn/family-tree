@@ -214,6 +214,7 @@ html.is-locked,body.is-locked{overflow:hidden!important}
   border-color:var(--focus-border);
   box-shadow:0 0 0 .2rem var(--focus-ring-soft);
 }
+
 .pin-manage-eye{
   position:absolute;inset-inline-end:.55rem;
   inline-size:2.1rem;block-size:2.1rem;
@@ -236,12 +237,44 @@ html.is-locked,body.is-locked{overflow:hidden!important}
   display:flex;gap:.6rem;justify-content:flex-end;
   margin-top:.85rem;
 }
+
+/* رسالة الخطأ تحت الحقل */
+.pin-manage-field-msg{
+  margin-top:.35rem;
+  min-height:1.05rem;
+  font-size:.83rem;
+  line-height:1.5;
+  color:color-mix(in oklab,var(--text-main) 82%,var(--placeholder-fg));
+}
+
+/* ألوان حسب النوع */
+.pin-manage-field-msg[data-type="error"]{
+  color:color-mix(in oklab,var(--modal-danger,#c62828) 78%,var(--text-main));
+}
+.pin-manage-field-msg[data-type="warning"]{
+  color:color-mix(in oklab,var(--modal-warning,#f9a825) 82%,var(--text-main));
+}
+.pin-manage-field-msg[data-type="success"]{
+  color:color-mix(in oklab,var(--modal-success,#2e7d32) 75%,var(--text-main));
+}
+
+/* تحسين شكل الحقل عند الخطأ */
+.pin-manage-input-wrap input.is-invalid{
+  border-color: color-mix(in oklab,var(--modal-danger,#c62828) 60%,var(--surface-border));
+  box-shadow: 0 0 0 .2rem color-mix(in oklab,var(--modal-danger,#c62828) 18%,transparent);
+}
+
+/* (اختياري) اجعل الرسالة العامة أقل ظهورًا أو للاستخدام العام فقط */
 .pin-manage-msg{
   margin-top:.6rem;
   min-height:1.25rem;
   font-size:.88rem;
   color:color-mix(in oklab,var(--text-main) 88%,var(--placeholder-fg));
 }
+.pin-manage-msg[data-type="error"]{
+  color:color-mix(in oklab,var(--modal-danger,#c62828) 70%,var(--text-main));
+}
+
 
 /* =========================
    ⏳ عدّاد الجلسة المفتوحة (Top Bar)

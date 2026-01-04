@@ -411,7 +411,7 @@
 /* === ثَمبنايل صور الأحداث === */
 .timeline-image-thumb{
   position:relative;display:inline-flex;align-items:center;justify-content:center;
-  width:64px;height:64px;border-radius:.75rem;overflow:hidden;
+  width:8.8rem;height:7rem;border-radius:.75rem;overflow:hidden;
   border:1px solid color-mix(in oklab,var(--surface-border)80%,transparent);
   background:color-mix(in oklab,var(--panel-bg)96%,#fff);
   cursor:grab;box-shadow:0 .06rem .18rem rgba(0,0,0,.08);
@@ -421,8 +421,8 @@
 
 /* تصغير الثمبنيل داخل الخط الزمني فقط */
 .events-timeline .timeline-image-thumb{
-  width:40px;
-  height:40px;
+  width:8.8rem;
+  height:7rem;
   border-radius:.55rem;
   cursor:pointer;
 }

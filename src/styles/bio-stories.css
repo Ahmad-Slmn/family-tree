@@ -200,7 +200,7 @@
 }
 
 /* صورة المعاينة داخل الثَمب */
-.story-image-thumb--preview{width:64px;height:64px}
+.story-image-thumb--preview{width:8.8rem;height:7rem;cursor: pointer}
 
 /* حقل العبرة / الخلاصة */
 .story-note-preview{

@@ -1,9 +1,12 @@
-// db.js — إدارة IndexedDB: عائلات + صور (محسّن ومنظّم)
+// db.js — إدارة IndexedDB: عائلات + صور + كلمة المرور
 
 /* =========================
-   ثوابت/حارس بيئة
+   1) ثوابت / حارس بيئة
 ========================= */
 const DB_NAME = 'familyTreeDB';
+const DB_VERSION = 7;
+
+// Stores
 const STORE = 'families';
 const PHOTO_STORE = 'photos';
 const STORY_PHOTO_STORE = 'storyPhotos';
@@ -11,19 +14,120 @@ const EVENT_PHOTO_STORE = 'eventPhotos';
 const SOURCE_PHOTO_STORE = 'sourcePhotos';
 const PIN_STORE = 'pin';
 
+// قيود أحجام (كما كانت ضمنيًا موزعة)
+const MAX_PERSON_PHOTO_BYTES = 8 * 1024 * 1024;   // صور الأشخاص
+const MAX_STORY_EVENT_BYTES  = 8 * 1024 * 1024;   // بعد ضغط صور القصص/الأحداث
+const MAX_SOURCE_FILE_BYTES  = 20 * 1024 * 1024;  // مرفقات المصادر
+
+// قائمة موحّدة للتعامل مع التفريغ/المعاملات
+const ALL_STORES = [
+  STORE,
+  PHOTO_STORE,
+  STORY_PHOTO_STORE,
+  EVENT_PHOTO_STORE,
+  SOURCE_PHOTO_STORE,
+  PIN_STORE
+];
+
 if (!('indexedDB' in window)) {
   console.warn('IndexedDB not supported');
 }
 
 let dbp = null; // وعد اتصال واحد فقط
 
-/* =========================
-   مرافق معاملات مختصرة
-========================= */
-function _ro(db, store){ return db.transaction(store, 'readonly').objectStore(store); }
-function _rw(db, store){ return db.transaction(store, 'readwrite').objectStore(store); }
+// =========================
+// ObjectURL cache (لمنع تسريب blob:)
+// =========================
 
-function withTx(stores, mode, fn){
+// key = `${store}|${idbKey}`  -> url = blob:...
+const _blobUrlCache = new Map();
+
+// حد أقصى اختياري (LRU بسيطة) لتفادي تضخم الكاش لو فتحوا آلاف الصور
+const _BLOB_URL_CACHE_MAX = 300;
+
+function _blobUrlCacheKey(store, ref) {
+  return `${store}|${_idbKey(ref)}`;
+}
+
+function _cacheSet(key, url) {
+  // LRU بسيطة: إذا تجاوز الحد احذف الأقدم
+  if (_blobUrlCache.size >= _BLOB_URL_CACHE_MAX) {
+    const firstKey = _blobUrlCache.keys().next().value;
+    if (firstKey) {
+      const oldUrl = _blobUrlCache.get(firstKey);
+      try { if (oldUrl) URL.revokeObjectURL(oldUrl); } catch {}
+      _blobUrlCache.delete(firstKey);
+    }
+  }
+  _blobUrlCache.set(key, url);
+}
+
+function _cacheTouch(key) {
+  // LRU: إعادة إدخال المفتاح آخر القائمة
+  const v = _blobUrlCache.get(key);
+  if (v) {
+    _blobUrlCache.delete(key);
+    _blobUrlCache.set(key, v);
+  }
+}
+
+/* =========================
+   2) فتح/تهيئة قاعدة البيانات
+   - نفس السلوك، مع ensure stores دائمًا
+========================= */
+function open() {
+  if (dbp) return dbp;
+
+  dbp = new Promise((res, rej) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      const ensure = (name) => {
+        if (!db.objectStoreNames.contains(name)) db.createObjectStore(name);
+      };
+      ALL_STORES.forEach(ensure);
+    };
+
+    req.onsuccess = () => {
+      const db = req.result;
+
+      // إغلاق آمن عند تغيير النسخة (مع الإبقاء على نفس السلوك السابق)
+      db.onversionchange = () => { try { db.close(); } catch {} };
+      try {
+        db.addEventListener('versionchange', () => { try { db.close(); } catch {} });
+      } catch {}
+
+      res(db);
+    };
+
+    req.onerror = () => rej(req.error);
+    req.onblocked = () => console.warn('IndexedDB open blocked: close other tabs using the DB');
+  });
+
+  return dbp;
+}
+
+/** طلب تخزين دائم لتقليل فقدان البيانات */
+export async function ensurePersistentStorage() {
+  try {
+    if (navigator.storage && navigator.storage.persist) {
+      const granted = await navigator.storage.persist();
+      return !!granted;
+    }
+  } catch {}
+  return false;
+}
+
+/* =========================
+   3) معاملات/طلبات عامة (تقليل التكرار)
+========================= */
+
+/**
+ * تشغيل transaction موحّد:
+ * - يحافظ على سلوكك: resolve عند oncomplete + abort عند الخطأ داخل fn
+ */
+function withTx(stores, mode, fn) {
   return open().then((db) => new Promise((res, rej) => {
     const tx = db.transaction(stores, mode);
     let out;
@@ -42,65 +146,27 @@ function withTx(stores, mode, fn){
   }));
 }
 
-/* =========================
-   فتح/تهيئة قاعدة البيانات + مهاجرات مُنظّمة
-========================= */
-function open() {
-  if (dbp) return dbp;
-
-  dbp = new Promise((res, rej) => {
-    // رفع نسخة قاعدة البيانات إلى 7
-    const DB_VERSION = 7;
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-
-    // إنشاء/ترميم الـ stores دائمًا (تصحيحي) بدون الاعتماد على v < ...
-    req.onupgradeneeded = () => {
-      const db = req.result;
-
-      const ensure = (name) => {
-        if (!db.objectStoreNames.contains(name)) {
-          db.createObjectStore(name);
-        }
-      };
-
-      ensure(STORE);
-      ensure(PHOTO_STORE);
-      ensure(STORY_PHOTO_STORE);
-      ensure(EVENT_PHOTO_STORE);
-      ensure(SOURCE_PHOTO_STORE);
-      ensure(PIN_STORE);
-    };
-
-    req.onsuccess = () => {
-      const db = req.result;
-      db.onversionchange = () => { try { db.close(); } catch {} };
-      try { db.addEventListener('versionchange', () => { try { db.close(); } catch {} }); } catch {}
-      res(db);
-    };
-
-    req.onerror = () => rej(req.error);
-    req.onblocked = () => console.warn('IndexedDB open blocked: close other tabs using the DB');
-  });
-
-  return dbp;
+/** تنفيذ عملية put/delete/clear بدون تكرار boilerplate */
+function txWrite(store, op) {
+  return withTx(store, 'readwrite', (tx) => op(tx.objectStore(store)));
 }
 
-
-// طلب تخزين دائم لتقليل فقدان البيانات
-export async function ensurePersistentStorage(){
-  try{
-    if (navigator.storage && navigator.storage.persist) {
-      const granted = await navigator.storage.persist();
-      return !!granted;
-    }
-  }catch{}
-  return false;
+/** تنفيذ get/getKey/getAll/getAllKeys/count… مع Promise موحد */
+function txRead(store, op) {
+  return withTx(store, 'readonly', (tx) => new Promise((resolve, reject) => {
+    const st = tx.objectStore(store);
+    const req = op(st);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+  }));
 }
 
 /* =========================
-   أدوات مساعدة للأخطاء
+   4) أدوات مساعدة داخلية
 ========================= */
-function _friendlyIdbError(err){
+
+/** تصنيف خطأ IndexedDB (موجود عندك، أبقيناه للتوافق/الاستعمال المستقبلي) */
+function _friendlyIdbError(err) {
   const msg = String((err && err.message) || err || '');
   if (/Quota/i.test(msg))   return 'quota-exceeded';
   if (/Version/i.test(msg)) return 'version-conflict';
@@ -108,19 +174,29 @@ function _friendlyIdbError(err){
   return 'idb-error';
 }
 
-/* =========================
-   أدوات مساعدة داخلية
-========================= */
-
-// توليد معرّف فريد بسيط
+/** توليد معرّف فريد بسيط */
 function _genId(prefix = 'id_') {
-  if (window.crypto?.randomUUID) {
-    return prefix + window.crypto.randomUUID();
-  }
+  if (window.crypto?.randomUUID) return prefix + window.crypto.randomUUID();
   return prefix + Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-// ضغط ملف صورة إلى Blob أصغر (للاستخدام في صور القصص)
+/** استخراج مفتاح idb:xxx */
+function _idbKey(ref) {
+  return String(ref || '').replace(/^idb:/, '');
+}
+
+/** فحص MIME للصور (صور الأشخاص) */
+function _assertPersonPhotoBlob(blob) {
+  if (!(blob instanceof Blob)) throw new TypeError('putPhoto: expected Blob');
+  if (blob.size > MAX_PERSON_PHOTO_BYTES) throw new Error('putPhoto: blob too large');
+
+  const mt = blob.type || '';
+  if (mt && !/^image\/(jpeg|png|webp|gif|bmp)$/i.test(mt)) {
+    throw new Error('putPhoto: unsupported mime');
+  }
+}
+
+/** ضغط ملف صورة إلى Blob أصغر (يستخدم لصور القصص/الأحداث/ضغط صور المصادر) */
 function _compressImageFileToBlob(file, {
   maxWidth = 1600,
   maxHeight = 1600,
@@ -139,21 +215,20 @@ function _compressImageFileToBlob(file, {
         img.onload = () => {
           try {
             let { width, height } = img;
-            if (!width || !height) {
-              return reject(new Error('invalid image dimensions'));
-            }
+            if (!width || !height) return reject(new Error('invalid image dimensions'));
 
-            // حساب عامل التصغير
             let scale = 1;
             if (width > maxWidth || height > maxHeight) {
               scale = Math.min(maxWidth / width, maxHeight / height);
             }
+
             const w = Math.max(1, Math.round(width * scale));
             const h = Math.max(1, Math.round(height * scale));
 
             const canvas = document.createElement('canvas');
             canvas.width = w;
             canvas.height = h;
+
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, w, h);
 
@@ -172,6 +247,7 @@ function _compressImageFileToBlob(file, {
         img.onerror = err => reject(err);
         img.src = url;
       };
+
       reader.readAsDataURL(file);
     } catch (e) {
       reject(e);
@@ -179,8 +255,88 @@ function _compressImageFileToBlob(file, {
   });
 }
 
+/**
+ * حفظ صورة “مضغوطة” في store معين وإرجاع ref بصيغة idb:KEY
+ * (يوحّد putStoryImage و putEventImage بنفس السلوك)
+ */
+async function _putCompressedMedia(store, prefix, { file, personId = null, entityId = null, entityField = 'id' }) {
+  if (!(file instanceof Blob)) throw new TypeError(`put${prefix}: expected File/Blob`);
+
+  const compressed = await _compressImageFileToBlob(file, {
+    maxWidth: 1600,
+    maxHeight: 1600,
+    quality: 0.8,
+    mimeType: 'image/jpeg'
+  });
+
+  if (compressed.size > MAX_STORY_EVENT_BYTES) {
+    throw new Error(`put${prefix}: blob too large after compression`);
+  }
+
+  const key = _genId(prefix);
+  const value = {
+    blob: compressed,
+    meta: {
+      personId: personId || null,
+      [entityField]: entityId || null,
+      createdAt: new Date().toISOString()
+    }
+  };
+
+  await txWrite(store, (st) => st.put(value, key));
+  return `idb:${key}`;
+}
+
+/**
+ * جلب record من store وإرجاع blob:URL (يوحّد getStoryImageURL / getEventImageURL / getSourceFileURL)
+ */
+async function _getBlobUrlFromStore(store, ref) {
+  if (!ref) return null;
+
+  const cacheKey = _blobUrlCacheKey(store, ref);
+  const cached = _blobUrlCache.get(cacheKey);
+  if (cached) {
+    _cacheTouch(cacheKey);
+    return cached;
+  }
+
+  const key = _idbKey(ref);
+  const record = await txRead(store, (st) => st.get(key)).catch(() => null);
+  if (!record) return null;
+
+  const blob =
+    record.blob instanceof Blob ? record.blob :
+    (record instanceof Blob ? record : null);
+
+  if (!blob) return null;
+
+  const url = URL.createObjectURL(blob);
+  _cacheSet(cacheKey, url);
+  return url;
+}
+
+/**
+ * حذف record بناءً على ref بصيغة idb:xxx من store معيّن
+ * (يوحّد deleteStoryImage/deleteEventImage/deleteSourceFile)
+ */
+async function _deleteByRef(store, ref) {
+  if (!ref) return;
+
+  // revoke cached url (إن وجد)
+  const cacheKey = _blobUrlCacheKey(store, ref);
+  const cached = _blobUrlCache.get(cacheKey);
+  if (cached) {
+    try { URL.revokeObjectURL(cached); } catch {}
+    _blobUrlCache.delete(cacheKey);
+  }
+
+  const key = _idbKey(ref);
+  await txWrite(store, (st) => st.delete(key));
+}
+
+
 /* =========================
-   إغلاق/تفريغ داخلي
+   5) إغلاق/تفريغ داخلي
 ========================= */
 async function _closeConn() {
   if (!dbp) return;
@@ -191,242 +347,135 @@ async function _closeConn() {
 async function _clearStores() {
   const db = await open();
   await new Promise((res, rej) => {
-       const tx = db.transaction(
-      [STORE, PHOTO_STORE, STORY_PHOTO_STORE, EVENT_PHOTO_STORE, SOURCE_PHOTO_STORE],
-      'readwrite'
-    );
-
-    tx.objectStore(STORE).clear();
-    tx.objectStore(PHOTO_STORE).clear();
-    tx.objectStore(STORY_PHOTO_STORE).clear(); // مسح صور القصص
-    tx.objectStore(EVENT_PHOTO_STORE).clear(); // مسح صور الأحداث
-    tx.objectStore(SOURCE_PHOTO_STORE).clear();
+    const tx = db.transaction(ALL_STORES, 'readwrite');
+    ALL_STORES.forEach((name) => tx.objectStore(name).clear());
     tx.oncomplete = res;
-    tx.onerror    = () => rej(tx.error);
-    tx.onabort    = () => rej(tx.error);
+    tx.onerror = () => rej(tx.error);
+    tx.onabort = () => rej(tx.error);
   });
+
+  // revoke كل blob URLs المخبأة
+  for (const url of _blobUrlCache.values()) {
+    try { URL.revokeObjectURL(url); } catch {}
+  }
+  _blobUrlCache.clear();
 }
 
-
-
 /* =========================
-   صور الأشخاص (photos)
+   6) صور الأشخاص (photos)
 ========================= */
-// حفظ Blob مع فحص نوع/حجم
-async function putPhoto(personId, blob) {
-  if (!(blob instanceof Blob)) throw new TypeError('putPhoto: expected Blob');
-  if (blob.size > 8 * 1024 * 1024) throw new Error('putPhoto: blob too large');
-  const mt = blob.type || '';
-  if (mt && !/^image\/(jpeg|png|webp|gif|bmp)$/i.test(mt)) throw new Error('putPhoto: unsupported mime');
 
-  const db = await open();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(PHOTO_STORE, 'readwrite');
-    tx.objectStore(PHOTO_STORE).put(blob, personId);
-    tx.oncomplete = res;
-    tx.onerror    = () => rej(tx.error);
-    tx.onabort    = () => rej(tx.error);
-  });
+/** حفظ صورة شخص (Blob) مع فحص النوع/الحجم */
+async function putPhoto(personId, blob) {
+  _assertPersonPhotoBlob(blob);
+  await txWrite(PHOTO_STORE, (st) => st.put(blob, personId));
 }
 
 async function getPhoto(personId) {
-  const db = await open();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(PHOTO_STORE, 'readonly');
-    const r = tx.objectStore(PHOTO_STORE).get(personId);
-    let out = null;
-    r.onsuccess = () => { out = r.result || null; };
-    tx.oncomplete = () => res(out);
-    tx.onerror    = () => rej(tx.error);
-    tx.onabort    = () => rej(tx.error);
-  });
+  // نفس السلوك السابق: return null عند عدم وجود
+  const out = await txRead(PHOTO_STORE, (st) => st.get(personId)).catch(() => null);
+  return out || null;
 }
 
 async function clearPhoto(personId) {
-  const db = await open();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(PHOTO_STORE, 'readwrite');
-    tx.objectStore(PHOTO_STORE).delete(personId);
-    tx.oncomplete = res;
-    tx.onerror    = () => rej(tx.error);
-    tx.onabort    = () => rej(tx.error);
-  });
+  await txWrite(PHOTO_STORE, (st) => st.delete(personId));
 }
 
-// صور: دوال إضافية
-async function listPhotoIds(){ return keys(PHOTO_STORE); }
+/** صور: دوال إضافية */
+async function listPhotoIds() { return keys(PHOTO_STORE); }
 
-async function delPhotosBulk(ids = []){
-  const db = await open();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(PHOTO_STORE, 'readwrite');
+async function delPhotosBulk(ids = []) {
+  if (!Array.isArray(ids) || !ids.length) return;
+  await withTx(PHOTO_STORE, 'readwrite', (tx) => {
     const st = tx.objectStore(PHOTO_STORE);
     ids.forEach(id => st.delete(id));
-    tx.oncomplete = res;
-    tx.onerror    = () => rej(tx.error);
-    tx.onabort    = () => rej(tx.error);
   });
 }
+
 /* =========================
-   صور القصص (storyPhotos)
+   7) صور القصص (storyPhotos)
 ========================= */
 
-// حفظ صورة قصة مضغوطة في مخزن خاص وإرجاع مرجع idb:story_...
+/** حفظ صورة قصة مضغوطة وإرجاع ref idb:story_... */
 async function putStoryImage({ file, personId = null, storyId = null }) {
-  if (!(file instanceof Blob)) {
-    throw new TypeError('putStoryImage: expected File/Blob');
-  }
-
-  // ضغط الصورة
-  const compressed = await _compressImageFileToBlob(file, {
-    maxWidth: 1600,
-    maxHeight: 1600,
-    quality: 0.8,
-    mimeType: 'image/jpeg'
-  });
-
-  if (compressed.size > 8 * 1024 * 1024) {
-    throw new Error('putStoryImage: blob too large after compression');
-  }
-
-  const db = await open();
-  const key = _genId('story_'); // مثل: story_r4x...etc
-  const value = {
-    blob: compressed,
-    meta: {
-      personId: personId || null,
-      storyId: storyId || null,
-      createdAt: new Date().toISOString()
-    }
-  };
-
-  await new Promise((res, rej) => {
-    const tx = db.transaction(STORY_PHOTO_STORE, 'readwrite');
-    tx.objectStore(STORY_PHOTO_STORE).put(value, key);
-    tx.oncomplete = res;
-    tx.onerror    = () => rej(tx.error);
-    tx.onabort    = () => rej(tx.error);
-  });
-
-  // هذا هو الذي يُخزَّن في story.images
-  return `idb:${key}`;
+  return _putCompressedMedia(
+    STORY_PHOTO_STORE,
+    'story_',
+    { file, personId, entityId: storyId, entityField: 'storyId' }
+  );
 }
 
-// تحويل مرجع idb: إلى blob: URL للعرض
+/** تحويل مرجع idb: إلى blob:URL للعرض */
 async function getStoryImageURL(ref) {
-  if (!ref) return null;
-  const key = String(ref).replace(/^idb:/, '');
+  return _getBlobUrlFromStore(STORY_PHOTO_STORE, ref);
+}
 
-  const db = await open();
-  const record = await new Promise((res, rej) => {
-    const tx = db.transaction(STORY_PHOTO_STORE, 'readonly');
-    const r = tx.objectStore(STORY_PHOTO_STORE).get(key);
-    let out = null;
-    r.onsuccess = () => { out = r.result || null; };
-    tx.oncomplete = () => res(out);
-    tx.onerror    = () => rej(tx.error);
-    tx.onabort    = () => rej(tx.error);
-  });
-
-  if (!record) return null;
-
-  const blob =
-    record.blob instanceof Blob ? record.blob
-      : (record instanceof Blob ? record : null);
-
-  if (!blob) return null;
-
-  return URL.createObjectURL(blob);
+async function deleteStoryImage(ref) {
+  return _deleteByRef(STORY_PHOTO_STORE, ref);
 }
 
 /* =========================
-   صور الأحداث (eventPhotos)
+   8) صور الأحداث (eventPhotos)
 ========================= */
 
-// حفظ صورة حدث مضغوطة في مخزن خاص وإرجاع مرجع idb:event_...
+/** حفظ صورة حدث مضغوطة وإرجاع ref idb:event_... */
 async function putEventImage({ file, personId = null, eventId = null }) {
-  if (!(file instanceof Blob)) {
-    throw new TypeError('putEventImage: expected File/Blob');
-  }
-
-  // إعادة استخدام نفس منطق الضغط
-  const compressed = await _compressImageFileToBlob(file, {
-    maxWidth: 1600,
-    maxHeight: 1600,
-    quality: 0.8,
-    mimeType: 'image/jpeg'
-  });
-
-  if (compressed.size > 8 * 1024 * 1024) {
-    throw new Error('putEventImage: blob too large after compression');
-  }
-
-  const db = await open();
-  const key = _genId('event_'); // مثل: event_r4x...
-
-  const value = {
-    blob: compressed,
-    meta: {
-      personId: personId || null,
-      eventId: eventId || null,
-      createdAt: new Date().toISOString()
-    }
-  };
-
-  await new Promise((res, rej) => {
-    const tx = db.transaction(EVENT_PHOTO_STORE, 'readwrite');
-    tx.objectStore(EVENT_PHOTO_STORE).put(value, key);
-    tx.oncomplete = res;
-    tx.onerror    = () => rej(tx.error);
-    tx.onabort    = () => rej(tx.error);
-  });
-
-  // هذا هو الذي يُخزَّن في event.media
-  return `idb:${key}`;
+  return _putCompressedMedia(
+    EVENT_PHOTO_STORE,
+    'event_',
+    { file, personId, entityId: eventId, entityField: 'eventId' }
+  );
 }
 
-// تحويل مرجع idb: للحدث إلى blob: URL للعرض
+/** تحويل مرجع idb: للحدث إلى blob:URL للعرض */
 async function getEventImageURL(ref) {
-  if (!ref) return null;
-  const key = String(ref).replace(/^idb:/, '');
+  return _getBlobUrlFromStore(EVENT_PHOTO_STORE, ref);
+}
 
-  const db = await open();
-  const record = await new Promise((res, rej) => {
-    const tx = db.transaction(EVENT_PHOTO_STORE, 'readonly');
-    const r  = tx.objectStore(EVENT_PHOTO_STORE).get(key);
-    let out = null;
-    r.onsuccess = () => { out = r.result || null; };
-    tx.oncomplete = () => res(out);
-    tx.onerror    = () => rej(tx.error);
-    tx.onabort    = () => rej(tx.error);
-  });
-
-  if (!record) return null;
-
-  const blob =
-    record.blob instanceof Blob ? record.blob
-      : (record instanceof Blob ? record : null);
-
-  if (!blob) return null;
-
-  return URL.createObjectURL(blob);
+async function deleteEventImage(ref) {
+  return _deleteByRef(EVENT_PHOTO_STORE, ref);
 }
 
 /* =========================
-   صور/مرفقات المصادر (sourcePhotos)
+   9) صور/مرفقات المصادر (sourcePhotos)
 ========================= */
 
-// حفظ ملف مصدر (عادة صورة وثيقة، وقد يكون PDF) في مخزن خاص
-// ويُرجِع مرجعًا من نوع idb:src_... لتخزينه داخل كائن المصدر
+/**
+ * Wrapper للتوافق: putSourceImage => putSourceFile مع meta (كما كان)
+ * الآن يجمع mime/name/ext/kind بنفس منطقك.
+ */
 async function putSourceImage({ file, personId = null, sourceId = null }) {
-  if (!(file instanceof Blob)) {
-    throw new TypeError('putSourceImage: expected File/Blob');
-  }
+  const mime = (file?.type || '').toLowerCase();
+  const name = (file?.name || '');
+  const ext  = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
 
-  const mt = file.type || '';
+  const kind =
+    mime.startsWith('image/') ? 'image' :
+    mime === 'application/pdf' ? 'pdf' :
+    (mime.includes('word') || ['doc', 'docx', 'rtf', 'odt'].includes(ext)) ? 'word' :
+    (mime.includes('excel') || ['xls', 'xlsx', 'csv'].includes(ext)) ? 'excel' :
+    'other';
+
+  return putSourceFile({
+    file,
+    personId,
+    sourceId,
+    meta: { mime, name, ext, kind }
+  });
+}
+
+/**
+ * يحفظ ملف المصدر ويرجع ref من نوع idb:src_...
+ * - ضغط الصور فقط (كما منطقك)
+ * - حد الحجم 20MB (كما كان)
+ */
+async function putSourceFile({ file, personId = null, sourceId = null, meta = {} }) {
+  if (!(file instanceof Blob)) throw new TypeError('putSourceFile: expected File/Blob');
+
+  const mt = (file.type || meta?.mime || meta?.mimeType || '').toLowerCase();
   let blobToStore = file;
 
-  // نضغط فقط الملفات التي هي صور، والباقي نخزّنه كما هو (PDF، إلخ)
+  // اضغط فقط الصور
   if (/^image\//i.test(mt)) {
     blobToStore = await _compressImageFileToBlob(file, {
       maxWidth: 1600,
@@ -436,200 +485,164 @@ async function putSourceImage({ file, personId = null, sourceId = null }) {
     });
   }
 
-  // حد آمن للحجم (مثلاً 16MB بعد الضغط/بدونه)
-  if (blobToStore.size > 16 * 1024 * 1024) {
-    throw new Error('putSourceImage: blob too large');
+  if (blobToStore.size > MAX_SOURCE_FILE_BYTES) {
+    throw new Error('putSourceFile: blob too large');
   }
 
-  const db = await open();
-  const key = _genId('src_'); // مثل: src_r4x...
+  const key = _genId('src_');
 
   const value = {
     blob: blobToStore,
     meta: {
+      mime: (meta?.mime || mt || blobToStore.type || ''),
+      name: (meta?.name || file?.name || ''),
+      ext:  (meta?.ext || ''),
+      kind: (meta?.kind || ''),
       personId: personId || null,
       sourceId: sourceId || null,
-      mimeType: mt || blobToStore.type || '',
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      ...meta
     }
   };
 
-  await new Promise((res, rej) => {
-    const tx = db.transaction(SOURCE_PHOTO_STORE, 'readwrite');
-    tx.objectStore(SOURCE_PHOTO_STORE).put(value, key);
-    tx.oncomplete = res;
-    tx.onerror    = () => rej(tx.error);
-    tx.onabort    = () => rej(tx.error);
-  });
-
-  // هذا المرجع هو الذي يُحفَظ في source.files[] أو ما يماثله
+  await txWrite(SOURCE_PHOTO_STORE, (st) => st.put(value, key));
   return `idb:${key}`;
 }
 
-// تحويل مرجع idb:src_... إلى blob: URL للعرض / التحميل
-async function getSourceImageURL(ref) {
-  if (!ref) return null;
-  const key = String(ref).replace(/^idb:/, '');
-
-  const db = await open();
-  const record = await new Promise((res, rej) => {
-    const tx = db.transaction(SOURCE_PHOTO_STORE, 'readonly');
-    const r  = tx.objectStore(SOURCE_PHOTO_STORE).get(key);
-    let out = null;
-    r.onsuccess = () => { out = r.result || null; };
-    tx.oncomplete = () => res(out);
-    tx.onerror    = () => rej(tx.error);
-    tx.onabort    = () => rej(tx.error);
-  });
-
-  if (!record) return null;
-
-  const blob =
-    record.blob instanceof Blob ? record.blob
-      : (record instanceof Blob ? record : null);
-
-  if (!blob) return null;
-
-  return URL.createObjectURL(blob);
+async function getSourceFileURL(ref) {
+  return _getBlobUrlFromStore(SOURCE_PHOTO_STORE, ref);
 }
 
+async function getSourceFileMeta(ref) {
+  if (!ref) return null;
+  const key = _idbKey(ref);
+
+  const record = await txRead(SOURCE_PHOTO_STORE, (st) => st.get(key)).catch(() => null);
+  const meta = record?.meta || null;
+  if (!meta) return null;
+
+  // رجّع نفس الشكل المطلوب
+  return {
+    mime: meta.mime || meta.mimeType || '',
+    name: meta.name || '',
+    ext:  meta.ext || '',
+    kind: meta.kind || ''
+  };
+}
+
+// Wrapper للتوافق
+async function getSourceImageURL(ref) {
+  return getSourceFileURL(ref);
+}
+
+async function deleteSourceFile(ref) {
+  return _deleteByRef(SOURCE_PHOTO_STORE, ref);
+}
 
 /* =========================
-   مخزن العائلات (KV)
+   10) مخزن العائلات (KV) + PIN store (KV)
 ========================= */
+
+// KV (families)
 async function put(key, val) {
-  return withTx(STORE, 'readwrite', (tx) => {
-    tx.objectStore(STORE).put(val, key);
-  });
+  await txWrite(STORE, (st) => st.put(val, key));
 }
 
 async function get(key) {
-  return withTx(STORE, 'readonly', (tx) => {
-    return new Promise((resolve, reject) => {
-      const r = tx.objectStore(STORE).get(key);
-      r.onsuccess = () => resolve(r.result);
-      r.onerror   = () => reject(r.error);
-    });
-  });
+  return txRead(STORE, (st) => st.get(key));
 }
 
 async function del(key) {
-  return withTx(STORE, 'readwrite', (tx) => {
-    tx.objectStore(STORE).delete(key);
-  });
+  await txWrite(STORE, (st) => st.delete(key));
 }
 
 async function has(key) {
-  return withTx(STORE, 'readonly', (tx) => {
-    return new Promise((resolve, reject) => {
-      const r = tx.objectStore(STORE).getKey(key);
-      r.onsuccess = () => resolve(r.result != null);
-      r.onerror   = () => reject(r.error);
-    });
-  });
+  const k = await txRead(STORE, (st) => st.getKey(key));
+  return k != null;
 }
 
+// PIN store (KV)
 async function pinPut(key, val) {
-  return withTx(PIN_STORE, 'readwrite', (tx) => {
-    tx.objectStore(PIN_STORE).put(val, key);
-  });
+  await txWrite(PIN_STORE, (st) => st.put(val, key));
 }
 
 async function pinGet(key) {
-  return withTx(PIN_STORE, 'readonly', (tx) => {
-    return new Promise((resolve, reject) => {
-      const r = tx.objectStore(PIN_STORE).get(key);
-      r.onsuccess = () => resolve(r.result);
-      r.onerror   = () => reject(r.error);
-    });
-  });
+  return txRead(PIN_STORE, (st) => st.get(key));
 }
 
 async function pinDel(key) {
-  return withTx(PIN_STORE, 'readwrite', (tx) => {
-    tx.objectStore(PIN_STORE).delete(key);
-  });
+  await txWrite(PIN_STORE, (st) => st.delete(key));
 }
 
-async function pinGetAll() {
+/**
+ * getAllFamilies + pinGetAll:
+ * نفس منطقك (getAllKeys + getAll) لكن بدالة مشتركة لتقليل التكرار.
+ */
+async function _getAllAsObject(store) {
   const db = await open();
-  return new Promise((res, rej)=> {
-    const tx = db.transaction(PIN_STORE,'readonly');
-    const st = tx.objectStore(PIN_STORE);
+  return new Promise((res, rej) => {
+    const tx = db.transaction(store, 'readonly');
+    const st = tx.objectStore(store);
+
     const reqKeys = st.getAllKeys();
     const reqVals = st.getAll();
-    let keys=null, vals=null;
+
+    let keys = null, vals = null;
+
+    const finish = () => {
+      const out = {};
+      for (let i = 0; i < keys.length; i++) out[keys[i]] = vals[i];
+      res(out);
+    };
+
     reqKeys.onsuccess = () => { keys = reqKeys.result || []; if (vals) finish(); };
     reqVals.onsuccess = () => { vals = reqVals.result || []; if (keys) finish(); };
-    function finish(){
-      const out = {};
-      for(let i=0;i<keys.length;i++) out[keys[i]] = vals[i];
-      res(out);
-    }
+
     tx.onerror = () => rej(tx.error);
     tx.onabort = () => rej(tx.error);
   });
 }
 
+async function pinGetAll() {
+  return _getAllAsObject(PIN_STORE);
+}
 
-async function getAllFamilies(){
-  const db = await open();
-  return new Promise((res, rej)=>{
-    const tx = db.transaction(STORE,'readonly');
-    const st = tx.objectStore(STORE);
-    const reqKeys = st.getAllKeys();
-    const reqVals = st.getAll();
-    let keys=null, vals=null;
-    reqKeys.onsuccess = () => { keys = reqKeys.result || []; if (vals) finish(); };
-    reqVals.onsuccess = () => { vals = reqVals.result || []; if (keys) finish(); };
-    function finish(){
-      const out = {};
-      for(let i=0;i<keys.length;i++) out[keys[i]] = vals[i];
-      res(out);
-    }
-    tx.onerror = () => rej(tx.error);
-    tx.onabort  = () => rej(tx.error);
-  });
+async function getAllFamilies() {
+  return _getAllAsObject(STORE);
 }
 
 /* =========================
-   تشخيصات اختيارية
+   11) تشخيصات (count/keys)
 ========================= */
-async function storeOp(store, op) {
-  const db = await open();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(store, 'readonly');
-    const st = tx.objectStore(store);
-    const r = op(st);
-    r.onsuccess = () => res(r.result);
-    r.onerror   = () => rej(r.error);
-  });
-}
 
 async function count(store) {
-  const n = await storeOp(store, (st) => st.count());
-  return n | 0;
+  const n = await txRead(store, (st) => st.count());
+  return (n | 0);
 }
 
 async function keys(store) {
-  const ks = await storeOp(store, (st) => st.getAllKeys());
+  const ks = await txRead(store, (st) => st.getAllKeys());
   return ks || [];
 }
 
-
 /* =========================
-   حذف كامل لقاعدة البيانات
+   12) حذف كامل لقاعدة البيانات (nuke)
+   - نفس سلوكك: محاولات + fallback لمسح الـ stores
 ========================= */
 async function nuke() {
   await _closeConn();
+
   return new Promise((resolve, reject) => {
-    let settled = false, tries = 0;
+    let settled = false;
+    let tries = 0;
 
     const attempt = () => {
       tries++;
       const req = indexedDB.deleteDatabase(DB_NAME);
 
-      req.onsuccess = () => { if (!settled) { settled = true; resolve(); } };
+      req.onsuccess = () => {
+        if (!settled) { settled = true; resolve(); }
+      };
 
       req.onerror = () => {
         if (settled) return;
@@ -645,7 +658,7 @@ async function nuke() {
 
     attempt();
 
-    // بديل سريع إذا استمر الحظر
+    // fallback سريع إذا استمر الحظر
     setTimeout(async () => {
       if (settled) return;
       try { await _clearStores(); settled = true; resolve(); }
@@ -655,35 +668,42 @@ async function nuke() {
 }
 
 /* =========================
-   تصدير الواجهة
+   13) تصدير الواجهة (DB)
 ========================= */
 export const DB = {
-    // PIN store
+  // PIN store
   pinPut, pinGet, pinDel, pinGetAll,
 
-  // KV
+  // KV (families)
   put, get, del, has, getAllFamilies,
 
   // Photos الأشخاص
   putPhoto, getPhoto, clearPhoto, listPhotoIds, delPhotosBulk,
 
   // Photos القصص
-  putStoryImage, getStoryImageURL,
+  putStoryImage, getStoryImageURL, deleteStoryImage,
 
   // Photos الأحداث
-  putEventImage, getEventImageURL,
+  putEventImage, getEventImageURL, deleteEventImage,
 
   // Photos المصادر/الوثائق
+  putSourceFile, getSourceFileURL, getSourceFileMeta, deleteSourceFile,
+
+  // (توافق قديم)
   putSourceImage, getSourceImageURL,
 
   // إدارة
   nuke,
 
   // تشخيص
-  _countFamilies:    () => count(STORE),
-  _countPhotos:      () => count(PHOTO_STORE),
-  _keysFamilies:     () => keys(STORE),
-  _keysPhotos:       () => keys(PHOTO_STORE),
-  _countSourceFiles: () => count(SOURCE_PHOTO_STORE),
-  _keysSourceFiles:  () => keys(SOURCE_PHOTO_STORE),
+  _countFamilies:     () => count(STORE),
+  _countPhotos:       () => count(PHOTO_STORE),
+  _keysFamilies:      () => keys(STORE),
+  _keysPhotos:        () => keys(PHOTO_STORE),
+
+  _countSourceFiles:  () => count(SOURCE_PHOTO_STORE),
+  _keysSourceFiles:   () => keys(SOURCE_PHOTO_STORE),
+
+  _countStoryPhotos:  () => count(STORY_PHOTO_STORE),
+  _countEventPhotos:  () => count(EVENT_PHOTO_STORE)
 };

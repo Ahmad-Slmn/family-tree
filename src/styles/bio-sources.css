@@ -247,6 +247,51 @@
   gap:.4rem;
   margin-top:.3rem;
 }
+
+/* ✅ تكبير حاويات الملفات (صور/غير صور) */
+.source-file-thumb{
+  width: 8.8rem;
+  height: 7rem;
+  border-radius: .85rem;
+}
+
+/* ✅ شريط سفلي داخل الثمبنيل: النوع يسار + زر يمين */
+.source-file-thumb-footer{
+  width:100%;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:.5rem;
+  padding:.25rem .45rem;
+  position:absolute;
+  inset-inline:0;
+  inset-block-end:0;
+}
+
+/* ✅ اجعل الاسم لا يزاحم */
+.source-file-label{
+  margin:0;                 /* كان عندك margin-top */
+  font-size:.78rem;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  max-width:60%;
+}
+
+/* ✅ زر المعاينة/الفتح/التحميل داخل الثمبنيل */
+.source-file-thumb-view{
+  padding:.18rem .65rem;
+  border-radius:.65rem;
+  font-size:.78rem;
+  border:1px solid color-mix(in oklab,var(--surface-border)80%,transparent);
+  cursor:pointer;
+}
+
+/* ✅ حافظ على ظهور امتداد الملف بدون ما يزاحم الشريط السفلي */
+.source-file-ext{
+  inset-block-end: .35rem;
+}
+
 .source-file-thumb--preview{
   cursor:pointer;
 }
@@ -593,6 +638,57 @@ ease;
 .source-meta-field--primary input{
   border-color:color-mix(in oklab,var(--modal-primary)30%,var(--surface-border));
   background:color-mix(in oklab,var(--panel-bg)94%,#fff);
+}
+
+.source-file-icon{
+  width:100%;
+  height:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:2rem;
+  color:var(--text-muted);
+}
+
+.source-file-label{
+  display:block;
+  text-align:center;
+  font-size:.7rem;
+  margin-top:.15rem;
+  color:color-mix(in oklab,var(--text-muted)90%,var(--text-main));
+}
+
+.source-file-open-btn{
+  margin-top:.2rem;
+  padding:.15rem .6rem;
+  border-radius:.6rem;
+  border:1px solid color-mix(in oklab,var(--surface-border)80%,transparent);
+  background:color-mix(in oklab,var(--panel-bg)96%,#fff);
+  font-size:.75rem;
+  cursor:pointer;
+}
+
+.source-files-group-title{
+  width:100%;
+  font-size:.78rem;
+  font-weight:600;
+  color:color-mix(in oklab,var(--text-muted)88%,var(--text-main));
+  margin-top:.15rem;
+  margin-bottom:.15rem;
+  padding-inline:.15rem;
+}
+
+.source-files-group-divider{
+  width:100%;
+  height:1px;
+  background:color-mix(in oklab,var(--surface-border)80%,transparent);
+  margin:.35rem 0;
+}
+
+.source-files-slider-row{
+  flex: 0 0 100%;
+  display: flex;
+  justify-content: flex-start;
 }
 
 /* ========================================================================== */

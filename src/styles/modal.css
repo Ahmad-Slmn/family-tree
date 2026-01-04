@@ -492,6 +492,8 @@ display:inline-block;min-inline-size:2ch;padding:.15rem .55rem;border-radius:999
 .modal-box h2{margin:0 0 .75rem;font-size:1.25rem;font-weight:600;color:var(--title-color)}
 .modal-box p{color:var(--modal-muted);font-size:.95rem}
 .modal-box .reset-options{display:flex;flex-direction:column;align-items:flex-start;gap:.5rem;margin:1rem 0}
+
+.modal-box .reset-options > label{cursor: pointer}
 .modal-box .buttons{display:flex;gap:.625rem}
 .modal-box .buttons button{
   flex:1;padding:.625rem 0;border:0;border-radius:.375rem;cursor:pointer;font-size:.9375rem;

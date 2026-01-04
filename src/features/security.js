@@ -73,28 +73,32 @@ function buildManageModal({ title, fields, onSubmit, onCancel }) {
       <h3 class="pin-manage-title">${title}</h3>
       <div class="pin-manage-body">
         ${fields.map(f => `
-          <div class="pin-manage-field">
-            <label for="${f.id}">${f.label}</label>
+<div class="pin-manage-field" data-field="${f.id}">
+  <label for="${f.id}">${f.label}</label>
 
-            <div class="pin-manage-input-wrap">
-              <input
-                id="${f.id}"
-                type="${f.type || 'text'}"
-                ${f.maxlength ? `maxlength="${f.maxlength}"` : ''}
-                ${f.placeholder ? `placeholder="${f.placeholder}"` : ''}
-                autocomplete="off"
-              >
-              ${(f.type === 'password') ? `
-                <button type="button"
-                        class="pin-manage-eye"
-                        data-eye-for="${f.id}"
-                        aria-label="إظهار كلمة المرور"
-                        aria-pressed="false">
-                  <i class="fa-solid fa-eye" aria-hidden="true"></i>
-                </button>
-              ` : ''}
-            </div>
-          </div>
+  <div class="pin-manage-input-wrap">
+    <input
+      id="${f.id}"
+      type="${f.type || 'text'}"
+      ${f.maxlength ? `maxlength="${f.maxlength}"` : ''}
+      ${f.placeholder ? `placeholder="${f.placeholder}"` : ''}
+      autocomplete="off"
+    >
+    ${(f.type === 'password') ? `
+      <button type="button"
+              class="pin-manage-eye"
+              data-eye-for="${f.id}"
+              aria-label="إظهار كلمة المرور"
+              aria-pressed="false">
+        <i class="fa-solid fa-eye" aria-hidden="true"></i>
+      </button>
+    ` : ''}
+  </div>
+
+  <!-- رسالة خاصة بالحقل -->
+  <div class="pin-manage-field-msg" id="${f.id}__msg" role="alert" aria-live="polite"></div>
+</div>
+
         `).join('')}
       </div>
 
@@ -103,12 +107,20 @@ function buildManageModal({ title, fields, onSubmit, onCancel }) {
         <button type="button" class="btn small primary" data-act="ok">حفظ</button>
       </div>
 
-      <div class="pin-manage-msg" aria-live="polite"></div>
+      <div class="pin-manage-msg" id="pinManageMsg" role="alert"></div>
     </div>
   `;
 
   const msg = wrap.querySelector('.pin-manage-msg');
   const backdrop = wrap.querySelector('.pin-manage-backdrop');
+  
+const okBtn = wrap.querySelector('button[data-act="ok"]');
+
+function setBusy(b) {
+  if (!okBtn) return;
+  okBtn.disabled = !!b;
+  okBtn.setAttribute('aria-busy', b ? 'true' : 'false');
+}
 
   // مزامنة زر إظهار/إخفاء كلمة المرور
   function syncEye(btn, input) {
@@ -138,41 +150,134 @@ function buildManageModal({ title, fields, onSubmit, onCancel }) {
   });
 
   // إغلاق المودال (مع معالجة الإلغاء)
-  function close(reason = 'close') {
-    document.documentElement.style.overflow = '';
-    wrap.remove();
-    if (reason === 'cancel') {
-      try { onCancel?.(); } catch {}
+function close(reason = 'close') {
+  document.documentElement.style.overflow = '';
+  setBusy(false);
+  wrap.remove();
+  if (reason === 'cancel') {
+    try { onCancel?.(); } catch {}
+  }
+}
+
+
+// رسالة داخل المودال (تدعم type: info | error | warning | success)
+function setMsg(t, type = 'info') {
+  if (!msg) return;
+  msg.textContent = String(t || '');
+  msg.dataset.type = type;
+}
+
+  // ===== NEW: إدارة الحقل الخاطئ + التركيز عليه =====
+function clearInvalid() {
+  // نظّف الحقول
+  wrap.querySelectorAll('input[aria-invalid="true"]').forEach(inp => {
+    inp.removeAttribute('aria-invalid');
+    inp.classList.remove('is-invalid');
+    if (inp.getAttribute('aria-describedby')) inp.removeAttribute('aria-describedby');
+  });
+
+  // نظّف رسائل الحقول
+  wrap.querySelectorAll('.pin-manage-field-msg').forEach(el => {
+    el.textContent = '';
+    el.dataset.type = '';
+  });
+
+  // نظّف الرسالة العامة
+  if (msg) {
+    msg.textContent = '';
+    msg.dataset.type = '';
+  }
+}
+
+function invalid(fieldId, message, type = 'error') {
+  clearInvalid();
+
+  const inp = fieldId ? wrap.querySelector('#' + fieldId) : null;
+  const fieldMsg = fieldId ? wrap.querySelector('#' + fieldId + '__msg') : null;
+
+  // لو عندنا حقل محدد -> اعرض الرسالة تحته
+  if (inp && fieldMsg) {
+    inp.setAttribute('aria-invalid', 'true');
+    inp.classList.add('is-invalid');
+
+    fieldMsg.textContent = String(message || '');
+    fieldMsg.dataset.type = type;
+
+    // ربط الرسالة بالحقل لأدوات الوصول
+    inp.setAttribute('aria-describedby', fieldMsg.id);
+
+    inp.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => {
+      inp.focus?.();
+      inp.select?.();
+    }, 0);
+    return;
+  }
+
+  // fallback: رسالة عامة (بدون حقل)
+  if (msg) {
+    msg.textContent = String(message || '');
+    msg.dataset.type = type;
+  }
+}
+
+
+
+  // ===== OPTIONAL: Enter = حفظ =====
+  wrap.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      const active = document.activeElement;
+      if (active && wrap.contains(active) && active.tagName === 'INPUT') {
+        e.preventDefault();
+        wrap.querySelector('button[data-act="ok"]')?.click();
+      }
     }
-  }
+  });
 
-  // رسالة داخل المودال
-  function setMsg(t) {
-    if (msg) msg.textContent = String(t || '');
-  }
-
-  // فلترة موحّدة لحقول PIN (حروف/أرقام فقط + حد أقصى 12)
-  wrap.querySelectorAll('input[type="password"]').forEach((inp) => {
-    inp.addEventListener('input', () => {
+  wrap.querySelectorAll('input').forEach(inp => {
+  inp.addEventListener('input', () => {
+    // فلترة كلمة المرور فقط (حروف/أرقام فقط + حد أقصى 12)
+    if (inp.type === 'password') {
       const v = String(inp.value || '');
       const cleaned = v.replace(/[^\p{L}\p{N}]+/gu, '').slice(0, 12);
       if (cleaned !== v) inp.value = cleaned;
-    });
+    }
+
+    // إزالة حالة الخطأ عند الكتابة
+if (inp.getAttribute('aria-invalid') === 'true') {
+  inp.removeAttribute('aria-invalid');
+  inp.classList.remove('is-invalid');
+
+  const desc = inp.getAttribute('aria-describedby');
+  if (desc) {
+    const el = wrap.querySelector('#' + CSS.escape(desc));
+    if (el && el.classList.contains('pin-manage-field-msg')) {
+      el.textContent = '';
+      el.dataset.type = '';
+    }
+    inp.removeAttribute('aria-describedby');
+  }
+}
+
+
+    // إذا تريد تمسح الرسالة فورًا عند أي تعديل:
+    // setMsg('');
   });
+});
 
   // أحداث النقر (OK/Cancel/Backdrop)
   wrap.addEventListener('click', (e) => {
     const act = e.target && e.target.closest && e.target.closest('button')?.dataset?.act;
     if (act === 'cancel') { close('cancel'); return; }
 
-    if (act === 'ok') {
+     if (act === 'ok') {
       const values = {};
       fields.forEach(f => { values[f.id] = (wrap.querySelector('#' + f.id)?.value || '').trim(); });
-      onSubmit(values, { close, setMsg });
+onSubmit(values, { close, setMsg, invalid, clearInvalid, setBusy });
       return;
     }
 
-    if (e.target === backdrop) close('cancel');
+    if (e.target === backdrop) return;
   });
 
   // ESC للإغلاق
@@ -245,6 +350,56 @@ function injectPrivacySection(bus) {
   const visBox = sec.querySelector('.pin-vis-box');
   const sessionBox = sec.querySelector('.pin-session-box');
 
+  
+    // مدد الخمول
+  const IDLE_OPTIONS = [
+    { value: 15,  label: '15 ثانية' },
+    { value: 30,  label: '30 ثانية' },
+    { value: 60,  label: '1 دقيقة' },
+    { value: 120, label: '2 دقائق' },
+    { value: 180, label: '3 دقائق' },
+    { value: 300, label: '5 دقائق' },
+    { value: 600, label: '10 دقائق' }
+  ];
+
+  function fillIdleSelect() {
+    if (!idle) return;
+    idle.innerHTML = '';
+    IDLE_OPTIONS.forEach(opt => {
+      const o = document.createElement('option');
+      o.value = String(opt.value);
+      o.textContent = opt.label;
+      idle.appendChild(o);
+    });
+  }
+
+  function fmtIdleLabel(seconds) {
+    seconds = Number(seconds) || 60;
+    if (seconds < 60) return `${seconds} ثانية`;
+    const m = Math.round(seconds / 60);
+    return `${m} دقيقة`;
+  }
+  
+    // مدد الجلسة المفتوحة
+  const SESSION_OPTIONS = [
+    { value: 5,  label: '5 دقائق' },
+    { value: 15, label: '15 دقيقة' },
+    { value: 30, label: '30 دقيقة' },
+    { value: 60, label: '60 دقيقة' }
+  ];
+
+  function fillSessionSelect() {
+    if (!sessionSel) return;
+    sessionSel.innerHTML = '';
+    SESSION_OPTIONS.forEach(opt => {
+      const o = document.createElement('option');
+      o.value = String(opt.value);
+      o.textContent = opt.label;
+      sessionSel.appendChild(o);
+    });
+  }
+
+
   // حالة الجلسة المفتوحة
   const getSessionUntil = () => {
     const u = parseInt(lsGet(PIN_KEYS.sessionUntil, '0'), 10) || 0;
@@ -308,8 +463,19 @@ function injectPrivacySection(bus) {
   if (toggle) toggle.checked = isEnabled();
 
   if (idle) {
-    const v = lsGet(PIN_KEYS.idleMin, '3');
-    idle.value = (v === '2' || v === '3' || v === '5' || v === '10') ? v : '3';
+    fillIdleSelect();
+
+    // الافتراضي التلقائي: 60 ثانية (1 دقيقة)
+    const saved = parseInt(lsGet(PIN_KEYS.idleMin, '60'), 10) || 60;
+    const allowed = new Set(IDLE_OPTIONS.map(x => x.value));
+    const safe = allowed.has(saved) ? saved : 60;
+
+    idle.value = String(safe);
+
+    // إن لم توجد قيمة محفوظة سابقاً، احفظ الافتراضي
+    if (lsGet(PIN_KEYS.idleMin, null) == null) {
+      lsSet(PIN_KEYS.idleMin, String(60));
+    }
   }
 
   if (vis) {
@@ -317,8 +483,18 @@ function injectPrivacySection(bus) {
   }
 
   if (sessionSel) {
-    const v = lsGet(PIN_KEYS.sessionMin, '15');
-    sessionSel.value = (v === '5' || v === '15' || v === '30' || v === '60') ? v : '15';
+    fillSessionSelect();
+
+    const v = parseInt(lsGet(PIN_KEYS.sessionMin, '15'), 10) || 15;
+    const allowed = new Set(SESSION_OPTIONS.map(x => x.value));
+    const safe = allowed.has(v) ? v : 15;
+
+    sessionSel.value = String(safe);
+
+    // إن لم توجد قيمة محفوظة سابقاً، احفظ الافتراضي
+    if (lsGet(PIN_KEYS.sessionMin, null) == null) {
+      lsSet(PIN_KEYS.sessionMin, String(15));
+    }
   }
 
   /* ===== أحداث الواجهة ===== */
@@ -334,9 +510,9 @@ function injectPrivacySection(bus) {
 
   idle?.addEventListener('change', () => {
     if (idle.disabled) return;
-    const v = idle.value;
-    lsSet(PIN_KEYS.idleMin, v);
-    showSuccess(`تم ضبط مدة الخمول إلى ${highlight(v)} دقائق.`);
+    const v = parseInt(idle.value, 10) || 60;
+    lsSet(PIN_KEYS.idleMin, String(v));
+    showSuccess(`تم ضبط مدة الخمول إلى ${highlight(fmtIdleLabel(v))}.`);
   });
 
   vis?.addEventListener('change', () => {
@@ -380,8 +556,32 @@ function injectPrivacySection(bus) {
   syncOpenSessionUI();
   syncPinUIAvailability();
 
+  // استقبال إعادة ضبط تفضيلات الخصوصية من زر resetSettingsBtn (utils.js)
+  if (!window.__pinResetPrivacyPrefsBound) {
+    window.__pinResetPrivacyPrefsBound = true;
+
+    window.addEventListener('FT_RESET_PRIVACY_PREFS', () => {
+      // الافتراضيات:
+      // idle = 60 ثانية، lockOnVis = 0، sessionMin = 15، وإلغاء أي جلسة مفتوحة
+      lsSet(PIN_KEYS.idleMin, '60');
+      lsSet(PIN_KEYS.lockOnVis, '0');
+      lsSet(PIN_KEYS.sessionMin, '15');
+      lsDel(PIN_KEYS.sessionUntil);
+
+      // تحديث عناصر الواجهة فورًا إن كانت موجودة
+      if (idle) idle.value = '60';
+      if (vis) vis.checked = false;
+      if (sessionSel) sessionSel.value = '15';
+
+      // مزامنة حالة الأزرار/الإخفاء
+      syncPinUIAvailability();
+      syncOpenSessionUI();
+    });
+  }
+
   // مزامنة بين التبويبات عبر BroadcastChannel
   if ('BroadcastChannel' in window) {
+
     const bc = new BroadcastChannel('pin_channel');
     bc.addEventListener('message', (e) => {
       const msg = e?.data || null;
@@ -420,25 +620,35 @@ function injectPrivacySection(bus) {
           { id: 'pin2', label: 'تأكيد كلمة المرور', type: 'password', maxlength: 12, placeholder: 'أعد الإدخال' },
           { id: 'hint', label: 'تلميح (اختياري)', type: 'text', maxlength: 40, placeholder: 'مثال: رقم خاص...' }
         ],
-        onSubmit: async (vals, ui) => {
-          const p1 = vals.pin1 || '';
-          const p2 = vals.pin2 || '';
-          if (!p1 || p1.length < 4) { ui.setMsg('كلمة المرور يجب أن تكون 4 محارف على الأقل.'); return; }
-          if (p1 !== p2) { ui.setMsg('كلمة المرور غير متطابقة.'); return; }
+       onSubmit: async (vals, ui) => {
+  const p1 = vals.pin1 || '';
+  const p2 = vals.pin2 || '';
 
-          try {
-            await setNewPin(p1, vals.hint || '');
-            lsSet(PIN_KEYS.enabled, '1');
-            if (!lsGet(PIN_KEYS.idleMin, null)) lsSet(PIN_KEYS.idleMin, '3');
-            if (!lsGet(PIN_KEYS.lockOnVis, null)) lsSet(PIN_KEYS.lockOnVis, '0'); // default OFF
-            showSuccess('تم تفعيل القفل بنجاح.');
-            ui.close();
-            syncOpenSessionUI();
-            syncPinUIAvailability();
-            bus.emit('pin:settingsChanged');
-          } catch {
-            showError('تعذر تفعيل القفل (WebCrypto).');
-          }
+  if (!p1) { ui.invalid('pin1', 'أدخل كلمة المرور.'); return; }
+  if (p1.length < 4) { ui.invalid('pin1', 'كلمة المرور يجب أن تكون 4 محارف على الأقل.'); return; }
+
+  if (!p2) { ui.invalid('pin2', 'أعد إدخال كلمة المرور للتأكيد.'); return; }
+  if (p1 !== p2) { ui.invalid('pin2', 'كلمة المرور غير متطابقة.'); return; }
+
+  ui.setBusy(true);
+try {
+  await setNewPin(p1, vals.hint || '');
+
+  await lsSet(PIN_KEYS.enabled, '1');
+  if (!lsGet(PIN_KEYS.idleMin, null)) await lsSet(PIN_KEYS.idleMin, '60'); // default 1 minute
+  if (!lsGet(PIN_KEYS.lockOnVis, null)) await lsSet(PIN_KEYS.lockOnVis, '0'); // default OFF
+
+  showSuccess('تم تفعيل القفل بنجاح.');
+  ui.close();
+  syncOpenSessionUI();
+  syncPinUIAvailability();
+  bus.emit('pin:settingsChanged');
+} catch {
+  showError('تعذر تفعيل القفل (WebCrypto).');
+} finally {
+  ui.setBusy(false);
+}
+
         },
         onCancel: () => {
           toggle.checked = false;
@@ -463,30 +673,34 @@ function injectPrivacySection(bus) {
         ],
         onSubmit: async (vals, ui) => {
           const cur = (vals.curPin || '').trim();
-          if (!cur) { ui.setMsg('أدخل كلمة المرور الحالية.'); return; }
+if (!cur) { ui.invalid('curPin', 'أدخل كلمة المرور الحالية.'); return; }
 
-          try {
-            const ok = await verifyPin(cur);
-            if (!ok) { ui.setMsg('كلمة المرور غير صحيحة.'); return; }
+ui.setBusy(true);
+try {
+  const ok = await verifyPin(cur);
+  if (!ok) { ui.invalid('curPin', 'كلمة المرور غير صحيحة.'); return; }
 
-            lsSet(PIN_KEYS.enabled, '0');
-            lsDel(PIN_KEYS.salt);
-            lsDel(PIN_KEYS.hash);
-            lsDel(PIN_KEYS.hint);
-            lsDel(PIN_KEYS.tries);
-            lsDel(PIN_KEYS.lockUntil);
-            lsDel(PIN_KEYS.sessionUntil);
-            lsDel(PIN_KEYS.sessionMin);
-            lsDel(PIN_KEYS.lastTryAt);
+  await lsSet(PIN_KEYS.enabled, '0');
+  lsDel(PIN_KEYS.salt);
+  lsDel(PIN_KEYS.hash);
+  lsDel(PIN_KEYS.hint);
+  lsDel(PIN_KEYS.tries);
+  lsDel(PIN_KEYS.lockUntil);
+  lsDel(PIN_KEYS.sessionUntil);
+  lsDel(PIN_KEYS.sessionMin);
+  lsDel(PIN_KEYS.lastTryAt);
 
-            bus.emit('pin:disabled');
-            showSuccess('تم تعطيل قفل كلمة المرور ومسح بياناته من الجهاز.');
-            ui.close();
-            syncOpenSessionUI();
-            syncPinUIAvailability();
-          } catch {
-            ui.setMsg('تعذر التحقق من كلمة المرور.');
-          }
+  bus.emit('pin:disabled');
+  showSuccess('تم تعطيل قفل كلمة المرور ومسح بياناته من الجهاز.');
+  ui.close();
+  syncOpenSessionUI();
+  syncPinUIAvailability();
+} catch {
+  ui.setMsg('تعذر التحقق من كلمة المرور.', 'error');
+} finally {
+  ui.setBusy(false);
+}
+
         },
         onCancel: () => {
           toggle.checked = true;
@@ -516,22 +730,37 @@ function injectPrivacySection(bus) {
         const n1 = vals.newPin1 || '';
         const n2 = vals.newPin2 || '';
 
-        if (!oldPin) { ui.setMsg('أدخل كلمة المرور الحالية.'); return; }
+        // ✅ بدل setMsg: ركّز على الحقل الناقص
+        if (!oldPin) { ui.invalid('oldPin', 'أدخل كلمة المرور الحالية.'); return; }
 
-        try {
-          const ok = await verifyPin(oldPin);
-          if (!ok) { ui.setMsg('PIN الحالي غير صحيح.'); return; }
+ui.setBusy(true);
+try {
+  const ok = await verifyPin(oldPin);
+  if (!ok) { ui.invalid('oldPin', 'كلمة المرور غير صحيحة.'); return; }
+  
+// منع تغيير كلمة المرور لنفس كلمة المرور الحالية
+if (n1 && n1 === oldPin) {
+  ui.invalid('newPin1', 'كلمة المرور الجديدة يجب أن تكون مختلفة عن الحالية.');
+  return;
+}
 
-          if (!n1 || n1.length < 4) { ui.setMsg('كلمة المرور الجديد يجب أن يكون 4 على الأقل.'); return; }
-          if (n1 !== n2) { ui.setMsg('كلمة المرور الجديد غير متطابق.'); return; }
+  if (!n1) { ui.invalid('newPin1', 'أدخل كلمة المرور الجديدة.'); return; }
+  if (n1.length < 4) { ui.invalid('newPin1', 'كلمة المرور الجديدة يجب أن تكون 4 محارف على الأقل.'); return; }
 
-          await setNewPin(n1, vals.hint || lsGet(PIN_KEYS.hint, ''));
-          showSuccess('تم تغيير كلمة المرور بنجاح.');
-          ui.close();
-        } catch {
-          showError('تعذر تغيير كلمة المرور (WebCrypto).');
-        }
+  if (!n2) { ui.invalid('newPin2', 'أعد إدخال كلمة المرور الجديدة للتأكيد.'); return; }
+  if (n1 !== n2) { ui.invalid('newPin2', 'كلمة المرور الجديدة غير متطابقة.'); return; }
+
+  await setNewPin(n1, vals.hint || lsGet(PIN_KEYS.hint, ''));
+  showSuccess('تم تغيير كلمة المرور بنجاح.');
+  ui.close();
+} catch {
+  showError('تعذر تغيير كلمة المرور (WebCrypto).');
+} finally {
+  ui.setBusy(false);
+}
+
       }
+
     });
   });
 }

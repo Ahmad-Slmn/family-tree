@@ -30,6 +30,17 @@ export const getArabicOrdinalF = (n) => ARABIC_ORDINALS_F[n - 1] || String(n);
 // توافق قديم: المذكر كافتراضي
 export function getArabicOrdinal(n){ return getArabicOrdinalM(n); }
 
+function pinGet(k, def = null) {
+  const PS = window.__PinStore;
+  if (PS?.PERSISTED_KEYS?.has?.(k)) return PS.getSync(k, def);
+  try {
+    const v = localStorage.getItem(k);
+    return (v == null) ? def : v;
+  } catch {
+    return def;
+  }
+}
+
 /* =======================
    ⚑ حالة «إخفاء العائلات الأساسية»
 ======================= */
@@ -139,9 +150,19 @@ export function textEl(tag, txt, cls) {
 /* =======================
    نافذة تأكيد عامة
 ======================= */
+/* =======================
+   نافذة تأكيد عامة (v2)
+   - تدعم bodyNode بدل message
+   - تدعم preConfirm async
+   - تدعم confirmDisabledUntilValid + onInputValidChange(setValid)
+======================= */
 export function showConfirmModal({
   title = 'تأكيد',
   message = 'هل أنت متأكد؟',
+  bodyNode = null,                 // NEW
+  preConfirm = null,               // NEW async () => boolean
+  confirmDisabledUntilValid = false,// NEW
+  onInputValidChange = null,       // NEW (اختياري) (setValid)=>void
   confirmText = 'تأكيد',
   cancelText = 'إلغاء',
   variant = 'default',
@@ -151,21 +172,30 @@ export function showConfirmModal({
 } = {}) {
   const modal = byId('confirmModal'),
         titleEl = byId('confirmTitle'),
-        confirmTextEl = byId('confirmText'),
+        confirmBodyEl = byId('confirmText'),
         yesBtn = byId('confirmYes'),
         noBtn = byId('confirmNo');
 
-  // بدل false: رجّع dismiss لأن المودال غير موجود أصلاً
-  if (!modal || !titleEl || !confirmTextEl || !yesBtn || !noBtn) {
+  if (!modal || !titleEl || !confirmBodyEl || !yesBtn || !noBtn) {
     return Promise.resolve('dismiss');
   }
 
-  // نصوص + حالة مظهر
+  // نصوص + مظهر
   titleEl.textContent = title;
-  confirmTextEl.textContent = message;
+
+  // bodyNode له أولوية، وإلا message نص عادي
+  confirmBodyEl.innerHTML = '';
+  if (bodyNode && bodyNode.nodeType === 1) {
+    confirmBodyEl.appendChild(bodyNode);
+  } else {
+    confirmBodyEl.textContent = message;
+  }
+
   yesBtn.textContent = confirmText;
   noBtn.textContent  = cancelText;
+
   modal.classList.toggle('danger', variant === 'danger');
+  modal.classList.toggle('warning', variant === 'warning');
 
   // ARIA
   const ariaRole = (arguments[0] && arguments[0]._ariaRole) || 'dialog';
@@ -181,7 +211,7 @@ export function showConfirmModal({
   document.documentElement.style.overflow = 'hidden';
   modal.classList.add('show');
 
-  // استبدال الأزرار لفصل المستمعات القديمة
+  // استبدال الأزرار لفصل المستمعات القديمة (يبقى داخل المودال فقط)
   const replace = (btn) => { const c = btn.cloneNode(true); btn.parentNode.replaceChild(c, btn); return c; };
   const newYes = replace(yesBtn), newNo = replace(noBtn);
   const prevFocus = document.activeElement;
@@ -191,6 +221,7 @@ export function showConfirmModal({
 
   let _resolved = false;
   let _resolve = null;
+
   function resolveOnce(val) {
     if (_resolved) return;
     _resolved = true;
@@ -212,7 +243,6 @@ export function showConfirmModal({
     try { prevFocus?.focus(); } catch {}
   }
 
-  // التغيير الجذري: الخلفية = dismiss (إغلاق فقط)
   function onBackdrop(e) {
     if (closeOnBackdrop && e.target === modal) {
       cleanup();
@@ -220,7 +250,6 @@ export function showConfirmModal({
     }
   }
 
-  // ESC = dismiss (إغلاق فقط)
   function onKey(e) {
     if (e.key === 'Escape' && closeOnEsc) {
       e.preventDefault();
@@ -239,17 +268,75 @@ export function showConfirmModal({
   modal.addEventListener('click', onBackdrop);
   modal.addEventListener('keydown', onKey);
 
+  // إدارة تفعيل زر التأكيد
+  const setValid = (ok) => {
+    if (!confirmDisabledUntilValid) return;
+    if (ok) newYes.removeAttribute('disabled');
+    else newYes.setAttribute('disabled', '');
+  };
+  if (confirmDisabledUntilValid) setValid(false);
+
+  // امنح الـ caller setter بدون ما يلمس أزرار المودال
+  try {
+    if (typeof onInputValidChange === 'function') {
+      onInputValidChange(setValid);
+    }
+  } catch {}
+
   // تركيز مبدئي
   setTimeout(() => (defaultFocus === 'confirm' ? newYes : newNo)?.focus(), 0);
 
-  // رجع 3 حالات بدل true/false
+  // رجع 3 حالات: confirm / cancel / dismiss
   return new Promise((resolve) => {
     _resolve = resolve;
-    newYes.addEventListener('click', () => { cleanup(); resolveOnce('confirm'); });
-    newNo .addEventListener('click', () => { cleanup(); resolveOnce('cancel'); });
+
+    newNo.addEventListener('click', () => {
+      cleanup();
+      resolveOnce('cancel');
+    });
+
+    newYes.addEventListener('click', async () => {
+      // لو في تعطيل حتى valid—تأكد (احتياط)
+      if (confirmDisabledUntilValid && newYes.hasAttribute('disabled')) return;
+
+      // دعم preConfirm async: لو رجع false لا نغلق
+      if (typeof preConfirm === 'function') {
+        try {
+          newYes.setAttribute('disabled', '');
+          newNo.setAttribute('disabled', '');
+          newYes.classList.add('loading');
+
+          const ok = await preConfirm();
+
+          newYes.classList.remove('loading');
+          newNo.removeAttribute('disabled');
+
+          if (!ok) {
+            // ابقَ داخل المودال، وأعد تفعيل زر التأكيد حسب الـ setValid
+            if (!confirmDisabledUntilValid) newYes.removeAttribute('disabled');
+            return;
+          }
+
+          cleanup();
+          resolveOnce('confirm');
+          return;
+
+        } catch (err) {
+          newYes.classList.remove('loading');
+          newNo.removeAttribute('disabled');
+          if (!confirmDisabledUntilValid) newYes.removeAttribute('disabled');
+
+          console.error('preConfirm error:', err);
+          showError('حدث خطأ أثناء تنفيذ العملية. حاول مرة أخرى.');
+          return;
+        }
+      }
+
+      cleanup();
+      resolveOnce('confirm');
+    });
   });
 }
-
 
 /* =======================
    🎨 إدارة الثيم
@@ -327,7 +414,7 @@ export function persistUserPreferences({ theme, family } = {}, options = {}) {
 /* =======================
    ♻️ إعادة التفضيلات إلى الافتراضي
 ======================= */
-function resetPreferences({ theme = true, family = true, font = true } = {}) {
+function resetPreferences({ theme = true, family = true, font = true, privacy = false } = {}) {
   const items = [];
 
   if (theme) {
@@ -380,10 +467,17 @@ function resetPreferences({ theme = true, family = true, font = true } = {}) {
     const r = byId('fontSizeRange'); if (r) r.value = currentFontSize;
     items.push('حجم الخط');
   }
+  
+if (privacy) {
+  // مصدر الحقيقة الوحيد: security.js (PinStore/lsSet)
+  window.dispatchEvent(new CustomEvent('FT_RESET_PRIVACY_PREFS'));
+  items.push('الخصوصية');
+}
+
 
   if (!items.length) { showInfo('لم يتم اختيار أي إعداد لإعادة التعيين.'); return; }
   const colored = items.map(highlight);
-  showSuccess(`✅ تمت إعادة ${colored.join(' و ')} إلى الوضع الافتراضي.`);
+  showSuccess(`تمت إعادة ${colored.join(' و ')} إلى الوضع الافتراضي.`);
 }
 
 /* =======================
@@ -404,11 +498,39 @@ function showResetOptionsModal({ title = 'تأكيد إعادة القيم', onC
   const defaultFamilyKey   = getDefaultFamilyKey();
   const hasVisibleFamily   = !!defaultFamilyKey;
 
+// ===== إعدادات الخصوصية (كلمة المرور) الافتراضية =====
+const PIN_DEFAULTS = { idle: 60, vis: '0', sessionMin: 15 };
+
+// قراءة تفضيلات الخصوصية الحالية (مع تمييز عدم وجود المفتاح)
+const pinIdleRaw  = pinGet('pin_idle_minutes', String(PIN_DEFAULTS.idle));
+const pinVisRaw   = pinGet('pin_lock_on_visibility', PIN_DEFAULTS.vis);
+const pinSessRaw  = pinGet('pin_session_minutes', String(PIN_DEFAULTS.sessionMin));
+const pinUntilRaw = pinGet('pin_session_until', null); // يميّز بين "غير موجود" و "0"
+
+const pinIdle = parseInt(pinIdleRaw, 10) || PIN_DEFAULTS.idle;
+const pinVis  = String(pinVisRaw ?? PIN_DEFAULTS.vis);
+const pinSess = parseInt(pinSessRaw, 10) || PIN_DEFAULTS.sessionMin;
+
+// الافتراضي الحقيقي: القيم الافتراضية + عدم وجود مفتاح session_until أساسًا
+const pinIsDefault =
+  (pinIdle === PIN_DEFAULTS.idle) &&
+  (pinVis === PIN_DEFAULTS.vis) &&
+  (pinSess === PIN_DEFAULTS.sessionMin) &&
+  (pinUntilRaw == null);
+
   const opts = [
-    { id: 'reset_opt_theme',  changed: currentTheme !== 'default',             label: `إعادة النمط إلى (${themeDefaultLabel})`,    info: 'النمط بالفعل على الوضع الإفتراضي' },
-    { id: 'reset_opt_font',   changed: parseInt(currentFontSize) !== 16,       label: `إعادة حجم الخط إلى (${fontDefaultLabel})`,   info: 'حجم الخط بالفعل على الوضع الإفتراضي' },
-    { id: 'reset_opt_core',   changed: !!getHasHiddenCoreFamilies(),           label: 'إظهار العائلات الأساسية المخفية',            info: 'لا توجد عائلات أساسية مخفية' }
+    { id: 'reset_opt_theme',   changed: currentTheme !== 'default',        label: `إعادة النمط إلى (${themeDefaultLabel})`,        info: 'النمط بالفعل على الوضع الإفتراضي' },
+    { id: 'reset_opt_font',    changed: parseInt(currentFontSize) !== 16,  label: `إعادة حجم الخط إلى (${fontDefaultLabel})`,      info: 'حجم الخط بالفعل على الوضع الإفتراضي' },
+    { id: 'reset_opt_core',    changed: !!getHasHiddenCoreFamilies(),      label: 'إظهار العائلات الأساسية المخفية',               info: 'لا توجد عائلات أساسية مخفية' },
+
+    {
+      id: 'reset_opt_privacy',
+      changed: !pinIsDefault,
+      label: 'إعادة تفضيلات الخصوصية',
+      info: 'تفضيلات الخصوصية بالفعل على الوضع الإفتراضي'
+    }
   ];
+
   if (hasVisibleFamily) {
     opts.push({ id: 'reset_opt_family', changed: currentFamilyKey !== defaultFamilyKey, label: `إعادة العائلة الحالية إلى (${familyDefaultLabel})`, info: 'العائلة بالفعل على الوضع الإفتراضي' });
   }
@@ -431,7 +553,9 @@ function showResetOptionsModal({ title = 'تأكيد إعادة القيم', onC
   const replace = (btn) => { const c = btn.cloneNode(true); btn.parentNode.replaceChild(c, btn); return c; };
   const newYes = replace(yesBtn), newNo = replace(noBtn);
 
-  const inputs = ['reset_opt_theme','reset_opt_family','reset_opt_font','reset_opt_core'].map((id) => byId(id)).filter(Boolean);
+  const inputs = ['reset_opt_theme','reset_opt_family','reset_opt_font','reset_opt_core','reset_opt_privacy']
+    .map((id) => byId(id))
+    .filter(Boolean);
   const checkAny = () => inputs.some((i) => i.checked);
   const alertMsg = 'يرجى اختيار إعداد واحد على الأقل.';
 
@@ -453,44 +577,47 @@ function showResetOptionsModal({ title = 'تأكيد إعادة القيم', onC
   }));
 
   newYes.addEventListener('click', async () => {
-    const theme = !!byId('reset_opt_theme')?.checked;
-    const family = !!byId('reset_opt_family')?.checked;
-    const font   = !!byId('reset_opt_font')?.checked;
-    const core   = !!byId('reset_opt_core')?.checked;
+    const theme   = !!byId('reset_opt_theme')?.checked;
+    const family  = !!byId('reset_opt_family')?.checked;
+    const font    = !!byId('reset_opt_font')?.checked;
+    const core    = !!byId('reset_opt_core')?.checked;
+    const privacy = !!byId('reset_opt_privacy')?.checked;
 
-    if (!theme && !family && !font && !core) { showInfo(alertMsg); return; }
+    if (!theme && !family && !font && !core && !privacy) { showInfo(alertMsg); return; }
+
     modal.classList.remove('show');
 
-    if ((theme || family || font) && onConfirm) onConfirm({ theme, family, font });
+    if ((theme || family || font || privacy) && onConfirm) onConfirm({ theme, family, font, privacy });
 
     // رسائل مناسبة عند إظهار العائلات الأساسية المخفية
-    if (core) {
-      try {
-        const restored = await triggerResetHiddenCore();
-        // إعادة رسم الواجهة بعد تحديث الرؤية
-        window.dispatchEvent(new CustomEvent('FT_VISIBILITY_REFRESH'));
+// رسائل مناسبة عند إظهار العائلات الأساسية المخفية
+if (core) {
+  try {
+    const restored = await triggerResetHiddenCore();
 
-        // يدعم الشكلين: رقم مباشر أو كائن { count, labels }
-        const info = (restored && typeof restored === 'object') ? restored
-          : { count: Number(restored) || 0, labels: [] };
+    // إعادة رسم الواجهة بعد تحديث الرؤية
+    window.dispatchEvent(new CustomEvent('FT_VISIBILITY_REFRESH'));
 
-        const n = Number(info.count) || 0;
+    // يدعم الشكلين: رقم مباشر أو كائن { count, labels }
+    const info = (restored && typeof restored === 'object') ? restored
+      : { count: Number(restored) || 0, labels: [] };
 
-        if (n === 1) {
-          const label = (info.labels && info.labels[0]) || 'العائلة الأساسية';
-          // 2) تم إظهار العائلة المخفية + اسم العائلة مميز بـ highlight
-          showSuccess(`تم إظهار عائلة ${highlight(label)} المخفية.`);
+    const n = Number(info.count) || 0;
 
-        } else if (n > 1) {
-          // 3) تمييز العدد بـ highlight
-          showSuccess(`تم إظهار ${highlight(String(n))} من العائلات الأساسية المخفية.`);
-        }
-        // لا حاجة لفرع n === 0 لأن الخيار لا يكون متاحاً أصلاً بدون عائلات مخفية
-      } catch {
-        showError('تعذّر إظهار العائلات الأساسية المخفية، حاول مرة أخرى.');
-      }
+    if (n === 1) {
+      const label = (info.labels && info.labels[0]) || 'العائلة الأساسية';
+      showSuccess(`تم إظهار عائلة ${highlight(label)} المخفية.`);
+    } else if (n > 1) {
+      showSuccess(`تم إظهار ${highlight(String(n))} من العائلات الأساسية المخفية.`);
+    } else {
+      // احتياط: لو رجّع 0 لأي سبب، أعطِ نجاحًا واضحًا بدل “لا شيء”
+      showSuccess('تم تحديث عرض العائلات الأساسية (لا توجد عائلات مخفية حاليًا).');
     }
 
+  } catch {
+    showError('تعذّر إظهار العائلات الأساسية المخفية، حاول مرة أخرى.');
+  }
+}
 
   });
 
@@ -542,7 +669,26 @@ function initResetSettings() {
     const fontIsDefault   = Number(currentFontSize) === 16;
     const coreIsDefault   = !getHasHiddenCoreFamilies();
 
-    const isDefault = themeIsDefault && fontIsDefault && familyIsDefault && coreIsDefault;
+        // ===== فحص افتراضي الخصوصية (PIN) =====
+    const PIN_DEFAULTS = { idle: 60, vis: '0', sessionMin: 15 };
+
+
+const pinIdleRaw  = pinGet('pin_idle_minutes', String(PIN_DEFAULTS.idle));
+const pinVisRaw   = pinGet('pin_lock_on_visibility', PIN_DEFAULTS.vis);
+const pinSessRaw  = pinGet('pin_session_minutes', String(PIN_DEFAULTS.sessionMin));
+const pinUntilRaw = pinGet('pin_session_until', null);
+
+const pinIdle = parseInt(pinIdleRaw, 10) || PIN_DEFAULTS.idle;
+const pinVis  = String(pinVisRaw ?? PIN_DEFAULTS.vis);
+const pinSess = parseInt(pinSessRaw, 10) || PIN_DEFAULTS.sessionMin;
+
+const privacyIsDefault =
+  (pinIdle === PIN_DEFAULTS.idle) &&
+  (pinVis === PIN_DEFAULTS.vis) &&
+  (pinSess === PIN_DEFAULTS.sessionMin) &&
+  (pinUntilRaw == null);
+
+    const isDefault = themeIsDefault && fontIsDefault && familyIsDefault && coreIsDefault && privacyIsDefault;
 
     if (isDefault) {
       showInfo('تفضيلات الواجهة حالياً على الوضع الافتراضي بالفعل.');

@@ -1837,7 +1837,6 @@ byId('statsBtn')?.addEventListener('click', ()=>{
 
 
   byId('closeStats')?.addEventListener('click', closeStatsModal);
-  byId('statsModal')?.addEventListener('click', e => { if (e.target.id === 'statsModal') closeStatsModal(); });
 
 // === [إضافة جديدة تبدأ هنا] تحديث قائمة "النطاق" عند تغيّر رؤية العائلات ===
 const refreshScopeOptions = () => {
