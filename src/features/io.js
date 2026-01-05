@@ -689,31 +689,46 @@ function bindExportButton() {
       if (sum.hasBlockers) showError(`يوجد تنبيهات تمنع التصدير: ${msg}`);
       else showWarning(`يوجد تنبيهات قبل التصدير: ${msg}`);
 
-      (async () => {
-        const res = await showConfirmModal({
-          title: sum.hasBlockers ? 'تنبيهات تمنع التصدير' : 'تنبيهات قبل التصدير',
-          message:
-            `يوجد تنبيهات مرتبطة بهذه العائلة.\n\n` +
-            `${msg}\n\n` +
-            `اختر أحد الخيارين:`,
-          confirmText: 'عرض التنبيهات',
-          cancelText: 'تصدير',
-          variant: sum.hasBlockers ? 'danger' : 'warning',
-          closeOnBackdrop: true,
-          closeOnEsc: true,
-          defaultFocus: 'confirm'
-        });
+(async () => {
+  const isBlocker = !!sum.hasBlockers;
 
-        if (res === 'confirm') {
-          openValidationModal(`export:${key}`);
-          return;
-        }
-        if (res === 'cancel') {
-          doExport();
-          showSuccess('تم التصدير رغم وجود التنبيهات.');
-          return;
-        }
-      })();
+  const res = await showConfirmModal({
+    title: isBlocker ? 'تنبيهات تمنع التصدير' : 'تنبيهات قبل التصدير',
+    message:
+      `يوجد تنبيهات مرتبطة بهذه العائلة.\n\n` +
+      `${msg}\n\n` +
+      (isBlocker ? `لا يمكن التصدير قبل معالجة التنبيهات.`
+        : `يمكنك التصدير رغم التنبيهات أو عرضها أولاً.`),
+
+    // وفق القاعدة: confirm لا يغلق بالخارج
+    closeOnBackdrop: false,
+    closeOnEsc: true,
+
+    variant: isBlocker ? 'danger' : 'warning',
+
+    // اجعل "cancel" آمن دائمًا (Esc = cancel)
+    confirmText: isBlocker ? 'عرض التنبيهات' : 'تصدير رغم التنبيهات',
+    cancelText:  isBlocker ? 'إلغاء'         : 'عرض التنبيهات',
+
+    defaultFocus: isBlocker ? 'confirm' : 'cancel'
+  });
+
+  if (res === 'confirm') {
+    if (isBlocker) {
+      openValidationModal(`export:${key}`);
+      return;
+    }
+    doExport();
+    showSuccess('تم التصدير رغم وجود التنبيهات.');
+    return;
+  }
+
+  // cancel (أو Esc) — آمن دائمًا
+  if (!isBlocker) {
+    openValidationModal(`export:${key}`);
+  }
+})();
+
 
       return; // امنع أي تنفيذ لاحق
     }
@@ -970,7 +985,8 @@ function bindHardReset(ctx) {
       cancelText: 'إلغاء',
       variant: 'danger',
       closeOnBackdrop: false,
-      closeOnEsc: false,
+closeOnEsc: true,
+
       defaultFocus: 'cancel',
 
       confirmDisabledUntilValid: true,

@@ -1,4 +1,4 @@
-// src/features/photoGallery.js
+// src/features/photoGallery.js — معرض الصور الجاهزة (تصنيفات + بحث + معاينة + اختيار صورة)
 import { byId, showError } from '../utils.js';
 
 /* =========================

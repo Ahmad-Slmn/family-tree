@@ -226,7 +226,6 @@ byId('printBtn')?.addEventListener('click', () => {
         confirmText: 'عرض التنبيهات',
         cancelText: 'طباعة',
         variant: 'danger',
-        closeOnBackdrop: true,
         closeOnEsc: true,
         defaultFocus: 'confirm'
       });
@@ -243,7 +242,6 @@ byId('printBtn')?.addEventListener('click', () => {
         return;
       }
 
-      // res === 'dismiss' => لا شيء
     })();
 
     // (1) منع الطباعة الآن

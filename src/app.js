@@ -436,9 +436,11 @@ function _lsGet(k, def = null) {
   try { const v = localStorage.getItem(k); return (v == null) ? def : v; } catch { return def; }
 }
 function _lsSet(k, v) {
-  if (PinStore.PERSISTED_KEYS?.has?.(k)) { PinStore.set(k, v); return; }
-  try { localStorage.setItem(k, String(v)); } catch { }
+  if (PinStore.PERSISTED_KEYS?.has?.(k)) return PinStore.set(k, v); // <-- رجّع Promise
+  try { localStorage.setItem(k, String(v)); } catch {}
+  return Promise.resolve();
 }
+
 function _lsDel(k) {
   if (PinStore.PERSISTED_KEYS?.has?.(k)) { PinStore.del?.(k); return; }
   try { localStorage.removeItem(k); } catch { }
@@ -599,7 +601,10 @@ function lockUI(reason = '', opts = {}) {
     setTimeout(() => _pin.input.focus(), 0);
   }
 
-_setMsg(reason || '', 'info');
+_setMsg(reason || '🔒 الواجهة مقفلة. أدخل كلمة المرور.', 'info');
+
+  const until = parseInt(_lsGet(PIN_KEYS.lockUntil, '0'), 10) || 0;
+if (until > _now()) startPinCooldown(until);
 
   // Focus trap داخل overlay
   if (!_pin.trapHandler) {
@@ -666,23 +671,11 @@ async function verifyAndUnlockFromUI() {
   const until = parseInt(_lsGet(PIN_KEYS.lockUntil, '0'), 10) || 0;
   const now = _now();
 
-  if (until > now) {
-    if (_pin.cooldownTimer) clearInterval(_pin.cooldownTimer);
+if (until > now) {
+  startPinCooldown(until);
+  return;
+}
 
-    const tick = () => {
-      const left = Math.max(0, until - _now());
-      _setMsg(`⏳ انتظر ${_secondsLeft(left)} ثانية ثم حاول مرة أخرى.`, 'warning');
-      if (left <= 0) {
-        clearInterval(_pin.cooldownTimer);
-        _pin.cooldownTimer = null;
-        _setMsg('يمكنك المحاولة الآن.', 'info');
-      }
-    };
-
-    tick();
-    _pin.cooldownTimer = setInterval(tick, 1000);
-    return;
-  }
 
   const salt = _lsGet(PIN_KEYS.salt, '');
   const storedHash = _lsGet(PIN_KEYS.hash, '');
@@ -740,14 +733,15 @@ async function verifyAndUnlockFromUI() {
 
     const freezeAt = nextFreezePoint(tries);
 
-    if (cooldownMs > 0) {
-      const lockUntil = _now() + cooldownMs;
-      _lsSet(PIN_KEYS.lockUntil, String(lockUntil));
+if (cooldownMs > 0) {
+  const lockUntil = _now() + cooldownMs;
+  _lsSet(PIN_KEYS.lockUntil, String(lockUntil));
 
-      const secs = _secondsLeft(cooldownMs);
-      _setMsg(`❌ محاولة خاطئة (${tries}/${freezeAt}). انتظر ${secs} ثانية ثم حاول مرة أخرى.`, 'error');
-      if (_pin.input) _pin.input.value = '';
-    } else {
+  // فضّي الإدخال وابدأ العدّاد فورًا (بدون انتظار ضغط جديد)
+  if (_pin.input) _pin.input.value = '';
+  startPinCooldown(lockUntil);
+  return;
+} else {
       _setMsg(`❌ محاولة خاطئة (${tries}/${freezeAt}) قبل الانتظار.`, 'error');
       _pin.input?.focus?.();
       _pin.input?.select?.();
@@ -755,6 +749,34 @@ async function verifyAndUnlockFromUI() {
   } catch {
     _setMsg('⚠️ تعذر التحقق من كلمة المرور (WebCrypto).', 'error');
   }
+}
+
+function startPinCooldown(until) {
+  if (_pin.cooldownTimer) clearInterval(_pin.cooldownTimer);
+
+  // عطّل الإدخال والزر أثناء الانتظار
+  if (_pin.input) _pin.input.disabled = true;
+  if (_pin.unlockBtn) _pin.unlockBtn.disabled = true;
+
+  const tick = () => {
+    const left = Math.max(0, until - _now());
+    _setMsg(`⏳ انتظر ${_secondsLeft(left)} ثانية ثم حاول مرة أخرى.`, 'warning');
+
+    if (left <= 0) {
+      if (_pin.input) _pin.input.disabled = false;
+      if (_pin.unlockBtn) _pin.unlockBtn.disabled = false;
+
+      clearInterval(_pin.cooldownTimer);
+      _pin.cooldownTimer = null;
+
+      _setMsg('يمكنك المحاولة الآن.', 'info');
+      _pin.input?.focus?.();
+      _pin.input?.select?.();
+    }
+  };
+
+  tick();
+  _pin.cooldownTimer = setInterval(tick, 1000);
 }
 
 function _isSessionOpen() {
@@ -822,25 +844,22 @@ function _syncPinSessionLabelCountdown() {
   }
 }
 
-function _endOpenSessionAndLock(reason, opts = {}) {
+async function _endOpenSessionAndLock(reason, opts = {}) {
   try { _lsDel(PIN_KEYS.sessionUntil); } catch {}
 
   _syncTopBarSessionCountdown();
   _syncPinSessionLabelCountdown();
 
   if (_isPinEnabled() && !_pin.locked) {
-    // اجعل القفل يستمر بعد reload
-    _lsSet(PIN_KEYS.forceLocked, '1');
+    await _lsSet(PIN_KEYS.forceLocked, '1');
 
-    // لا تكتب session_end إذا كان سبب القفل يجب أن يبقى كما هو (مثلاً manual)
-    if (!opts.keepReason) _lsSet(PIN_KEYS.lockReason, 'session_end');
+    if (!opts.keepReason) {
+      await _lsSet(PIN_KEYS.lockReason, 'session_end');
+    }
 
-    // اعرض الرسالة الصحيحة دائمًا
-const msg = _lockReasonMessage() || reason || '🔒 انتهت مدة الجلسة المفتوحة.';
-lockUI(msg);
-
+    const msg = _lockReasonMessage() || reason || '🔒 انتهت مدة الجلسة المفتوحة.';
+    lockUI(msg);
   }
-
 }
 
 
@@ -854,7 +873,7 @@ function _startTopBarSessionCountdown() {
   var until = parseInt(_lsGet(PIN_KEYS.sessionUntil, '0'), 10) || 0;
   if (!until || until <= _now()) return;
 
-  __pinSessionCountdownTimer = setInterval(() => {
+  __pinSessionCountdownTimer = setInterval(async () => {
     _syncTopBarSessionCountdown();
     _syncPinSessionLabelCountdown();
 
@@ -862,10 +881,12 @@ function _startTopBarSessionCountdown() {
     if (u && u <= _now()) {
       clearInterval(__pinSessionCountdownTimer);
       __pinSessionCountdownTimer = null;
-      _endOpenSessionAndLock('🔒 انتهت الجلسة المفتوحة. أدخل كلمة المرور لفتح الواجهة.');
+
+      await _endOpenSessionAndLock('🔒 انتهت الجلسة المفتوحة. أدخل كلمة المرور لفتح الواجهة.');
     }
   }, 1000);
 }
+
 
 function _shouldAutoLockByIdle() {
   if (!_isPinEnabled()) return false;
@@ -887,13 +908,13 @@ function startPinAutoLockMonitors() {
   events.forEach(ev => document.addEventListener(ev, _markActivity, { passive: true }));
 
   if (_pin.intervalId) clearInterval(_pin.intervalId);
-_pin.intervalId = setInterval(() => {
+_pin.intervalId = setInterval(async () => {
   if (_pin.locked) return;
 
   if (_shouldAutoLockByIdle()) {
-    _lsSet(PIN_KEYS.forceLocked, '1');   // يبقى بعد reload
-    _lsSet(PIN_KEYS.lockReason, 'idle'); // السبب الحقيقي
-    lockUI('🔒 تم قفل الواجهة بسبب عدم النشاط.'); // persist الافتراضي true
+    await _lsSet(PIN_KEYS.forceLocked, '1');
+    await _lsSet(PIN_KEYS.lockReason, 'idle');
+    lockUI('🔒 تم قفل الواجهة بسبب عدم النشاط.');
   }
 }, 15000);
 
@@ -901,41 +922,39 @@ _pin.intervalId = setInterval(() => {
   __pinEverVisible = (document.visibilityState === 'visible');
   __pinLockedByVisibility = false;
 
-  document.addEventListener('visibilitychange', () => {
-    if (!_isPinEnabled()) return;
+document.addEventListener('visibilitychange', async () => {
+  if (!_isPinEnabled()) return;
 
-if (document.visibilityState === 'visible') {
-  __pinEverVisible = true;
+  if (document.visibilityState === 'visible') {
+    __pinEverVisible = true;
 
-  // إذا الواجهة مقفولة أصلًا، لا تعيد lockUI ولا تغيّر الرسالة
-  if (_pin.locked) return;
+    // إذا الواجهة مقفولة أصلًا، لا تعيد lockUI ولا تغيّر الرسالة
+    if (_pin.locked) return;
 
-  if (!_lockOnVisibility() && _shouldAutoLockByIdle()) {
-    _lsSet(PIN_KEYS.forceLocked, '1');
-    _lsSet(PIN_KEYS.lockReason, 'idle_away');
-    lockUI('🔒 تم قفل الواجهة بسبب الخمول أثناء غياب التبويب.');
+    if (!_lockOnVisibility() && _shouldAutoLockByIdle()) {
+      await _lsSet(PIN_KEYS.forceLocked, '1');
+      await _lsSet(PIN_KEYS.lockReason, 'idle_away');
+      lockUI('🔒 تم قفل الواجهة بسبب الخمول أثناء غياب التبويب.');
+      return;
+    }
+
+    if (_lockOnVisibility() && __pinLockedByVisibility) {
+      return;
+    }
+
     return;
   }
-
-  if (_lockOnVisibility() && __pinLockedByVisibility) {
-    return;
-  }
-
-  return;
-}
 
   if (document.visibilityState !== 'hidden') return;
-
-    if (!__pinEverVisible) return;
+  if (!__pinEverVisible) return;
 
   if (_lockOnVisibility() && !_isSessionOpen()) {
-  __pinLockedByVisibility = true;
-  _lsSet(PIN_KEYS.forceLocked, '1');          // يبقى بعد reload
-  _lsSet(PIN_KEYS.lockReason, 'visibility');  // السبب الحقيقي
-  lockUI('🔒 تم قفل الواجهة عند مغادرة التبويب.'); // persist الافتراضي true
-}
-
-  });
+    __pinLockedByVisibility = true;
+    await _lsSet(PIN_KEYS.forceLocked, '1');
+    await _lsSet(PIN_KEYS.lockReason, 'visibility');
+    lockUI('🔒 تم قفل الواجهة عند مغادرة التبويب.');
+  }
+});
 
   if ('BroadcastChannel' in window) {
     const bc = new BroadcastChannel('pin_channel');
@@ -1015,7 +1034,8 @@ lockUI(msg);
   }
 
 if (_ssGet(PIN_SESSION_KEYS.locked, '0') === '1') {
-  lockUI(_lockReasonMessage());
+const msg = _lockReasonMessage() || '🔒 الواجهة مقفلة. أدخل كلمة المرور.';
+lockUI(msg);
   await waitUnlocked();
   return;
 }
@@ -1030,19 +1050,20 @@ if (_ssGet(PIN_SESSION_KEYS.locked, '0') === '1') {
 
   if (last && (_now() - last) < idleMs) { unlockUI(); return; }
 
- lockUI(_lockReasonMessage());
+const msg = _lockReasonMessage() || '🔒 الواجهة مقفلة. أدخل كلمة المرور.';
+lockUI(msg);
 await waitUnlocked();
 
 }
 
 // أحداث bus المرتبطة بـ PIN
-bus.on('pin:lockNow', () => {
+bus.on('pin:lockNow', async () => {
   if (!_isPinEnabled()) return;
 
-  _lsSet(PIN_KEYS.forceLocked, '1');
-  _lsSet(PIN_KEYS.lockReason, 'manual');
+  await _lsSet(PIN_KEYS.forceLocked, '1');
+  await _lsSet(PIN_KEYS.lockReason, 'manual');
 
-  _endOpenSessionAndLock(_lockReasonMessage() || '🔒 تم قفل الواجهة يدويًا.', { keepReason: true });
+await _endOpenSessionAndLock(_lockReasonMessage() || '🔒 تم قفل الواجهة يدويًا.', { keepReason: true });
 });
 
 

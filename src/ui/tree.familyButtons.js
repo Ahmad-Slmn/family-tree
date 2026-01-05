@@ -116,16 +116,15 @@ export function renderFamilyButtons(families = {}, selectedKey = null, handlers 
       del.addEventListener('keydown', e => { if (e.key==='Enter') del.click(); });
       del.addEventListener('click', async ev => {
         ev.stopPropagation();
-        const res = await showConfirmModal({
+const res = await showConfirmModal({
   title: 'حذف العائلة',
   message: `هل أنت متأكد من حذف "${(f.familyName||f.title||k)}" ؟ لا يمكن التراجع.`,
   confirmText: 'حذف',
   cancelText: 'إلغاء',
   variant: 'danger',
-  closeOnBackdrop: false,
-  closeOnEsc: true,
   defaultFocus: 'cancel'
 });
+
 
 if (res === 'confirm') {
   await handlers?.onDeleteFamily?.(k);
@@ -135,29 +134,19 @@ if (res === 'confirm') {
 
 wrap.append(edit, del);
 
-    } else if (f.__core){
-      const hideBtn = document.createElement('button');
-      hideBtn.className = 'btn tiny hide-family'; hideBtn.title = 'إخفاء العائلة الأساسية من العرض';
-      hideBtn.innerHTML = '<i class="fa-solid fa-eye-slash"></i>';
-      hideBtn.addEventListener('click', async ev => {
-        ev.stopPropagation();
-     const res = await showConfirmModal({
-  title: 'إخفاء العائلة',
-  message: `هل تريد إخفاء "${(f.familyName||f.title||k)}" من القائمة؟ يمكن إظهارها لاحقًا من الإعدادات.`,
-  confirmText: 'إخفاء',
-  cancelText: 'إلغاء',
-  variant: 'warning',
-  closeOnBackdrop: false,
-  closeOnEsc: true,
-  defaultFocus: 'cancel'
-});
+} else if (f.__core){
+  const hideBtn = document.createElement('button');
+  hideBtn.className = 'btn tiny hide-family';
+  hideBtn.title = 'إخفاء العائلة الأساسية من العرض';
+  hideBtn.innerHTML = '<i class="fa-solid fa-eye-slash"></i>';
 
-if (res === 'confirm') {
-  handlers?.onHideFamily?.(k);
+  hideBtn.addEventListener('click', async ev => {
+    ev.stopPropagation();
+    await handlers?.onHideFamily?.(k);
+  });
+
+  wrap.appendChild(hideBtn);
 }
-      });
-      wrap.appendChild(hideBtn);
-    }
 
     container.appendChild(wrap);
   });

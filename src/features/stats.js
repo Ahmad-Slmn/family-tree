@@ -1657,9 +1657,27 @@ tbClan.innerHTML = top.length ? top.map(c=>{
   };
   const applyFiltersDebounced = debounce(applyFilters, 200);
 
-    // ===== (4) إعادة الحساب عند تغيّر البيانات (إذا كان لدينا bus) =====
-  const statsModal = byId('statsModal');
-  let offRecompute = null;
+// ===== (4) إعادة الحساب عند تغيّر البيانات (إذا كان لدينا bus) =====
+const statsModal = byId('statsModal');
+
+  // إغلاق نافذة الإحصاءات عند النقر على الخلفية (backdrop)
+  const onStatsBackdrop = (e) => {
+    if (e.target === statsModal) closeStatsModal();
+  };
+
+  // Esc يغلق نافذة الإحصاءات مباشرة
+  const onStatsEsc = (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeStatsModal();
+    }
+  };
+
+  // فعّل الإغلاق (عند كونها مفتوحة)
+  statsModal?.addEventListener('click', onStatsBackdrop);
+  document.addEventListener('keydown', onStatsEsc, true);
+
+let offRecompute = null;
 
   if (_ctx?.bus?.on){
     const handler = () => {
@@ -1750,17 +1768,19 @@ byId('btnExportExcel')?.addEventListener('click', ()=>{
 
   
 // تنظيف عند إغلاق نافذة الإحصاءات
-// تنظيف عند إغلاق نافذة الإحصاءات
 const detach = () => {
+  try { statsModal?.removeEventListener('click', onStatsBackdrop); } catch {}
+  try { document.removeEventListener('keydown', onStatsEsc, true); } catch {}
+
   try { offRecompute?.(); } catch {}
   try { mo.disconnect(); } catch {}
   try { mql?.removeEventListener?.('change', redrawAll); } catch {}
   try { window.removeEventListener('theme:change', redrawAll); } catch {}
-  try { ro.disconnect?.(); } catch {}             
-try { if (cvBar) ro.unobserve?.(cvBar); if (cvStack) ro.unobserve?.(cvStack); } catch {} // احتياطي
-
-  try { _statsCache.clear(); } catch {} // اختياري ممتاز: تنظيف ذاكرة + يمنع stale إن لم تُستدع recomputeAll
+  try { ro.disconnect?.(); } catch {}
+  try { if (cvBar) ro.unobserve?.(cvBar); if (cvStack) ro.unobserve?.(cvStack); } catch {}
+  try { _statsCache.clear(); } catch {}
 };
+
  //  خزّنها ليستدعيها closeStatsModal
  if (statsModal) statsModal.__statsDetach = detach;
 

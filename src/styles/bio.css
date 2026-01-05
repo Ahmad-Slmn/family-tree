@@ -463,6 +463,71 @@
 .bio-photo-top img{
   width:100%;height:100%;object-fit:cover;display:block
 }
+
+/* ================== Photo Busy Indicator (Overlay) ================== */
+
+#bioPhoto.is-photo-busy{
+  pointer-events:none; /* امنع أي نقر/سحب أثناء المعالجة */
+  user-select:none;
+}
+
+#bioPhoto .photo-busy-overlay{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:.75rem;
+  background:color-mix(in oklab, var(--modal-overlay) 55%, transparent);
+  backdrop-filter: blur(.35rem);
+  border-radius:inherit;
+  z-index:50;
+}
+
+#bioPhoto .photo-busy-card{
+  display:flex;
+  align-items:center;
+  gap:.65rem;
+  padding:.55rem .85rem;
+  border-radius:999px;
+  background:color-mix(in oklab, var(--card-bg) 86%, #fff);
+  border:1px solid color-mix(in oklab, var(--surface-border) 80%, transparent);
+  box-shadow:0 .35rem 1rem rgba(0,0,0,.10);
+  color:var(--text-main);
+}
+
+#bioPhoto .photo-busy-text{
+  display:flex;
+  flex-direction:column;
+  gap:.05rem;
+  line-height:1.2;
+}
+
+#bioPhoto .photo-busy-title{
+  font-weight:800;
+  font-size:.9rem;
+  color:var(--title-color);
+}
+
+#bioPhoto .photo-busy-sub{
+  font-size:.78rem;
+  opacity:.85;
+}
+
+#bioPhoto .photo-busy-spinner{
+  width:18px;
+  height:18px;
+  border-radius:50%;
+  border:2px solid color-mix(in oklab, var(--surface-border) 70%, transparent);
+  border-top-color: color-mix(in oklab, var(--modal-primary) 85%, var(--title-color));
+  animation: photoBusySpin .75s linear infinite;
+}
+
+@keyframes photoBusySpin{
+  from{ transform:rotate(0deg); }
+  to{ transform:rotate(360deg); }
+}
+
 .bio-identity{
   display:flex;flex-direction:column;align-items:center;text-align:center;
   gap:.45rem;width:100%

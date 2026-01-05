@@ -1302,12 +1302,14 @@ showConfirmModal({
   // Hook للـ Escape داخل ModalManager: إن وُجد يُستدعى بدل الإغلاق المباشر
   modal.__onEscapeHook = requestClose;
 
-  // الإغلاق بالخلفية الداكنة فقط (تفويض أحداث)
-  modal.addEventListener('click', e => {
-    if (e.target === modal) {
-      requestClose();
-    }
-  });
+// القاعدة: هذا مودال "تأكيد/خطر" (فقدان بيانات محتمل) → لا إغلاق بالنقر على الخلفية
+modal.addEventListener('click', e => {
+  if (e.target === modal) {
+    // لا تفعل شيء (يمكن منع أي handlers أخرى بالالتقاط إن لزم)
+    e.preventDefault();
+    e.stopPropagation();
+  }
+});
 
   // زر × أعلى المودال
   closeBtn?.addEventListener('click', e => {

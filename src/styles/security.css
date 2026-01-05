@@ -340,7 +340,7 @@ html.is-locked,body.is-locked{overflow:hidden!important}
 
 #privacySection .side-grid>.family-button{justify-content:space-between;padding-inline:.65rem}
 #privacySection .pin-toggle-row{
-  display:flex;align-items:center;justify-content:space-between;
+  display:flex;align-items:center;justify-content:center;
   gap:.6rem;
 }
 #privacySection .pin-toggle-row > span{

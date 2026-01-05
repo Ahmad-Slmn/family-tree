@@ -67,22 +67,24 @@ async function onHideFamily(
   const fam = Model.getFamily(key);
   if (!fam) return;
 
-// لا تُخفِ آخر عائلة مرئية إلا بعد تأكيد صريح
 const fams = Model.getFamilies();
 const visibleKeys = Object.keys(fams).filter(k => !fams[k]?.hidden);
 const isLastVisible = visibleKeys.length === 1 && visibleKeys[0] === key;
-if (isLastVisible && !opts.force){
-  const famLabel = fam.familyName || fam.title || fam.rootPerson?.name || key;
-const res = await (showConfirmModal?.({
-  title: 'إخفاء العائلة',
-  message: `هذه آخر عائلة مرئية. هل تريد إخفاء "${famLabel}"؟ يمكن إظهارها لاحقًا من الإعدادات.`,
-  confirmText: 'إخفاء',
-  cancelText: 'إلغاء',
-  variant: 'danger',
-  _ariaRole: 'alertdialog'
-}) || Promise.resolve('dismiss'));
 
-if (res !== 'confirm') return;
+const famLabel = fam.familyName || fam.title || fam.rootPerson?.name || key;
+
+// (1) حالة آخر عائلة مرئية: تأكيد أقوى (إلزامي)
+if (isLastVisible && !opts.force){
+  const res = await showConfirmModal({
+    title: 'إخفاء العائلة',
+    message: `هذه آخر عائلة مرئية. هل تريد إخفاء "${famLabel}"؟ يمكن إظهارها لاحقًا من الإعدادات.`,
+    confirmText: 'إخفاء',
+    cancelText: 'إلغاء',
+    variant: 'danger',
+    _ariaRole: 'alertdialog'
+  });
+
+  if (res !== 'confirm') return;
 
   // أعد الاستدعاء مع force:true بعد الموافقة
   return onHideFamily(
@@ -90,6 +92,21 @@ if (res !== 'confirm') return;
     { Model, redrawUI, showInfo, showSuccess, highlight, bus },
     { force: true }
   );
+}
+
+// (2) إخفاء عادي (خصوصًا للعائلات الأساسية core): تأكيد موحّد داخل المنطق
+// ملاحظة: نخلي التأكيد افتراضيًا للعائلات الأساسية، وإذا احتجت لاحقًا توسّعها على غيرها بسهولة.
+if (fam.__core && !opts.force){
+  const res = await showConfirmModal({
+    title: 'إخفاء العائلة',
+    message: `هل تريد إخفاء "${famLabel}" من القائمة؟ يمكن إظهارها لاحقًا من الإعدادات.`,
+    confirmText: 'إخفاء',
+    cancelText: 'إلغاء',
+    variant: 'warning',
+    defaultFocus: 'cancel'
+  });
+
+  if (res !== 'confirm') return;
 }
 
 
