@@ -616,9 +616,9 @@ function injectPrivacySection(bus) {
       buildManageModal({
         title: 'حماية الخصوصية',
         fields: [
-          { id: 'pin1', label: 'كلمة مرور جديدة', type: 'password', maxlength: 12, placeholder: 'مثال: 1234' },
+          { id: 'pin1', label: 'كلمة مرور جديدة', type: 'password', maxlength: 12, placeholder: 'كلمة المرور' },
           { id: 'pin2', label: 'تأكيد كلمة المرور', type: 'password', maxlength: 12, placeholder: 'أعد الإدخال' },
-          { id: 'hint', label: 'تلميح (اختياري)', type: 'text', maxlength: 40, placeholder: 'مثال: رقم خاص...' }
+          { id: 'hint', label: 'تلميح (اختياري)', type: 'text', maxlength: 40, placeholder: 'تلميح قصير' }
         ],
        onSubmit: async (vals, ui) => {
   const p1 = vals.pin1 || '';
@@ -719,18 +719,19 @@ try {
 
     buildManageModal({
       title: 'تغيير كلمة المرور',
-      fields: [
-        { id: 'oldPin', label: 'كلمة المرور الحالية', type: 'password', maxlength: 12 },
-        { id: 'newPin1', label: 'كلمة المرور الجديدة', type: 'password', maxlength: 12 },
-        { id: 'newPin2', label: 'تأكيد كلمة المرور الجديدة', type: 'password', maxlength: 12 },
-        { id: 'hint', label: 'تلميح (اختياري)', type: 'text', maxlength: 40 }
-      ],
+ fields: [
+  { id: 'oldPin',  label: 'كلمة المرور الحالية',        type: 'password', maxlength: 12, placeholder: 'أدخل كلمة المرور الحالية' },
+  { id: 'newPin1', label: 'كلمة المرور الجديدة',        type: 'password', maxlength: 12, placeholder: 'أدخل كلمة مرور جديدة' },
+  { id: 'newPin2', label: 'تأكيد كلمة المرور الجديدة',  type: 'password', maxlength: 12, placeholder: 'أعد إدخال كلمة المرور الجديدة' },
+  { id: 'hint',    label: 'تلميح (اختياري)',             type: 'text',     maxlength: 40, placeholder: 'تلميح قصير' }
+],
+
       onSubmit: async (vals, ui) => {
         const oldPin = vals.oldPin || '';
         const n1 = vals.newPin1 || '';
         const n2 = vals.newPin2 || '';
 
-        // ✅ بدل setMsg: ركّز على الحقل الناقص
+        // بدل setMsg: ركّز على الحقل الناقص
         if (!oldPin) { ui.invalid('oldPin', 'أدخل كلمة المرور الحالية.'); return; }
 
 ui.setBusy(true);

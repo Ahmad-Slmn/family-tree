@@ -53,15 +53,16 @@ let PHOTO_MAX = parseInt(localStorage.getItem('photoMax') || '150', 10);
 if (!Number.isFinite(PHOTO_MAX) || PHOTO_MAX < 1) PHOTO_MAX = 150;
 
 function _cacheGet(id){ return PHOTO_CACHE.get(id) || null; }
-function _cachePut(id, url, isBlob){
+function _cachePut(id, url, isBlob, ver){
   if (isBlob) return;
   if (PHOTO_CACHE.has(id)) PHOTO_CACHE.delete(id);
-  PHOTO_CACHE.set(id, { url, isBlob: false });
+  PHOTO_CACHE.set(id, { url, isBlob:false, ver: ver || 0 });
   if (PHOTO_CACHE.size > PHOTO_MAX){
     const [oldId] = PHOTO_CACHE.entries().next().value;
     PHOTO_CACHE.delete(oldId);
   }
 }
+
 
 export function clearPersonPhotoCache(id){ if (id) PHOTO_CACHE.delete(id); }
 
@@ -71,13 +72,19 @@ export function clearPhotoCache(){
 
 // ===== إرجاع مصدر صورة الشخص مع دعم idb:/data:/URL =====
 async function getPersonPhotoURL(person){
-const id = person?._id != null ? String(person._id) : '';
+  const id = person?._id != null ? String(person._id) : '';
   const raw = (person?.bio?.photoUrl || person?.photoUrl || '').trim();
+
+  const verNow = person?.photoVer || 0; // تعريف واحد فقط
 
   if (id){
     const hit = _cacheGet(id);
+
     if (hit && hit.url){
-      if (raw) return hit.url;
+      // إذا نفس النسخة (ver) رجّع من الكاش
+      if (raw && (hit.ver || 0) === (verNow || 0)) return hit.url;
+
+      // غير ذلك: كاش قديم
       PHOTO_CACHE.delete(id);
     }
   }
@@ -99,14 +106,15 @@ const id = person?._id != null ? String(person._id) : '';
   }
 
   if (!raw) return '';
-  if (raw.startsWith('data:')){
-    if (id) _cachePut(id, raw, false);
-    return raw;
-  }
-  const v = person?.photoVer || 0;
-  const url = `${raw}${raw.includes('?') ? '&' : '?'}v=${v}`;
-  if (id) _cachePut(id, url, false);
-  return url;
+if (raw.startsWith('data:')){
+  if (id) _cachePut(id, raw, false, verNow); // ✅
+  return raw;
+}
+
+const url = `${raw}${raw.includes('?') ? '&' : '?'}v=${verNow}`; // ✅
+if (id) _cachePut(id, url, false, verNow); // ✅
+return url;
+
 }
 
 // ===== تحديث الصورة داخل البطاقة مع تنظيف blob القديم =====

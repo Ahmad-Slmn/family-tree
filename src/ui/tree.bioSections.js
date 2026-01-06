@@ -816,7 +816,7 @@ addBioRow(
   // ملاحظة
   addBioRow(body, LABELS.remark || 'ملاحظة', bio.remark, 'remark');
 
-  // ملخّص عائلي + نسبي + تلميح المصادر
+  // ملخّص عائلي + نسبي
   if (person && family && ctx){
     // ملخّص عائلي: أبناء/بنات + إخوة/أخوات + زوجات
     const sibResolved = Lineage.resolveSiblings(person, family, ctx) || {};
@@ -905,33 +905,6 @@ addBioRow(
       }
 
       row.append(textEl('span', ' ' + parts.join('، ')));
-      body.appendChild(row);
-    }
-  }
-
-  // تلميح المصادر والوثائق داخل الأساسي
-  {
-    const sources = Array.isArray(person.sources) ? person.sources : [];
-    if (sources.length){
-      const row = el('div', 'bio-field bio-field--sourcesHint');
-      row.append(textEl('strong', 'الوثائق:'));
-
-      const span = document.createElement('span');
-      span.textContent = `هناك ${sources.length} وثيقة متعلّقة بهذا الشخص.`;
-
-      const btn = el('button', 'bio-link-btn');
-      btn.type  = 'button';
-      btn.textContent = 'عرض الوثائق';
-      btn.addEventListener('click', ev => {
-        ev.preventDefault();
-        const target = document.querySelector('.bio-section[data-section-id="sources"]');
-        if (target){
-          target.scrollIntoView({ behavior:'smooth', block:'start' });
-        }
-      });
-
-      span.appendChild(btn);
-      row.appendChild(span);
       body.appendChild(row);
     }
   }

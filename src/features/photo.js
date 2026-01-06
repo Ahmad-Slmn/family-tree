@@ -1,5 +1,5 @@
 // features/photo.js — الصور (تدوير/قص + إدارة ذاكرة/إبطال + قنوات Canvas آمنة)
-import { byId, showInfo, showError, showSuccess, showWarning, showConfirmModal } from '../utils.js';
+import { byId, showInfo, showError, showSuccess, showWarning, showConfirmModal, createImageViewerOverlay } from '../utils.js';
 import * as Model from '../model/families.js';
 import * as TreeUI from '../ui/tree.js';
 import { openPhotoGallery, PRESET_PHOTOS } from './photoGallery.js';
@@ -32,7 +32,7 @@ function ensurePhotoBusyIndicator(photoBox){
 
   // لازم يكون container قابل للـ overlay
   const st = getComputedStyle(photoBox);
-  if (st.position === 'static') photoBox.style.position = 'relative';
+if (st.position === 'static') photoBox.classList.add('photo-box--relative');
 
   let el = photoBox.querySelector('#photoBusyOverlay');
   if (el) return el;
@@ -600,7 +600,6 @@ async function renderPersonPhoto(box, person, srcMaybe, DB){
   try{ if (typeof img.decode === 'function') img.decode().catch(()=>{}); }catch{}
 }
 
-
 /* =========================================================
  * تدوير/قص بالرسم اليدوي (حل احتياطي)
  * ========================================================= */
@@ -1071,6 +1070,8 @@ async function restoreOriginalIfAny(ctx, photoBox, pid){
   if (origBlob instanceof Blob){
     const small = await compressBlobForPid(origBlob);
     await ctx.DB.putPhoto(pid, small);
+      try { await ctx.DB.putPhoto(pid + '_full', origBlob); } catch {}
+
   }
 
   await renderPersonPhoto(photoBox, ctx.dom.currentPerson, undefined, ctx.DB);
@@ -1091,32 +1092,54 @@ async function restoreOriginalIfAny(ctx, photoBox, pid){
     };
 
     const tops = [
-      ...(Array.isArray(famF.ancestors)?famF.ancestors:[]),
-      famF.father, famF.rootPerson, ...(famF.wives||[])
+      ...(Array.isArray(famF.ancestors) ? famF.ancestors : []),
+      famF.father,
+      famF.rootPerson,
+      ...(famF.wives || [])
     ].filter(Boolean);
 
-    tops.forEach(p=>{ touch(p); (p?.children||[]).forEach(touch); (p?.wives||[]).forEach(touch); });
-    (famF.rootPerson?.wives||[]).forEach(w=>{ touch(w); (w?.children||[]).forEach(touch); });
+    tops.forEach(p => { touch(p); (p?.children || []).forEach(touch); (p?.wives || []).forEach(touch); });
+    (famF.rootPerson?.wives || []).forEach(w => { touch(w); (w?.children || []).forEach(touch); });
 
-    // امسح أعلام القص/التدوير/الأصل
+    // امسح أعلام القص/التدوير/الأصل + أعلام التحويل الإضافية
     const clearFlags = (p)=>{
       if (p && p._id === pid && p.bio){
         delete p.bio.photoHasOrig;
         delete p.bio.photoCropped;
         delete p.bio.photoRotated;
+
+        delete p.bio.photoRotateDeg;
+        delete p.bio.photoFlipX;
+        delete p.bio.photoFlipY;
+        delete p.bio.photoFitted;
       }
     };
 
-    tops.forEach(p=>{ clearFlags(p); (p?.children||[]).forEach(clearFlags); (p?.wives||[]).forEach(clearFlags); });
-    (fam.rootPerson?.wives||[]).forEach(w=>{ clearFlags(w); (w?.children||[]).forEach(clearFlags); });
+    tops.forEach(p => { clearFlags(p); (p?.children || []).forEach(clearFlags); (p?.wives || []).forEach(clearFlags); });
+
+    // تصحيح: famF بدل fam
+    (famF.rootPerson?.wives || []).forEach(w => { clearFlags(w); (w?.children || []).forEach(clearFlags); });
 
     Model.commitFamily(famKeyF);
     Model.savePersistedFamilies?.();
   }
 
+  // الأفضل: صفّر pending قبل أي مزامنة UI
+  ctx.dom.pendingPhoto = null;
+
+  // امسح flags من الـ dataset بعد الاستعادة
   delete photoBox.dataset.cropped;
   delete photoBox.dataset.rotated;
-  ctx.dom.pendingPhoto = null;
+  delete photoBox.dataset.rotateDeg;
+  delete photoBox.dataset.flipX;
+  delete photoBox.dataset.flipY;
+  delete photoBox.dataset.fitted;
+
+  // صفّر السلايدر
+  const range = byId('freeRotate');
+  const out   = byId('freeRotateVal');
+  if (range) range.value = '0';
+  if (out) out.textContent = '0°';
 
   try { TreeUI.clearPersonPhotoCache?.(pid); } catch {}
   try { TreeUI.refreshAvatarById?.({ _id: pid, ...ctx.dom.currentPerson }); } catch {}
@@ -1147,25 +1170,23 @@ async function openCropperFor(photoBox){
 
   const layer = document.createElement('div');
   layer.id = 'cropperLayer';
-  layer.style.cssText = `
-    position:fixed;inset:0;background:rgba(0,0,0,.55);
-    display:flex;align-items:center;justify-content:center;z-index:9999;
-  `;
+  layer.className = 'photo-modal-layer';
+
   layer.innerHTML = `
-    <div style="background:#fff;padding:12px;border-radius:10px;max-width:90vw;max-height:90vh">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+    <div class="photo-modal-card">
+      <div class="photo-modal-actions">
         <button id="crpCancel" class="btn tiny">إلغاء</button>
         <button id="crpDone"   class="btn tiny primary">اعتماد القص</button>
       </div>
-      <div style="max-width:80vw;max-height:75vh;overflow:hidden">
-        <img id="crpImg" alt="" style="max-width:100%;display:block">
+      <div class="photo-modal-body">
+        <img id="crpImg" alt="" class="photo-modal-img">
       </div>
     </div>
   `;
   document.body.appendChild(layer);
 
   const editorImg = layer.querySelector('#crpImg');
-const safe = await ensureCanvasSafeBlobURL(img.src, { signal: _uiFetchCtrl?.signal });
+  const safe = await ensureCanvasSafeBlobURL(img.src, { signal: _uiFetchCtrl?.signal });
   editorImg.crossOrigin = 'anonymous';
   editorImg.src = safe.url || img.src;
 
@@ -1187,54 +1208,52 @@ const safe = await ensureCanvasSafeBlobURL(img.src, { signal: _uiFetchCtrl?.sign
     layer.remove();
   };
 
-
   layer.querySelector('#crpCancel').onclick = cleanup;
 
-layer.querySelector('#crpDone').onclick = async () => {
-  const ctx = window.__photoCtx;
-  setPhotoBusy(ctx, true);
+  layer.querySelector('#crpDone').onclick = async () => {
+    const ctx = window.__photoCtx;
+    setPhotoBusy(ctx, true);
 
-  try{
-    await ensureOriginalSnapshotOnce(ctx);
+    try{
+      await ensureOriginalSnapshotOnce(ctx);
 
-    const c = cropper.getCroppedCanvas({ imageSmoothingEnabled: true });
+      const c = cropper.getCroppedCanvas({ imageSmoothingEnabled: true });
 
-    // إنتاج → تصغير → ضغط
-    const maxDim = 512;
-    const scale  = Math.min(1, maxDim / Math.max(c.width, c.height));
-    const dst    = document.createElement('canvas');
-    dst.width    = Math.max(1, Math.round(c.width  * scale));
-    dst.height   = Math.max(1, Math.round(c.height * scale));
+      const maxDim = 512;
+      const scale  = Math.min(1, maxDim / Math.max(c.width, c.height));
+      const dst    = document.createElement('canvas');
+      dst.width    = Math.max(1, Math.round(c.width  * scale));
+      dst.height   = Math.max(1, Math.round(c.height * scale));
 
-    await window.pica().resize(c, dst);
+      await window.pica().resize(c, dst);
 
-    const preBlob = await new Promise(res => dst.toBlob(res, 'image/jpeg', 0.92));
-    const compressed = await new Promise((resolve, reject) =>
-      new window.Compressor(preBlob, { quality: JPEG_Q, success: resolve, error: reject })
-    );
+      const preBlob = await new Promise(res => dst.toBlob(res, 'image/jpeg', 0.92));
+      const compressed = await new Promise((resolve, reject) =>
+        new window.Compressor(preBlob, { quality: JPEG_Q, success: resolve, error: reject })
+      );
 
-    const dataUrl = await new Promise((resolve, reject) => {
-      const fr = new FileReader();
-      fr.onload  = () => resolve(fr.result);
-      fr.onerror = () => reject(new Error('فشل التحويل'));
-      fr.readAsDataURL(compressed);
-    });
+      const dataUrl = await new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload  = () => resolve(fr.result);
+        fr.onerror = () => reject(new Error('فشل التحويل'));
+        fr.readAsDataURL(compressed);
+      });
 
-    const photoBox2 = byId('bioPhoto');
-    if (await acceptOrRejectSame(ctx, dataUrl, photoBox2)){
-      photoBox2.dataset.cropped = '1';
-      ctx.syncPhotoUI?.();
-      showInfo('تم تجهيز القص — لم يُحفظ بعد.');
+      const photoBox2 = byId('bioPhoto');
+      if (await acceptOrRejectSame(ctx, dataUrl, photoBox2)){
+        photoBox2.dataset.cropped = '1';
+        ctx.syncPhotoUI?.();
+        showInfo('تم تجهيز القص — لم يُحفظ بعد.');
+      }
+    } catch {
+      showError('تعذّر إتمام القص/الضغط.');
+    } finally {
+      setPhotoBusy(ctx, false);
+      cleanup();
     }
-  } catch {
-    showError('تعذّر إتمام القص/الضغط.');
-  } finally {
-    setPhotoBusy(ctx, false);
-    cleanup();
-  }
-};
-
+  };
 }
+
 
 /* =========================================================
  * هاش الصورة الحالية/الأصلية + تصنيف المرشح
@@ -1694,27 +1713,24 @@ async function openFitEditorFor(photoBox){
 
   const layer = document.createElement('div');
   layer.id = 'cropperLayer';
-  layer.style.cssText = `
-    position:fixed;inset:0;background:rgba(0,0,0,.55);
-    display:flex;align-items:center;justify-content:center;z-index:9999;
-  `;
+  layer.className = 'photo-modal-layer';
 
   layer.innerHTML = `
-    <div style="background:#fff;padding:12px;border-radius:10px;max-width:90vw;max-height:90vh">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+    <div class="photo-modal-card">
+      <div class="photo-modal-actions">
         <button id="fitCancel" class="btn tiny">إلغاء</button>
         <button id="fitReset"  class="btn tiny">إعادة الضبط</button>
         <button id="fitDone"   class="btn tiny primary">اعتماد التمركز</button>
       </div>
-      <div style="max-width:80vw;max-height:75vh;overflow:hidden">
-        <img id="fitImg" alt="" style="max-width:100%;display:block">
+      <div class="photo-modal-body">
+        <img id="fitImg" alt="" class="photo-modal-img">
       </div>
     </div>
   `;
   document.body.appendChild(layer);
 
   const editorImg = layer.querySelector('#fitImg');
-const safe = await ensureCanvasSafeBlobURL(img.src, { signal: _uiFetchCtrl?.signal });
+  const safe = await ensureCanvasSafeBlobURL(img.src, { signal: _uiFetchCtrl?.signal });
   editorImg.crossOrigin = 'anonymous';
   editorImg.src = safe.url || img.src;
 
@@ -1741,7 +1757,7 @@ const safe = await ensureCanvasSafeBlobURL(img.src, { signal: _uiFetchCtrl?.sign
   layer.querySelector('#fitReset').onclick = () => {
     try{
       cropper.reset();
-      cropper.setCropBoxData(cropper.getCropBoxData()); // تثبيت
+      cropper.setCropBoxData(cropper.getCropBoxData());
     }catch{}
   };
 
@@ -1755,7 +1771,6 @@ const safe = await ensureCanvasSafeBlobURL(img.src, { signal: _uiFetchCtrl?.sign
 
       const c = cropper.getCroppedCanvas({ imageSmoothingEnabled: true });
 
-      // تصغير + ضغط (نفس أسلوب القص)
       const maxDim = 512;
       const scale  = Math.min(1, maxDim / Math.max(c.width, c.height));
       const dst    = document.createElement('canvas');
@@ -1776,7 +1791,6 @@ const safe = await ensureCanvasSafeBlobURL(img.src, { signal: _uiFetchCtrl?.sign
         fr.readAsDataURL(compressed);
       });
 
-      // اعتماده كـ pending (بدون اعتبار أنه crop نهائي)
       if (await acceptOrRejectSame(ctx, dataUrl, photoBox2)){
         photoBox2.dataset.fitted = '1';
         ctx.syncPhotoUI?.();
@@ -1798,33 +1812,45 @@ function ensurePhotoToolsDOM(ctx, photoBox){
 
   tools = document.createElement('div');
   tools.id = 'photoTools';
-  tools.style.cssText = 'display:flex;gap:.4rem;margin-top:.5rem;flex-wrap:wrap;align-items:center;';
-  tools.innerHTML = `
-    <button type="button" id="undoPhoto"   class="btn tiny" hidden>تراجع</button>
-    <button type="button" id="redoPhoto"   class="btn tiny" hidden>إعادة</button>
+tools.className = 'photo-tools';
+tools.innerHTML = `
+  <!-- History -->
+  <button type="button" id="undoPhoto"   class="btn tiny" hidden>تراجع</button>
+  <button type="button" id="redoPhoto"   class="btn tiny" hidden>إعادة</button>
 
-    <button type="button" id="compareHold" class="btn tiny" hidden>قبل/بعد</button>
+  <!-- Reset -->
+  <button type="button" id="resetTransforms" class="btn tiny" title="إعادة ضبط التعديلات">إعادة الضبط</button>
 
-    <button type="button" id="fitEditor"   class="btn tiny">تحريك/تكبير</button>
+  <!-- Compare (only when pending) -->
+  <button type="button" id="compareHold" class="btn tiny" hidden>قبل/بعد</button>
 
-    <button type="button" id="flipX"       class="btn tiny">قلب أفقي</button>
-    <button type="button" id="flipY"       class="btn tiny">قلب عمودي</button>
+  <!-- Layout / Crop / Fit -->
+  <button type="button" id="fitEditor"   class="btn tiny">تحريك/تكبير</button>
 
-    <label id="freeRotateWrap" class="btn tiny" style="display:inline-flex;gap:.35rem;align-items:center;">
-      <span style="font-size:.78rem;">تدوير:</span>
-      <input id="freeRotate" type="range" min="0" max="360" step="1" value="0" style="width:120px;">
-      <span id="freeRotateVal" style="min-width:2.2rem;text-align:center;font-size:.78rem;">0°</span>
-    </label>
-    <button type="button" id="resetTransforms" class="btn tiny" title="إعادة ضبط التعديلات">إعادة الضبط</button>
+  <button type="button" id="cropSquare"  class="btn tiny">ملاءمة الصورة للإطار</button>
+  <button type="button" id="undoCrop"    class="btn tiny" hidden>إلغاء الملاءمة</button>
 
-    <button type="button" id="rotateLeft"  class="btn tiny">تدوير 90°</button>
-    <button type="button" id="undoRotate"  class="btn tiny" hidden>إلغاء التدوير</button>
+  <!-- Rotate -->
+  <button type="button" id="rotateLeft"  class="btn tiny">تدوير 90°</button>
+  <button type="button" id="undoRotate"  class="btn tiny" hidden>إلغاء التدوير</button>
 
-    <button type="button" id="cropSquare"  class="btn tiny">ملاءمة الصورة للإطار</button>
-    <button type="button" id="undoCrop"    class="btn tiny" hidden>إلغاء الملاءمة</button>
+  <div id="freeRotateWrap" class="btn tiny free-rotate-wrap">
+    <span class="free-rotate-label">تدوير:</span>
+    <button type="button" id="freeRotateMinus" class="btn tiny" title="نقص درجة" aria-label="نقص درجة">−</button>
+    <input id="freeRotate" type="range" min="0" max="360" step="1" value="0" class="free-rotate-range">
+    <span id="freeRotateVal" class="free-rotate-val">0°</span>
+    <button type="button" id="freeRotatePlus" class="btn tiny" title="زد درجة" aria-label="زد درجة">+</button>
+  </div>
 
-    <button type="button" id="restoreOrig" class="btn tiny danger" hidden>استعادة الأصل</button>
-  `;
+  <!-- Flip -->
+  <button type="button" id="flipX" class="btn tiny">قلب أفقي</button>
+  <button type="button" id="flipY" class="btn tiny">قلب عمودي</button>
+
+  <!-- Restore original (last + danger) -->
+  <button type="button" id="restoreOrig" class="btn tiny danger" hidden>استعادة الأصل</button>
+`;
+
+
   (byId('bioTools') || photoBox.parentNode)?.appendChild(tools);
 
   // Undo/Redo (history)
@@ -1976,14 +2002,21 @@ function ensurePhotoToolsDOM(ctx, photoBox){
         const flipXNow = photoBox.dataset.flipX === '1';
         const flipYNow = photoBox.dataset.flipY === '1';
 
-        const d = await transformToDataURL(imgEl.src, { deg, flipX: flipXNow, flipY: flipYNow, square:true });
-        const changed = await acceptOrRejectSame(ctx, d, photoBox);
-        if (changed){
-          if (deg) photoBox.dataset.rotateDeg = String(deg);
-          else delete photoBox.dataset.rotateDeg;
-          showInfo('تم تدوير الصورة — لم تُحفظ بعد.');
-          ctx.syncPhotoUI?.();
-        }
+     const d = await transformToDataURL(imgEl.src, { deg, flipX: flipXNow, flipY: flipYNow, square:true });
+
+// لا تعتمد على aHash في التدوير الحر — اعتبره دائمًا تعديل
+ctx.dom.pendingPhoto = d;
+await renderPersonPhoto(photoBox, ctx.dom.currentPerson, d, ctx.DB);
+
+if (deg) photoBox.dataset.rotateDeg = String(deg);
+else delete photoBox.dataset.rotateDeg;
+
+// history snapshot (pending + flags الحالية)
+pushHistorySnapshot(ctx, { pending: d, flags: readFlagsFromPhotoBox(photoBox), at: Date.now() });
+
+showInfo('تم تدوير الصورة — لم تُحفظ بعد.');
+ctx.syncPhotoUI?.();
+
       } catch {
         showError('تعذّر تنفيذ التدوير.');
       } finally {
@@ -1998,6 +2031,33 @@ function ensurePhotoToolsDOM(ctx, photoBox){
       clearTimeout(t);
       t = setTimeout(()=> applyDeg(v), 220);
     });
+    
+      const minusBtn = byId('freeRotateMinus');
+  const plusBtn  = byId('freeRotatePlus');
+
+  const nudge = (delta) => {
+    if (!range) return;
+
+    const min = Number(range.min || 0) || 0;
+    const max = Number(range.max || 360) || 360;
+    const step = Number(range.step || 1) || 1;
+
+    const cur = Number(range.value || 0) || 0;
+    let next = cur + (delta * step);
+
+    if (next < min) next = min;
+    if (next > max) next = max;
+
+    range.value = String(next);
+
+    // نخلي نفس منطق input يشتغل (يعرض القيمة + debounce + applyDeg)
+    range.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+
+  // مهم: لا نخلي الضغط على الزر يفعّل label/يسحب الـ range
+  minusBtn?.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); nudge(-1); });
+  plusBtn?.addEventListener('click',  (e) => { e.preventDefault(); e.stopPropagation(); nudge( 1); });
+
   }
 
   // إعادة ضبط التعديلات (flags + رجوع للصورة المخزّنة)
@@ -2153,6 +2213,16 @@ function applyPhotoUIState(state, photoBox){
   }
 
   tools = ensurePhotoToolsDOM(window.__photoCtx, photoBox);
+// مزامنة السلايدر بعد ضمان وجوده في DOM
+{
+  const range = byId('freeRotate');
+  const out   = byId('freeRotateVal');
+
+  const deg = Number(photoBox?.dataset?.rotateDeg || 0) || 0;
+
+  if (range) range.value = String(deg);
+  if (out)   out.textContent = `${deg}°`;
+}
 
   const undoBtn     = byId('undoPhoto');
   const redoBtn     = byId('redoPhoto');
@@ -2200,10 +2270,10 @@ function applyPhotoUIState(state, photoBox){
   }
 
   // rotate slider wrap
-  if (rotWrap){
-    if (state.showRotateSlider) rotWrap.style.display = 'inline-flex';
-    else rotWrap.style.display = 'none';
-  }
+if (rotWrap){
+  if (state.showRotateSlider) rotWrap.removeAttribute('hidden');
+  else rotWrap.setAttribute('hidden','');
+}
 
   // rotate toggles 90
   if (state.showUndoRotate){
@@ -2233,9 +2303,9 @@ function applyPhotoUIState(state, photoBox){
   }
 
   // Disable all during busy
-  const allIds = ['undoPhoto','redoPhoto','compareHold','fitEditor','flipX','flipY','freeRotate','resetTransforms','rotateLeft','undoRotate','cropSquare','undoCrop','restoreOrig'];
-  allIds.forEach(id=>{
-    const el = byId(id);
+  const allIds = ['undoPhoto', 'redoPhoto', 'compareHold', 'fitEditor', 'flipX', 'flipY', 'freeRotate', 'resetTransforms', 'rotateLeft', 'undoRotate', 'cropSquare', 'undoCrop', 'restoreOrig', 'freeRotateMinus', 'freeRotatePlus'];
+  allIds.forEach(id => {
+              const el = byId(id);
     if (!el) return;
     if (state.disableAll) el.setAttribute('disabled','');
     else el.removeAttribute('disabled');
@@ -2340,6 +2410,52 @@ try{
     }
 
     await renderPersonPhoto(photoBox, person, undefined, ctx.DB);
+// ===== معاينة الصورة عند النقر (bioPhoto) =====
+if (!photoBox.__viewerBound){
+  photoBox.__viewerBound = true;
+
+// Viewer API singleton (يتشارك overlay نفسه)
+const viewer = createImageViewerOverlay({
+  overlayClass: 'bio-image-viewer-overlay',
+  backdropClass: 'bio-image-viewer-backdrop',
+  dialogClass: 'bio-image-viewer-dialog',
+  imgClass: 'bio-image-viewer-img',
+  closeBtnClass: 'bio-image-viewer-close',
+  navClass: 'bio-image-viewer-nav',
+  saveBtnClass: 'bio-image-viewer-save image-viewer-save',
+  minimalNav: true
+});
+
+
+  photoBox.addEventListener('click', async (e) => {
+    const imgEl = e.target && e.target.closest && e.target.closest('#bioPhoto img');
+    if (!imgEl) return;
+ //  منع المعاينة أثناء المعالجة
+  if (ctx?.dom?.photoBusy) return;
+    // لا تفتح المعاينة إذا لا توجد صورة فعلية
+    const srcNow = imgEl.currentSrc || imgEl.src || '';
+    if (!srcNow) return;
+
+    // لو عندنا نسخة كاملة محفوظة pid_full نفضّل عرضها
+    const pid = ctx?.dom?.currentPerson?._id;
+    if (pid){
+      try{
+        const fullBlob = await ctx.DB.getPhoto(pid + '_full');
+        if (fullBlob instanceof Blob){
+          const fullUrl = trackObjectURL(URL.createObjectURL(fullBlob));
+          viewer.open([fullUrl], 0);
+
+          // مهم: لما يقفل المستخدم المعاينة ما عندنا hook مباشر للإغلاق هنا،
+          // لكننا على الأقل نتركه ضمن tracked urls ويتنظف في person:close عبر revokeAllTrackedObjectURLs().
+          return;
+        }
+      }catch{}
+    }
+
+    // fallback: اعرض المصدر الحالي (data/blob/http)
+    viewer.open([srcNow], 0);
+  }, true);
+}
 
     // رفع حالتي القص/التدوير من الموديل إلى DOM
     if (person?.bio?.photoRotated) photoBox.dataset.rotated = '1'; else delete photoBox.dataset.rotated;

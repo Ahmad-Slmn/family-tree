@@ -722,22 +722,46 @@ return res; // confirm / cancel
 ========================================================= */
 function initFontSize() {
   const r = byId('fontSizeRange');
-
-  applyFontSize(currentFontSize);
+  const minusBtn = byId('fontSizeMinus');
+  const plusBtn  = byId('fontSizePlus');
   if (!r) return;
 
-  r.value = currentFontSize;
+  const min  = parseInt(r.min || '12', 10);
+  const max  = parseInt(r.max || '24', 10);
+  const step = parseInt(r.step || '1', 10);
+  const clamp = (v) => Math.max(min, Math.min(max, v));
+
+  const paint = (v) => {
+    r.value = String(v);
+    r.setAttribute('aria-valuenow', String(v));
+    applyFontSize(v); // يكتب النص + يحفظ في localStorage
+  };
+
+  const setSize = (v, showToast = false, force = false) => {
+    v = clamp(v);
+    const old = currentFontSize;
+
+    if (!force && v === old) return;
+
+    currentFontSize = v;
+    paint(v);
+
+    if (showToast) {
+      showSuccess(`تم تغيير حجم الخط من ${highlight(old + 'px')} إلى ${highlight(v + 'px')}`);
+    }
+  };
+
+  // تهيئة من التخزين (إجبار تحديث الواجهة)
+  setSize(currentFontSize, false, true);
 
   r.addEventListener('input', () => {
-    const v = parseInt(r.value);
-    if (v === currentFontSize) return;
-
-    const old = currentFontSize;
-    currentFontSize = v;
-    applyFontSize(v);
-
-    showSuccess(`تم تغيير حجم الخط من ${highlight(old + 'px')} إلى ${highlight(v + 'px')}`);
+    const v = parseInt(r.value, 10);
+    if (!Number.isFinite(v)) return;
+    setSize(v, true);
   });
+
+  minusBtn?.addEventListener('click', (e) => { e.preventDefault(); setSize(currentFontSize - step, true); });
+  plusBtn?.addEventListener('click',  (e) => { e.preventDefault(); setSize(currentFontSize + step, true); });
 }
 
 function initResetSettings() {
@@ -998,7 +1022,8 @@ export function createImageViewerOverlay({
   arrowPrevClass = 'image-viewer-arrow image-viewer-arrow-prev',
   arrowNextClass = 'image-viewer-arrow image-viewer-arrow-next',
   counterClass = 'image-viewer-counter',
-  saveBtnClass = 'image-viewer-save'
+  saveBtnClass = 'image-viewer-save',
+  minimalNav = false
 } = {}) {
   let overlay = document.querySelector(`.${overlayClass}`);
   if (overlay && overlay._sliderApi) return overlay._sliderApi;
@@ -1021,32 +1046,41 @@ export function createImageViewerOverlay({
   img.className = imgClass;
   img.alt = 'معاينة الصورة';
 
+  // NAV (مشروط)
   const nav = document.createElement('div');
   nav.className = navClass;
-
-  const prevBtn = document.createElement('button');
-  prevBtn.type = 'button';
-  prevBtn.className = arrowPrevClass;
-  prevBtn.textContent = '›';
-
-  const counter = document.createElement('div');
-  counter.className = counterClass;
 
   const saveBtn = document.createElement('button');
   saveBtn.type = 'button';
   saveBtn.className = saveBtnClass;
   saveBtn.innerHTML = '<i class="fa-solid fa-download"></i><span>حفظ الصورة</span>';
 
-  const nextBtn = document.createElement('button');
-  nextBtn.type = 'button';
-  nextBtn.className = arrowNextClass;
-  nextBtn.textContent = '‹';
+  // وضع بسيط: حفظ فقط
+  let prevBtn = null, nextBtn = null, counter = null;
 
-  const centerWrap = document.createElement('div');
-  centerWrap.className = 'image-viewer-center';
-  centerWrap.append(counter, saveBtn);
+  if (minimalNav) {
+    nav.append(saveBtn);
+  } else {
+    prevBtn = document.createElement('button');
+    prevBtn.type = 'button';
+    prevBtn.className = arrowPrevClass;
+    prevBtn.textContent = '›';
 
-  nav.append(nextBtn, centerWrap, prevBtn);
+    counter = document.createElement('div');
+    counter.className = counterClass;
+
+    nextBtn = document.createElement('button');
+    nextBtn.type = 'button';
+    nextBtn.className = arrowNextClass;
+    nextBtn.textContent = '‹';
+
+    const centerWrap = document.createElement('div');
+    centerWrap.className = 'image-viewer-center';
+    centerWrap.append(counter, saveBtn);
+
+    nav.append(nextBtn, centerWrap, prevBtn);
+  }
+
   dialog.append(closeBtn, img, nav);
   overlay.append(backdrop, dialog);
   document.body.appendChild(overlay);
@@ -1056,27 +1090,26 @@ export function createImageViewerOverlay({
 
   const prevTokens = arrowPrevClass.split(/\s+/).filter((c) => /prev$/i.test(c));
   const nextTokens = arrowNextClass.split(/\s+/).filter((c) => /next$/i.test(c));
-
   const dialogEl = dialog;
 
   function runOpenAnimation() {
     dialogEl.style.transition = 'none';
     dialogEl.style.opacity = '0';
     dialogEl.style.transform = 'scale(.92) translateY(8px)';
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        dialogEl.style.transition = 'opacity .32s ease, transform .32s ease';
-        dialogEl.style.opacity = '1';
-        dialogEl.style.transform = 'scale(1) translateY(0)';
-      });
-    });
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      dialogEl.style.transition = 'opacity .32s ease, transform .32s ease';
+      dialogEl.style.opacity = '1';
+      dialogEl.style.transform = 'scale(1) translateY(0)';
+    }));
   }
 
-  // updateUI الأساسي
+  // updateUI (مشروط)
   let updateUI = function () {
     if (!urls.length) return;
 
     img.src = urls[index];
+    if (minimalNav) return; // لا أسهم ولا عداد
+
     counter.textContent = `${index + 1} / ${urls.length}`;
 
     const single = urls.length <= 1;
@@ -1092,32 +1125,28 @@ export function createImageViewerOverlay({
 
   // تأثير انتقال الصور + حركة الاتجاه
   let lastIndex = -1;
-
   function animateImageChange(_newIndex, direction) {
     img.style.transition = 'none';
     img.style.opacity = 0;
     img.style.transform = `translateX(${direction * 40}px) scale(.97)`;
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        img.style.transition = 'opacity .32s ease, transform .32s ease';
-        img.style.opacity = 1;
-        img.style.transform = 'translateX(0) scale(1)';
-      });
-    });
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      img.style.transition = 'opacity .32s ease, transform .32s ease';
+      img.style.opacity = 1;
+      img.style.transform = 'translateX(0) scale(1)';
+    }));
   }
 
   const _updateUI_original = updateUI;
   updateUI = function () {
     const old = lastIndex;
     _updateUI_original();
-    if (old !== -1 && old !== index) {
+    if (!minimalNav && old !== -1 && old !== index) {
       const dir = index > old ? -1 : 1;
       animateImageChange(index, dir);
     }
     lastIndex = index;
   };
 
-  // Bounce عند حدود الصور
   function bounceEffect(direction) {
     img.style.transition = 'transform .25s ease';
     img.style.transform = `translateX(${direction * 22}px)`;
@@ -1131,7 +1160,6 @@ export function createImageViewerOverlay({
     if (index <= 0) { bounceEffect(1); return; }
     goPrev_original();
   };
-
   let goNext = function () {
     if (index >= urls.length - 1) { bounceEffect(-1); return; }
     goNext_original();
@@ -1168,30 +1196,32 @@ export function createImageViewerOverlay({
     a.remove();
   }
 
-  // أحداث التنقل
-  nav.addEventListener('click', (e) => {
-    const btn = e.target.closest('button');
-    if (!btn || btn.disabled) return;
+  // أحداث التنقل (تعطيلها في minimalNav)
+  if (!minimalNav) {
+    nav.addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (!btn || btn.disabled) return;
 
-    const isPrev =
-      prevTokens.some((cls) => btn.classList.contains(cls)) ||
-      btn.classList.contains('image-viewer-arrow-prev') ||
-      btn.classList.contains('story-image-viewer-arrow-prev') ||
-      btn.classList.contains('timeline-image-viewer-arrow-prev') ||
-      btn.classList.contains('bio-image-viewer-arrow-prev') ||
-      btn.classList.contains('sources-image-viewer-arrow-prev');
+      const isPrev =
+        prevTokens.some((cls) => btn.classList.contains(cls)) ||
+        btn.classList.contains('image-viewer-arrow-prev') ||
+        btn.classList.contains('story-image-viewer-arrow-prev') ||
+        btn.classList.contains('timeline-image-viewer-arrow-prev') ||
+        btn.classList.contains('bio-image-viewer-arrow-prev') ||
+        btn.classList.contains('sources-image-viewer-arrow-prev');
 
-    const isNext =
-      nextTokens.some((cls) => btn.classList.contains(cls)) ||
-      btn.classList.contains('image-viewer-arrow-next') ||
-      btn.classList.contains('story-image-viewer-arrow-next') ||
-      btn.classList.contains('timeline-image-viewer-arrow-next') ||
-      btn.classList.contains('bio-image-viewer-arrow-next') ||
-      btn.classList.contains('sources-image-viewer-arrow-next');
+      const isNext =
+        nextTokens.some((cls) => btn.classList.contains(cls)) ||
+        btn.classList.contains('image-viewer-arrow-next') ||
+        btn.classList.contains('story-image-viewer-arrow-next') ||
+        btn.classList.contains('timeline-image-viewer-arrow-next') ||
+        btn.classList.contains('bio-image-viewer-arrow-next') ||
+        btn.classList.contains('sources-image-viewer-arrow-next');
 
-    if (isPrev) goPrev();
-    else if (isNext) goNext();
-  });
+      if (isPrev) goPrev();
+      else if (isNext) goNext();
+    });
+  }
 
   saveBtn.addEventListener('click', (e) => { e.stopPropagation(); downloadCurrentImage(); });
 
@@ -1199,17 +1229,17 @@ export function createImageViewerOverlay({
   closeBtn.addEventListener('click', closeViewer);
   overlay.addEventListener('click', (e) => { if (e.target === overlay) closeViewer(); });
 
+  // كيبورد (تعطيل الأسهم في minimalNav)
   document.addEventListener('keydown', (e) => {
     if (!overlay.classList.contains('is-open')) return;
 
     if (e.key === 'Escape') closeViewer();
-    else if (e.key === 'ArrowLeft') { e.preventDefault(); prevBtn.click(); }
-    else if (e.key === 'ArrowRight') { e.preventDefault(); nextBtn.click(); }
+    else if (!minimalNav && e.key === 'ArrowLeft') { e.preventDefault(); prevBtn.click(); }
+    else if (!minimalNav && e.key === 'ArrowRight') { e.preventDefault(); nextBtn.click(); }
   });
 
-  // السحب الحيّ drag-follow
-  let dragX = 0;
-  let dragging = false;
+  // السحب (تعطيله في minimalNav)
+  let dragX = 0, dragging = false;
 
   function onTouchStart(e) {
     if (!overlay.classList.contains('is-open')) return;
@@ -1239,13 +1269,15 @@ export function createImageViewerOverlay({
     else if (dx > 60) goPrev();
   }
 
-  img.addEventListener('touchstart', onTouchStart, { passive: false });
-  img.addEventListener('touchmove', onTouchMove, { passive: false });
-  img.addEventListener('touchend', onTouchEnd);
+  if (!minimalNav) {
+    img.addEventListener('touchstart', onTouchStart, { passive: false });
+    img.addEventListener('touchmove', onTouchMove, { passive: false });
+    img.addEventListener('touchend', onTouchEnd);
 
-  dialog.addEventListener('touchstart', onTouchStart, { passive: false });
-  dialog.addEventListener('touchmove', onTouchMove, { passive: false });
-  dialog.addEventListener('touchend', onTouchEnd);
+    dialog.addEventListener('touchstart', onTouchStart, { passive: false });
+    dialog.addEventListener('touchmove', onTouchMove, { passive: false });
+    dialog.addEventListener('touchend', onTouchEnd);
+  }
 
   const api = { open };
   overlay._sliderApi = api;

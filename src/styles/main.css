@@ -56,8 +56,8 @@ body {
   /* Splash loading */
   --z-splash: 1300;
 
-  /* Toast أعلى شيء (بدون 99999) */
-  --z-toast: 1400;
+  /* Toast أعلى شيء */
+  --z-toast: 2001;
 
   /* Confirm modal لازم يكون فوق المودالات */
   --z-confirm: 2000;

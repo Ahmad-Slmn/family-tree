@@ -263,10 +263,21 @@
             <h4>حجم الخط</h4>
             <div class="font-size-selector">
                 <label for="fontSizeRange">الحجم:</label>
+
+                <button type="button" id="fontSizeMinus" class="btn tiny" aria-label="تصغير الخط" title="تصغير">
+                    <i class="fa-solid fa-minus"></i>
+                </button>
+
                 <input type="range" id="fontSizeRange" min="12" max="24" step="1" value="16" aria-valuemin="12" aria-valuemax="24" />
+
+                <button type="button" id="fontSizePlus" class="btn tiny" aria-label="تكبير الخط" title="تكبير">
+                    <i class="fa-solid fa-plus"></i>
+                </button>
+
                 <span id="fontSizeValue">16px</span>
             </div>
         </section>
+
 
         <!-- ♻️ إعادة الإعدادات -->
         <section class="side-section">
