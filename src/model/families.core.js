@@ -174,7 +174,10 @@ export function normalizeChild(c){
       bio: _cloneDefaultBio(),
       stories: [],
       events: [],
-      sources: []
+      sources: [],
+      education: [],
+      career: [],
+
     };
   }
   const bio = _withBio(c?.bio);
@@ -185,7 +188,10 @@ export function normalizeChild(c){
     _id: c?._id,
     stories: Array.isArray(c?.stories) ? c.stories : [],
     events: Array.isArray(c?.events) ? c.events : [],
-    sources: Array.isArray(c?.sources) ? c.sources : []
+    sources: Array.isArray(c?.sources) ? c.sources : [],
+    education: Array.isArray(c?.education) ? c.education : [],
+    career: Array.isArray(c?.career) ? c.career : [],
+
   };
 }
 
@@ -215,7 +221,10 @@ export function normalizeWife(w, idx){
 
     stories: Array.isArray(w?.stories) ? w.stories : [],
     events: Array.isArray(w?.events) ? w.events : [],
-    sources: Array.isArray(w?.sources) ? w.sources : []
+    sources: Array.isArray(w?.sources) ? w.sources : [],
+    education: Array.isArray(w?.education) ? w.education : [],
+    career: Array.isArray(w?.career) ? w.career : [],
+
   };
 
   ww.children = (w?.children || []).map(normalizeChild);
@@ -236,6 +245,8 @@ export function normalizeChildForLoad(c) {
       stories: [],
       events: [],
       sources: [],
+      education: [],
+      career: [],
       children: [],
       wives: []
     };
@@ -250,6 +261,8 @@ export function normalizeChildForLoad(c) {
     stories: Array.isArray(c.stories) ? c.stories : [],
     events: Array.isArray(c.events) ? c.events : [],
     sources: Array.isArray(c.sources) ? c.sources : [],
+    education: Array.isArray(c.education) ? c.education : [],
+    career: Array.isArray(c.career) ? c.career : [],
     children: Array.isArray(c.children) ? c.children.map(normalizeChildForLoad).filter(Boolean) : [],
     wives: Array.isArray(c.wives) ? c.wives.map(normalizeWifeForLoad).filter(Boolean) : []
   };
@@ -269,6 +282,8 @@ export function normalizeWifeForLoad(w, i){
     stories: Array.isArray(w?.stories) ? w.stories : [],
     events: Array.isArray(w?.events) ? w.events : [],
     sources: Array.isArray(w?.sources) ? w.sources : [],
+    education: Array.isArray(w?.education) ? w.education : [],
+    career: Array.isArray(w?.career) ? w.career : [],
     children: Array.isArray(w?.children) ? w.children.map(normalizeChildForLoad).filter(Boolean) : []
   };
 }
@@ -291,6 +306,16 @@ export function ensureSourcesArray(person) {
   if (!Array.isArray(person.sources)) person.sources = [];
 }
 
+export function ensureEducationArray(person) {
+  if (!person || typeof person !== 'object') return;
+  if (!Array.isArray(person.education)) person.education = [];
+}
+
+export function ensureCareerArray(person) {
+  if (!person || typeof person !== 'object') return;
+  if (!Array.isArray(person.career)) person.career = [];
+}
+
 export function ensureBio(person) {
   if (!person) return;
 
@@ -298,6 +323,8 @@ export function ensureBio(person) {
   ensureStoriesArray(person);
   ensureEventsArray(person);
   ensureSourcesArray(person);
+  ensureEducationArray(person);
+  ensureCareerArray(person);
 
   if (Array.isArray(person.children)) {
     person.children = person.children.map(normalizeChild);
@@ -471,6 +498,8 @@ export function normalizeNewFamilyForLineage(f){
     if (!Array.isArray(p.stories)) p.stories = [];
     if (!Array.isArray(p.events)) p.events = [];
     if (!Array.isArray(p.sources)) p.sources = [];
+    if (!Array.isArray(p.education)) p.education = [];
+    if (!Array.isArray(p.career)) p.career = [];
 
     p.children.forEach(visit);
     p.wives.forEach(visit);
@@ -1602,6 +1631,8 @@ export function linkRootPersonWives(fam) {
           stories: [],
           events: [],
           sources: [],
+          education: [],
+          career: [],
           children: [],
           wives: []
         };
@@ -1616,6 +1647,8 @@ export function linkRootPersonWives(fam) {
           stories: Array.isArray(c.stories) ? c.stories : [],
           events: Array.isArray(c.events) ? c.events : [],
           sources: Array.isArray(c.sources) ? c.sources : [],
+          education: Array.isArray(c.education) ? c.education : [],
+          career: Array.isArray(c.career) ? c.career : [],
           children: Array.isArray(c.children) ? c.children : [],
           wives: Array.isArray(c.wives) ? c.wives : []
         };

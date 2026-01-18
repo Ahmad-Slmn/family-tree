@@ -126,9 +126,12 @@ let _ui = {
   btnEl: null,
   badgeEl: null,
   tooltipEl: null,
+
   modalEl: null,
   modalBodyEl: null,
   modalTitleEl: null,
+  modalAbort: null, 
+
   currentScopeKey: null,
   lastScopeKey: null
 };
@@ -553,7 +556,28 @@ function buildIcon(slot){
   });
 }
 
+function destroyModal(){
+  if (!_ui.modalEl) return;
+
+  // ألغي كل event listeners المسجلة باستخدام AbortController
+  try { _ui.modalAbort?.abort?.(); } catch {}
+  _ui.modalAbort = null;
+
+  _ui.modalEl.remove();
+  _ui.modalEl = null;
+  _ui.modalBodyEl = null;
+  _ui.modalTitleEl = null;
+}
+
+function closeValidationModal(){
+  if (!_ui.modalEl) return;
+  destroyModal();
+}
+
 function buildModal(){
+  // احتياط: لو موجود مودال قديم شيله أول
+  if (_ui.modalEl) destroyModal();
+
   const modal = document.createElement('div');
   modal.className = 'validation-center-modal';
   modal.id = 'validationCenterModal';
@@ -573,25 +597,34 @@ function buildModal(){
   `;
 
   document.body.appendChild(modal);
-
+modal.classList.add('show');
   const closeBtn = modal.querySelector('.validation-center-close');
   const card = modal.querySelector('.validation-center-card');
 
-  closeBtn.addEventListener('click', () => modal.classList.remove('show'));
-  modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('show'); });
+  // اربط كل listeners بـ AbortController عشان نلغيها عند destroy
+  const ac = new AbortController();
+  const opt = { signal: ac.signal };
+  _ui.modalAbort = ac;
+
+  closeBtn.addEventListener('click', closeValidationModal, opt);
+
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeValidationModal();
+  }, opt);
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && modal.classList.contains('show')){
-      modal.classList.remove('show');
-    }
-  });
+    // بما أن المودال ينحذف عند الإغلاق، يكفي Escape يشتغل إذا المودال موجود
+    if (e.key === 'Escape') closeValidationModal();
+  }, opt);
 
   _ui.modalEl = modal;
   _ui.modalBodyEl = modal.querySelector('#validationCenterBody');
   _ui.modalTitleEl = modal.querySelector('#validationCenterTitle');
 
-  card.addEventListener('click', (e) => e.stopPropagation());
+  // امنع إغلاق بالضغط داخل الكارد
+  card.addEventListener('click', (e) => e.stopPropagation(), opt);
 
+  // زر القفز للسيرة: يغلق ثم يفتح الشخص
   card.addEventListener('click', (e) => {
     const btn = e.target?.closest?.('button.vc-jump[data-pid]');
     if (!btn) return;
@@ -599,9 +632,9 @@ function buildModal(){
     const pid = String(btn.dataset.pid || '').trim();
     if (!pid) return;
 
-    modal.classList.remove('show');
+    closeValidationModal();
     _ui.ctx?.bus?.emit?.('ui:openPersonById', { id: pid });
-  });
+  }, opt);
 }
 
 /* =========================
@@ -661,8 +694,6 @@ export function initValidationUI(ctx){
 
   if (slot){
     buildIcon(slot);
-    buildModal();
-
     loadStoreFromLS();
 
     // إن لم توجد نتائج للعائلة الحالية أنشئها الآن (silent)
@@ -768,6 +799,8 @@ export function getValidationSummary(scopeKey){
 }
 
 export function openValidationModal(scopeKey){
+  // إن لم يكن موجود، ابنِه الآن
+  if (!_ui.modalEl) buildModal();
   if (!_ui.modalEl) return;
 
   const key = String(scopeKey || getActiveFamilyScopeKey() || _ui.lastScopeKey || '').trim();
@@ -779,5 +812,4 @@ export function openValidationModal(scopeKey){
   _ui.modalBodyEl.innerHTML = payload ? renderPayload(payload)
     : `<div class="vc-section"><h3>لا توجد بيانات لعرضها</h3><div class="vc-mini">لا يوجد scopeKey محفوظ.</div></div>`;
 
-  _ui.modalEl.classList.add('show');
 }

@@ -1,0 +1,62 @@
+/* ========================================================================== */
+/* bio-education.css - قسم التعليم */
+/* ========================================================================== */
+
+.bio-section-education .education-note-preview{
+  margin-top:.25rem;
+  font-size:.82rem;
+  line-height:1.6;
+  color:color-mix(in oklab,var(--text-muted)88%,var(--text-main));
+}
+.bio-section-education .education-note-preview strong{font-weight:700}
+
+.bio-section-education .education-image-thumb--preview{
+  width:8.8rem;
+  height:7rem;
+  cursor:pointer;
+}
+
+.bio-section-education .education-grade-input,
+.bio-section-education .education-tags-input{
+  width:100%;
+  padding:.32rem .65rem;
+  border-radius:.6rem;
+  border:1px solid var(--surface-border);
+  background:var(--panel-bg);
+  font-size:.84rem;
+  color:var(--text-main);
+  outline:none!important;
+  box-shadow:0 .06rem .18rem rgba(0,0,0,.03);
+  transition:border-color .16s,box-shadow .16s,background-color .16s,transform .12s;
+}
+.bio-section-education .education-grade-input::placeholder,
+.bio-section-education .education-tags-input::placeholder{color:var(--text-muted)}
+.bio-section-education .education-grade-input:hover,
+.bio-section-education .education-tags-input:hover{
+  border-color:color-mix(in oklab,var(--modal-primary) 40%,var(--surface-border));
+  background:color-mix(in oklab,var(--panel-bg) 94%,#fff);
+  transform:translateY(-1px);
+  box-shadow:0 .12rem .32rem rgba(0,0,0,.06);
+}
+.bio-section-education .education-grade-input:focus-visible,
+.bio-section-education .education-tags-input:focus-visible{
+  border-color:var(--modal-primary);
+  box-shadow:0 0 0 .09rem color-mix(in oklab,var(--modal-primary) 40%,transparent);
+  background:var(--card-bg);
+}
+
+.education-ongoing-toggle{margin: 0}
+
+/* رابط التحقق داخل المعاينة */
+.education-credverify-row--url a {
+  color: var(--biosec-link-color, #2563eb); /* أزرق مريح */
+  font-weight: 500;
+  text-decoration: underline;
+  word-break: break-all;
+}
+
+.education-credverify-row--url a:hover {
+  color: var(--biosec-link-hover-color, #1d4ed8);
+  text-decoration: none;
+}
+

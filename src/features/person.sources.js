@@ -1,5 +1,6 @@
 // person.sources.js
-// إدارة "المصادر والوثائق" لكل شخص (منطق + واجهة القسم داخل نافذة السيرة)
+// قسم "المصادر والوثائق" لكل شخص (منطق + واجهة)
+// مضاف: تاريخ الانتهاء + تنبيه، حقول هوية/ميلاد ديناميكية، سجل تدقيق history، بحث متقدم، اقتراح وسوم، إحصاءات موسعة
 
 import {
   el,
@@ -15,14 +16,48 @@ import {
   attachHorizontalSortable,
   createImageViewerOverlay
 } from '../utils.js';
+
 import { DB } from '../storage/db.js';
 
+import {
+  nowIso,
+  safeStr,
+  shallowArr,
+  splitCommaTags,
+  isTmpRef,
+  isIdbRef,
+  autoResizeTextareas,
+
+  createSectionTempAndResolver,
+  upgradeTmpRefs,
+  makeTempMetaFromFile,
+
+  formatCreatedAtLabel,
+  getTextLengthInfo,
+  openResolvedSlider,
+  applyCardEditMode,
+
+  createTypeHelpers,
+
+  isAllowedFile,
+  getRefExt,
+  inferFileKind,
+  openInNewTabSafe,
+  groupRefsByKind,
+  buildDownloadName,
+
+  findImageIndex,
+  makeGroupTitle,
+  makeDivider,
+  createFiltersCollapseController
+} from '../features/bio-sections.utils.js';
+
+
 /* ============================================================================
-   1) إعدادات التحقق من الملفات المرفقة
-   ============================================================================ */
+   إعدادات الملفات
+============================================================================ */
 
 const MAX_FILE_SIZE_MB = 20;
-const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
 const MAX_FILES_PER_PICK = 10;
 
 const ALLOWED_MIME = new Set([
@@ -35,162 +70,9 @@ const ALLOWED_MIME = new Set([
   'image/heif'
 ]);
 
-function isAllowedSourceFile(file) {
-  if (!file) return { ok: false, reason: 'ملف غير صالح.' };
-  if (file.size > MAX_FILE_SIZE) {
-    return { ok: false, reason: `حجم الملف كبير (أقصى حد ${MAX_FILE_SIZE_MB}MB).` };
-  }
-
-  const type = (file.type || '').toLowerCase();
-
-  // الصور العادية
-  if (type.startsWith('image/')) return { ok: true };
-
-  // PDF/Word/Excel/HEIC...
-  if (ALLOWED_MIME.has(type)) return { ok: true };
-
-  // fallback بالامتداد لو file.type غير موجود/غير دقيق
-  const name = (file.name || '').toLowerCase();
-  const ext = name.includes('.') ? name.split('.').pop() : '';
-  const allowedExt = new Set([
-    'pdf', 'doc', 'docx', 'xls', 'xlsx',
-    'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg',
-    'heic', 'heif'
-  ]);
-
-  if (ext && allowedExt.has(ext)) return { ok: true };
-
-  return { ok: false, reason: 'نوع الملف غير مدعوم. ارفع صورة أو PDF أو Word/Excel.' };
-}
-
 /* ============================================================================
-   2) Helpers: امتداد / MIME / تصنيف نوع الملف (Image/PDF/Word/Excel/Other)
-   ============================================================================ */
-
-function getRefExt(ref) {
-  const s = String(ref || '');
-  const m = s.match(/\.([a-zA-Z0-9]+)(?:\?|#|$)/);
-  return m ? m[1].toLowerCase() : '';
-}
-
-function mimeToExt(mime = '') {
-  const m = String(mime || '').toLowerCase();
-  if (m === 'application/pdf') return 'pdf';
-  if (m === 'application/msword') return 'doc';
-  if (m === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return 'docx';
-  if (m === 'application/vnd.ms-excel') return 'xls';
-  if (m === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') return 'xlsx';
-  if (m === 'text/csv') return 'csv';
-  if (m.startsWith('image/')) {
-    const ext = m.split('/')[1] || '';
-    return ext === 'jpeg' ? 'jpg' : ext;
-  }
-  return '';
-}
-
-/**
- * تصنيف نوع الملف (kind) اعتماداً على mime/ext/ref/meta
- * - الهدف: تقليل تكرار منطق التصنيف في أكثر من مكان
- */
-function inferFileKind({ mime = '', ext = '', ref = '' } = {}) {
-  const m = String(mime || '').toLowerCase();
-  const e = String(ext || '').toLowerCase();
-  const r = String(ref || '').toLowerCase();
-
-  if (m.startsWith('image/') || r.startsWith('data:image/') || /\.(jpe?g|png|gif|webp|bmp|svg|heic|heif)(?:\?|#|$)/.test(r) || /(jpe?g|png|gif|webp|bmp|svg|heic|heif)$/.test(e)) {
-    return 'image';
-  }
-  if (m === 'application/pdf' || r.startsWith('data:application/pdf') || /\.pdf(?:\?|#|$)/.test(r) || e === 'pdf') {
-    return 'pdf';
-  }
-  if (m.includes('word') || /(doc|docx|rtf|odt)$/.test(e) || /\.(doc|docx|rtf|odt)(?:\?|#|$)/.test(r)) {
-    return 'word';
-  }
-  if (m.includes('excel') || /(xls|xlsx|csv)$/.test(e) || /\.(xls|xlsx|csv)(?:\?|#|$)/.test(r)) {
-    return 'excel';
-  }
-  return 'other';
-}
-
-/* ============================================================================
-   3) ملفات المصادر عبر IndexedDB: resolve/store/open
-   ============================================================================ */
-
-async function resolveSourceFileUrl(ref) {
-  if (!ref) return null;
-  const s = String(ref);
-
-  // روابط جاهزة
-  if (/^(data:|blob:|https?:)/.test(s)) return s;
-
-  // صيغة idb:...
-  if (typeof DB?.getSourceFileURL === 'function') {
-    try {
-      const url = await DB.getSourceFileURL(s);
-      return url || null;
-    } catch (e) {
-      console.error('resolveSourceFileUrl failed', e);
-      return null;
-    }
-  }
-
-  // fallback
-  return s;
-}
-
-// فتح تبويب "بشكل آمن" بدون ما يتبلك (لا تستخدم await قبل window.open)
-function openInNewTabSafe(urlPromise) {
-  const w = window.open('about:blank', '_blank'); // بدون noopener هنا
-  if (w) w.opener = null; // أمان noopener
-
-  Promise.resolve(urlPromise)
-    .then((url) => {
-      if (!url) {
-        try { w?.close(); } catch {}
-        return;
-      }
-      try { w.location.href = url; } catch {}
-    })
-    .catch(() => {
-      try { w?.close(); } catch {}
-    });
-}
-
-async function storeSourceFile(file, personId, sourceId) {
-  if (!file) return null;
-
-  if (typeof DB?.putSourceFile === 'function') {
-    try {
-      const mime = (file.type || '').toLowerCase();
-      const name = (file.name || '');
-      const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : mimeToExt(mime);
-      const kind = inferFileKind({ mime, ext });
-
-      const ref = await DB.putSourceFile({
-        file,
-        personId,
-        sourceId,
-        meta: { mime, name, ext, kind }
-      });
-      return ref || null;
-    } catch (e) {
-      console.error('storeSourceFile failed', e);
-      return null;
-    }
-  }
-
-  // fallback مؤقت: تخزين DataURL (غير مفضل للملفات الكبيرة)
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = (err) => reject(err);
-    reader.onload = (ev) => resolve(String(ev.target?.result || ''));
-    reader.readAsDataURL(file);
-  });
-}
-
-/* ============================================================================
-   4) منطق البيانات (Normalize / CRUD / Sort)
-   ============================================================================ */
+   بيانات المصدر: أنواع + تطبيع + CRUD
+============================================================================ */
 
 const SOURCE_TYPE_LABELS = {
   generic: 'عام',
@@ -215,16 +97,12 @@ const SOURCE_TYPE_OPTIONS = [
   ['other', 'أخرى']
 ];
 
-function getSourceTypeLabel(code) {
-  return SOURCE_TYPE_LABELS[code] || '';
-}
-
-function getNoteLengthInfo(len) {
-  if (!len) return { label: 'بدون وصف', level: 0 };
-  if (len <= 140) return { label: 'وصف قصير', level: 1 };
-  if (len <= 400) return { label: 'وصف متوسط', level: 2 };
-  return { label: 'وصف مطوّل', level: 3 };
-}
+const sourceType = createTypeHelpers({
+  labels: SOURCE_TYPE_LABELS,
+  options: SOURCE_TYPE_OPTIONS,
+  allValue: 'all',
+  allLabel: 'كل الأنواع'
+});
 
 const CONFIDENCE_LEVEL_LABELS = {
   official: 'رسمي',
@@ -239,37 +117,149 @@ const CONFIDENTIALITY_LABELS = {
   sensitive: 'حساس'
 };
 
+function getSourceNoteLengthInfo(len) {
+  return getTextLengthInfo(
+    len,
+    { short: 140, medium: 400 },
+    {
+      empty: 'بدون وصف',
+      short: 'وصف قصير',
+      medium: 'وصف متوسط',
+      long: 'وصف مطوّل'
+    }
+  );
+}
+
+/* ----------------------------
+   منطق الانتهاء والتنبيه
+   - إذا validUntil < اليوم => منتهي
+   - إذا خلال N يوم => قريب الانتهاء
+----------------------------- */
+
+const DEFAULT_EXPIRY_ALERT_DAYS = 30;
+
+function parseIsoDateOnly(d) {
+  if (!d) return null;
+  const s = String(d).trim();
+  if (!s) return null;
+  const dt = new Date(s + 'T00:00:00Z');
+  const time = dt.getTime();
+  return Number.isFinite(time) ? dt : null;
+}
+
+function daysUntil(dateOnlyIso) {
+  const dt = parseIsoDateOnly(dateOnlyIso);
+  if (!dt) return null;
+  const now = new Date();
+  const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const diffMs = dt.getTime() - todayUTC.getTime();
+  return Math.floor(diffMs / (24 * 3600 * 1000));
+}
+
+function getExpiryStatus(src, alertDays = DEFAULT_EXPIRY_ALERT_DAYS) {
+  const until = (src?.validUntil || '').trim();
+  if (!until) return { status: 'none', days: null };
+  const d = daysUntil(until);
+  if (d == null) return { status: 'none', days: null };
+  if (d < 0) return { status: 'expired', days: d };
+  if (d <= alertDays) return { status: 'near', days: d };
+  return { status: 'ok', days: d };
+}
+
+/* ----------------------------
+   سجل التدقيق (Audit trail) محلي/ضمن البيانات
+----------------------------- */
+
+function normalizeHistory(raw) {
+  const list = Array.isArray(raw) ? raw : [];
+  return list
+    .map(h => ({
+      at: h?.at || null,
+      by: safeStr(h?.by),
+      action: safeStr(h?.action)
+    }))
+    .filter(x => x.at && x.action);
+}
+
+function appendHistory(oldHistory, entry) {
+  const h = normalizeHistory(oldHistory);
+  const e = entry && typeof entry === 'object' ? { at: entry.at || nowIso(), by: safeStr(entry.by), action: safeStr(entry.action) }
+    : null;
+  if (e && e.at && e.action) h.push(e);
+  return h;
+}
+
 function normalizeSource(raw) {
-  const now = new Date().toISOString();
+  const now = nowIso();
   if (!raw || typeof raw !== 'object') raw = {};
 
   return {
     id: String(raw.id || 'src_' + Math.random().toString(36).slice(2)),
-    title: String(raw.title || '').trim(),
-    type: (raw.type || '').trim(),
-    forField: (raw.forField || '').trim(),
+    title: safeStr(raw.title),
+    type: safeStr(raw.type),
+    forField: safeStr(raw.forField),
     date: raw.date || null,
-    place: (raw.place || '').trim(),
-    referenceCode: (raw.referenceCode || '').trim(),
-    issuer: (raw.issuer || '').trim(),
-    pages: (raw.pages || '').trim(),
+    place: safeStr(raw.place),
+    referenceCode: safeStr(raw.referenceCode),
+    issuer: safeStr(raw.issuer),
+    pages: safeStr(raw.pages),
+
     files: Array.isArray(raw.files) ? raw.files.map(String) : [],
-    tags: Array.isArray(raw.tags) ? raw.tags.map(t => String(t).trim()).filter(Boolean) : [],
-    note: (raw.note || '').trim(),
+    tags: Array.isArray(raw.tags) ? raw.tags.map(t => safeStr(t)).filter(Boolean) : [],
+    note: safeStr(raw.note),
     pinned: !!raw.pinned,
 
-    confidenceLevel: (raw.confidenceLevel || '').trim(),
+    confidenceLevel: safeStr(raw.confidenceLevel),
     relatedEventId: raw.relatedEventId || null,
 
     verified: !!raw.verified,
-    verifiedBy: (raw.verifiedBy || '').trim(),
+    verifiedBy: safeStr(raw.verifiedBy),
     verifiedAt: raw.verifiedAt || null,
 
-    confidentiality: (raw.confidentiality || '').trim(),
+    confidentiality: safeStr(raw.confidentiality),
+
+    // جديد: صلاحية/انتهاء
+    validUntil: raw.validUntil || null,          // YYYY-MM-DD
+    expiryAlertDays: Number.isFinite(Number(raw.expiryAlertDays)) ? Number(raw.expiryAlertDays)
+      : DEFAULT_EXPIRY_ALERT_DAYS,
+
+    // جديد: حقول هوية/ميلاد (تظهر ديناميكياً حسب النوع)
+    holderName: safeStr(raw.holderName),         // اسم صاحب الوثيقة
+    nationalId: safeStr(raw.nationalId),         // رقم الهوية
+    civilRegistryNo: safeStr(raw.civilRegistryNo), // رقم السجل المدني
+
+    // جديد: سجل تدقيق
+    history: normalizeHistory(raw.history),
 
     createdAt: raw.createdAt || now,
     updatedAt: raw.updatedAt || now
   };
+}
+
+/* ----------------------------
+   مفاتيح الفراغ
+----------------------------- */
+
+const SOURCE_EMPTY_KEYS = [
+  'title', 'type', 'forField', 'date', 'place', 'referenceCode', 'issuer', 'pages',
+  'files', 'tags', 'note', 'confidenceLevel', 'relatedEventId',
+  'verifiedBy', 'verifiedAt', 'confidentiality',
+  'validUntil', 'holderName', 'nationalId', 'civilRegistryNo'
+];
+
+const SOURCE_DRAFT_EMPTY_KEYS = [
+  'title', 'forField', 'date', 'place', 'referenceCode', 'issuer', 'pages',
+  'files', 'tags', 'note', 'confidenceLevel', 'relatedEventId',
+  'verifiedBy', 'verifiedAt', 'confidentiality',
+  'validUntil', 'holderName', 'nationalId', 'civilRegistryNo'
+];
+
+function isEmptySourceRecord(rec) {
+  return BioSec.isEmptyRecordByKeys(rec, SOURCE_EMPTY_KEYS);
+}
+
+function isEmptySourceDraft(rec) {
+  return BioSec.isEmptyRecordByKeys(rec, SOURCE_DRAFT_EMPTY_KEYS);
 }
 
 export function ensureSources(person) {
@@ -278,26 +268,39 @@ export function ensureSources(person) {
   person.sources = person.sources.map(normalizeSource);
 }
 
-export function addSource(person, data = {}, { onChange } = {}) {
+export function addSource(person, data = {}, { onChange, by = '' } = {}) {
   ensureSources(person);
   const src = normalizeSource(data);
-  const now = new Date().toISOString();
+  const now = nowIso();
   src.createdAt = now;
   src.updatedAt = now;
+
+  // سجل تدقيق: إنشاء
+  src.history = appendHistory(src.history, { at: now, by: by || '', action: 'create' });
+
   person.sources.unshift(src);
   if (typeof onChange === 'function') onChange(person.sources, src);
   return src;
 }
 
-export function updateSource(person, sourceId, data = {}, { onChange } = {}) {
+export function updateSource(person, sourceId, data = {}, { onChange, by = '' } = {}) {
   ensureSources(person);
   const idx = person.sources.findIndex(s => s.id === sourceId);
   if (idx === -1) return null;
 
   const old = person.sources[idx];
+
   const merged = normalizeSource({ ...old, ...data, id: old.id });
   merged.createdAt = old.createdAt || merged.createdAt;
-  merged.updatedAt = new Date().toISOString();
+  merged.updatedAt = nowIso();
+
+  // سجل تدقيق: تحديث (لا نضيف إذا ما تغير شيء فعلاً - يعتمد على استدعاء UI)
+  merged.history = appendHistory(old.history, {
+    at: merged.updatedAt,
+    by: by || '',
+    action: 'update'
+  });
+
   person.sources[idx] = merged;
 
   if (typeof onChange === 'function') onChange(person.sources, merged);
@@ -313,7 +316,6 @@ export function deleteSource(person, sourceId, { onChange } = {}) {
   return true;
 }
 
-// الفرز: نفضّل تاريخ الوثيقة، ثم تاريخ الإنشاء
 export function sortSources(person, mode = 'latest') {
   ensureSources(person);
   person.sources.sort((a, b) => {
@@ -324,121 +326,183 @@ export function sortSources(person, mode = 'latest') {
 }
 
 /* ============================================================================
-   5) عارض صور/ملفات المصادر + UI helpers
-   ============================================================================ */
+   عارض الملفات + كاش الميتاداتا
+============================================================================ */
 
-const sourceImageViewer = createImageViewerOverlay({
-  overlayClass: 'source-image-viewer-overlay',
-  backdropClass: 'source-image-viewer-backdrop',
-  dialogClass: 'source-image-viewer-dialog',
-  imgClass: 'source-image-viewer-img',
-  closeBtnClass: 'source-image-viewer-close',
-  navClass: 'source-image-viewer-nav',
-  arrowPrevClass: 'source-image-viewer-arrow source-image-viewer-arrow-prev',
-  arrowNextClass: 'source-image-viewer-arrow source-image-viewer-arrow-next',
-  counterClass: 'source-image-viewer-counter'
+const sourceImageViewer = createImageViewerOverlay();
+
+const sourceFileMetaCache = new Map(); // ref -> { kind, ext, mime, name? }
+
+const sourceSectionTmp = createSectionTempAndResolver({
+  prefix: 'tmp:',
+  getIdbUrl: (ref) => DB?.getSourceFileURL?.(ref),
+  metaCache: sourceFileMetaCache
 });
 
-async function openSourceSlider(refs, startIndex = 0, resolver = resolveSourceFileUrl) {
-  const list = Array.isArray(refs) ? refs : [];
-  const urls = [];
-  for (const r of list) {
-    const u = await resolver(r);
-    if (u) urls.push(u);
-  }
-  if (!urls.length) return;
-  sourceImageViewer.open(urls, startIndex);
+const sourceTempCache = sourceSectionTmp.tempCache;
+const resolveSourceFileUrlLocal = sourceSectionTmp.resolve;
+
+function addTempFile(file) {
+  const meta = makeTempMetaFromFile(file);
+  return sourceSectionTmp.addTemp(file, meta);
 }
 
+function revokeTempRef(tmpRef) {
+  sourceSectionTmp.revokeTemp(tmpRef);
+}
 
-function autoResizeSourceTextareas(root) {
-  const areas = root.querySelectorAll('.source-note-input');
-  areas.forEach((ta) => {
-    const resize = () => {
-      ta.style.height = 'auto';
-      ta.style.height = ta.scrollHeight + 'px';
-    };
-    resize();
-    ta.removeEventListener('input', ta._autoResizeHandler || (() => {}));
-    ta._autoResizeHandler = resize;
-    ta.addEventListener('input', resize);
+async function openSourceSlider(refs, startIndex = 0, resolver = resolveSourceFileUrlLocal) {
+  return openResolvedSlider({
+    viewer: sourceImageViewer,
+    refs,
+    startIndex,
+    resolveUrl: resolver
   });
 }
-
-/* ============================================================================
-   6) واجهة القسم داخل نافذة السيرة
-   ============================================================================ */
 
 export function createSourcesSection(person, handlers = {}) {
   ensureSources(person);
 
   const personId = person && person._id ? String(person._id) : null;
+
+  // فلاتر أساسية
   let currentTypeFilter = 'all';
   let currentTagFilter = '';
   let currentSearchTerm = '';
-  let onlyPinned = false;
-  let viewMode = 'cards'; // 'cards' | 'table'
+  let pinnedFilterMode = 'all';
+
+  // فلاتر إضافية
+  let advIssuer = '';
+  let advConfidentiality = '';
+  let advVerifiedMode = 'all'; // all | verified | unverified
+  let advConfidence = '';
+
+  // جديد: شريط تنبيه الانتهاء
+  let expiryFocusMode = 'all'; // all | expired | near
+
+  let viewMode = 'cards';
   let lastEditedId = null;
 
-  // كاش ميتاداتا لملفات idb (لأنها غالباً بلا امتداد ظاهر)
-const sourceFileMetaCache = new Map(); // ref -> { kind, ext, mime }
-  
-// كاش مؤقت للملفات قبل الحفظ (tmp:...)
-const tempSourceFilesCache = new Map(); // tmpRef -> { file, url, meta }
+    // ✅ Persist filters state across reload (per person)
+  const SOURCES_FILTERS_STATE_KEY = `biosec:sources:filtersState:${personId || 'global'}`;
+
+  function readSourcesFiltersState() {
+    try {
+      const raw = localStorage.getItem(SOURCES_FILTERS_STATE_KEY);
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      return (obj && typeof obj === 'object') ? obj : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function writeSourcesFiltersState(state) {
+    try {
+      localStorage.setItem(SOURCES_FILTERS_STATE_KEY, JSON.stringify(state || {}));
+    } catch { /* ignore */ }
+  }
+
+  function persistSourcesFiltersState() {
+    writeSourcesFiltersState({
+      type: (currentTypeFilter || 'all').trim(),
+      pinned: (pinnedFilterMode || 'all').trim(),
+      tag: (currentTagFilter || '').trim(),
+      search: (currentSearchTerm || '').trim(),
+      expiry: (expiryFocusMode || 'all').trim(),
+
+      advIssuer: (advIssuer || '').trim(),
+      advConfidentiality: (advConfidentiality || '').trim(),
+      advConfidence: (advConfidence || '').trim(),
+      advVerifiedMode: (advVerifiedMode || 'all').trim(),
+
+      // ✅ Optional UX state
+      viewMode: (viewMode || 'cards').trim(),
+      sortMode: (sortSelect?.value || '').trim()
+    });
+  }
+
+  function clearSourcesFiltersState() {
+    try { localStorage.removeItem(SOURCES_FILTERS_STATE_KEY); } catch { /* ignore */ }
+  }
+
+  // Draft tracker (UI-only)
+  const draftNewMap = new Map();
+
+  // اسم المستخدم (اختياري - إذا عندك handler لهذا)
+  const getActorName = () => safeStr(handlers?.getActorName?.()) || '';
 
   function emitSourcesToHost() {
     if (!personId || typeof handlers.onUpdateSources !== 'function') return;
 
     const sources = Array.isArray(person.sources) ? person.sources.map(s => ({
-          id: s.id,
-          title: String(s.title || '').trim(),
-          type: (s.type || '').trim(),
-          forField: (s.forField || '').trim(),
-          date: s.date || null,
-          place: (s.place || '').trim(),
-          referenceCode: (s.referenceCode || '').trim(),
-          issuer: (s.issuer || '').trim(),
-          pages: (s.pages || '').trim(),
-          files: Array.isArray(s.files) ? s.files.slice() : [],
-          tags: Array.isArray(s.tags) ? s.tags.slice() : [],
-          note: (s.note || '').trim(),
-          pinned: !!s.pinned,
+      id: s.id,
+      title: safeStr(s.title),
+      type: safeStr(s.type),
+      forField: safeStr(s.forField),
+      date: s.date || null,
+      place: safeStr(s.place),
+      referenceCode: safeStr(s.referenceCode),
+      issuer: safeStr(s.issuer),
+      pages: safeStr(s.pages),
 
-          confidenceLevel: (s.confidenceLevel || '').trim(),
-          relatedEventId: s.relatedEventId || null,
-          verified: !!s.verified,
-          verifiedBy: (s.verifiedBy || '').trim(),
-          verifiedAt: s.verifiedAt || null,
-          confidentiality: (s.confidentiality || '').trim(),
+      files: shallowArr(s.files),
+      tags: shallowArr(s.tags),
+      note: safeStr(s.note),
+      pinned: !!s.pinned,
 
-          createdAt: s.createdAt,
-          updatedAt: s.updatedAt
-        }))
-      : [];
+      confidenceLevel: safeStr(s.confidenceLevel),
+      relatedEventId: s.relatedEventId || null,
+
+      verified: !!s.verified,
+      verifiedBy: safeStr(s.verifiedBy),
+      verifiedAt: s.verifiedAt || null,
+
+      confidentiality: safeStr(s.confidentiality),
+
+      // جديد
+      validUntil: s.validUntil || null,
+      expiryAlertDays: Number.isFinite(Number(s.expiryAlertDays)) ? Number(s.expiryAlertDays) : DEFAULT_EXPIRY_ALERT_DAYS,
+      holderName: safeStr(s.holderName),
+      nationalId: safeStr(s.nationalId),
+      civilRegistryNo: safeStr(s.civilRegistryNo),
+      history: Array.isArray(s.history) ? s.history.map(h => ({
+        at: h?.at || null,
+        by: safeStr(h?.by),
+        action: safeStr(h?.action)
+      })) : [],
+
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt
+    })) : [];
 
     handlers.onUpdateSources(personId, sources);
   }
 
-  const sortMode = (handlers.getSourcesSortMode && handlers.getSourcesSortMode()) || 'latest';
+  let sortMode = (handlers.getSourcesSortMode && handlers.getSourcesSortMode()) || 'latest';
   sortSources(person, sortMode);
 
   const root = el('section', 'bio-section bio-section-sources');
 
-  /* ---------- Title + Description ---------- */
-  const titleEl = el('h3');
+  /* ----------------------------
+     العنوان
+  ----------------------------- */
+
+  const titleEl = el('h3', 'biosec-section-title sources-section-title');
   const iconEl = el('i');
   iconEl.className = 'fa-solid fa-file-circle-check';
   iconEl.setAttribute('aria-hidden', 'true');
 
   const titleText = textEl('span', 'المصادر والوثائق');
-  const countBadge = el('span', 'sources-count-badge');
+  const countBadge = el('span', 'biosec-count-badge sources-count-badge');
 
   titleEl.append(iconEl, ' ', titleText, ' ', countBadge);
   root.appendChild(titleEl);
 
-  const metaEl = el('div', 'sources-meta');
-  metaEl.textContent =
-    'امنح السيرة العائلية قيمة أوثق بجمع كل وثيقة تدعم أي معلومة أو تاريخ أو حدث، من شهادات الميلاد والزواج والهوية إلى صكوك الميراث والملكية، وصولًا إلى الصور والوثائق القديمة التي تحفظ الإرث العائلي عبر الزمن.';
+  const metaEl = el('div', 'biosec-meta sources-meta');
+ metaEl.textContent =
+  'وثّق السيرة بإرفاق الوثائق الداعمة: الميلاد، الهوية، الزواج، الملكيات… باستخدام وسوم وفلاتر مرنة وتنبيهات انتهاء الصلاحية.';
+
   root.appendChild(metaEl);
 
   function updateSourcesCountBadge() {
@@ -446,74 +510,355 @@ const tempSourceFilesCache = new Map(); // tmpRef -> { file, url, meta }
     countBadge.textContent = n ? `(${n})` : '(لا توجد وثائق بعد)';
   }
 
-  /* ---------- Header tools ---------- */
-  const header = el('div', 'sources-header');
-  const tools = el('div', 'sources-tools');
-  const toolsLeft = el('div', 'sources-tools-left');
-  const toolsRight = el('div', 'sources-tools-right');
+  /* ----------------------------
+     أدوات القسم: فلاتر + بحث + عرض
+  ----------------------------- */
 
-  const typeFilterSelect = el('select', 'sources-type-filter');
+  const header = el('div', 'biosec-header sources-header');
+  const tools = el('div', 'biosec-tools sources-tools');
+  const toolsLeft = el('div', 'biosec-tools-left sources-tools-left');
+  const toolsRight = el('div', 'biosec-tools-right sources-tools-right');
+  
+  const FILTERS_COLLAPSE_LS_KEY = `biosec:sources:filtersCollapsed:${personId || 'global'}`;
+
+  // 1) زر إظهار/إخفاء الفلاتر أولاً (قبل أي استخدام)
+  const filtersToggleBtn = el('button', 'biosec-btn sources-filters-toggle-btn');
+  filtersToggleBtn.type = 'button';
+  filtersToggleBtn.setAttribute('aria-pressed', 'false');
+filtersToggleBtn.innerHTML = '';
+
+  function wrapToolsLeftItem({ title = '', icon = '', child, extraClass = '' } = {}) {
+    const wrap = el('div', 'biosec-tools-field sources-tools-field' + (extraClass ? ` ${extraClass}` : ''));
+    const label = el('div', 'biosec-tool-label sources-tool-label');
+    label.innerHTML = `<span class="biosec-meta-icon sources-tools-icon">${icon}</span> ${safeStr(title)}`;
+    wrap.append(label, child);
+    return wrap;
+  }
+
+  // 2) أنشئ عناصر الفلاتر قبل تعريف/استخدام hasActiveFilters
+  const typeFilterSelect = el('select', 'biosec-type-filter sources-type-filter');
   typeFilterSelect.name = 'sources_type_filter';
-  SOURCE_TYPE_OPTIONS.forEach(([value, label]) => {
-    const opt = el('option');
-    opt.value = value;
-    opt.textContent = label;
-    typeFilterSelect.appendChild(opt);
-  });
+  sourceType.fillSelect(typeFilterSelect);
   typeFilterSelect.value = 'all';
 
-  const sortSelect = el('select', 'sources-sort');
+  const sortSelect = el('select', 'biosec-sort sources-sort');
   sortSelect.name = 'sources_sort';
-  const optLatest = el('option');
-  optLatest.value = 'latest';
-  optLatest.textContent = 'الأحدث أولاً';
-  const optOldest = el('option');
-  optOldest.value = 'oldest';
-  optOldest.textContent = 'الأقدم أولاً';
+  const optLatest = el('option'); optLatest.value = 'latest'; optLatest.textContent = 'الأحدث أولاً';
+  const optOldest = el('option'); optOldest.value = 'oldest'; optOldest.textContent = 'الأقدم أولاً';
   sortSelect.append(optLatest, optOldest);
   sortSelect.value = sortMode;
 
-  const searchInput = el('input', 'sources-search-input');
+  const searchWrap = el('div', 'biosec-search-wrap sources-search-wrap');
+  const searchInput = el('input', 'biosec-search-input sources-search-input');
   searchInput.type = 'search';
   searchInput.name = 'sources_search';
-  searchInput.placeholder = 'بحث في العنوان / الجهة / رقم الصك / الوصف...';
+  searchInput.placeholder = 'بحث سريع (عنوان/جهة/رقم/وصف)...';
+  // ✅ زر مسح البحث (يظهر فقط عند وجود نص)
+const clearSearchBtn = el('button', 'biosec-search-clear sources-search-clear');
+clearSearchBtn.type = 'button';
+clearSearchBtn.title = 'مسح البحث';
+clearSearchBtn.setAttribute('aria-label', 'مسح البحث');
+clearSearchBtn.innerHTML = '<i class="fa-solid fa-circle-xmark" aria-hidden="true"></i>';
+clearSearchBtn.style.display = 'none';
 
-  const pinnedFilterLabel = el('label', 'sources-pinned-filter');
-  const pinnedFilterCheckbox = el('input');
-  pinnedFilterCheckbox.type = 'checkbox';
-  pinnedFilterCheckbox.name = 'sources_pinned_only';
-  const pinnedFilterText = textEl('span', 'عرض الوثائق الأساسية فقط');
-  pinnedFilterLabel.append(pinnedFilterCheckbox, pinnedFilterText);
+clearSearchBtn.addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
 
-  const viewToggle = el('div', 'sources-view-toggle');
+  searchInput.value = '';
+  currentSearchTerm = '';
+  clearSearchBtn.style.display = 'none';
+persistSourcesFiltersState();
+  renderList();
+  searchInput.focus();
+});
 
-  const viewBtnCards = el('button', 'sources-view-btn is-active');
-  viewBtnCards.type = 'button';
-  viewBtnCards.dataset.mode = 'cards';
-  viewBtnCards.innerHTML =
-    '<i class="fa-solid fa-table-cells-large" aria-hidden="true"></i><span>عرض كبطاقات</span>';
+searchWrap.append(searchInput, clearSearchBtn);
 
-  const viewBtnTable = el('button', 'sources-view-btn');
-  viewBtnTable.type = 'button';
-  viewBtnTable.dataset.mode = 'table';
-  viewBtnTable.innerHTML =
-    '<i class="fa-solid fa-list-ul" aria-hidden="true"></i><span>عرض كجدول مختصر</span>';
+  const pinnedFilterSelect = el('select', 'biosec-select sources-pinned-filter-select');
+  pinnedFilterSelect.name = 'sources_pinned_filter_mode';
+  {
+    const optAll = el('option'); optAll.value = 'all'; optAll.textContent = 'كل الوثائق';
+    const optPinned = el('option'); optPinned.value = 'pinned'; optPinned.textContent = 'الوثائق المهمة فقط';
+    pinnedFilterSelect.append(optAll, optPinned);
+    pinnedFilterSelect.value = pinnedFilterMode;
+  }
 
-  viewToggle.append(viewBtnCards, viewBtnTable);
+  // فلاتر إضافية (كانت ضمن البحث المتقدم سابقاً)
+  const advIssuerInput = el('input', 'biosec-input sources-adv-issuer');
+  advIssuerInput.name = 'sources_adv_issuer';
+  advIssuerInput.type = 'text';
+  advIssuerInput.placeholder = 'الجهة المصدرة (مطابقة جزئية)';
 
-  const addBtn = el('button', 'sources-add-btn');
+  const advConfSelect = el('select', 'biosec-select sources-adv-conf');
+  advConfSelect.name = 'sources_adv_confidentiality';
+  [
+    ['', 'كل مستويات السرية'],
+    ['public', CONFIDENTIALITY_LABELS.public],
+    ['private', CONFIDENTIALITY_LABELS.private],
+    ['sensitive', CONFIDENTIALITY_LABELS.sensitive]
+  ].forEach(([v, t]) => {
+    const o = el('option'); o.value = v; o.textContent = t; advConfSelect.appendChild(o);
+  });
+
+  const advConfidenceSelect = el('select', 'biosec-select sources-adv-confidence');
+  advConfidenceSelect.name = 'sources_adv_confidence';
+  [
+    ['', 'كل درجات الاعتماد'],
+    ['official', CONFIDENCE_LEVEL_LABELS.official],
+    ['family', CONFIDENCE_LEVEL_LABELS.family],
+    ['oral', CONFIDENCE_LEVEL_LABELS.oral],
+    ['copy', CONFIDENCE_LEVEL_LABELS.copy]
+  ].forEach(([v, t]) => {
+    const o = el('option'); o.value = v; o.textContent = t; advConfidenceSelect.appendChild(o);
+  });
+
+  // ✅ بدل checkbox: select بثلاث خيارات (يبقى نفس الاسم/الكلاس المطلوب)
+  const advVerifiedSelect = el('select', 'biosec-select sources-adv-verified');
+  advVerifiedSelect.name = 'sources_adv_verified_mode';
+  [
+    ['all', 'كل الوثائق (الموثقة وغير الموثقة)'],
+    ['verified', 'الموثقة'],
+    ['unverified', 'غير الموثقة']
+  ].forEach(([v, t]) => {
+    const o = el('option'); o.value = v; o.textContent = t; advVerifiedSelect.appendChild(o);
+  });
+  advVerifiedSelect.value = advVerifiedMode;
+const advClearBtn = el('button', 'biosec-btn sources-adv-clear');
+advClearBtn.type = 'button';
+advClearBtn.innerHTML =
+  '<i class="fa-solid fa-rotate-left" aria-hidden="true"></i> ' +
+  '<span>إعادة ضبط الفلاتر</span>';
+advClearBtn.removeAttribute('title');
+advClearBtn.setAttribute('aria-label', 'إعدة ضبط الفلاتر إلى الوضع الإفتراضي');
+
+    // ✅ Restore filters state on load
+  {
+    const st = readSourcesFiltersState();
+    if (st) {
+      // type
+      if (typeof st.type === 'string') {
+        currentTypeFilter = st.type || 'all';
+        typeFilterSelect.value = currentTypeFilter || 'all';
+      }
+
+      // pinned
+      if (typeof st.pinned === 'string') {
+        pinnedFilterMode = st.pinned || 'all';
+        pinnedFilterSelect.value = pinnedFilterMode || 'all';
+      }
+
+      // tag
+      if (typeof st.tag === 'string') {
+        currentTagFilter = st.tag;
+      }
+
+      // expiry
+      if (typeof st.expiry === 'string') {
+        expiryFocusMode = st.expiry || 'all';
+      }
+
+      // search
+      if (typeof st.search === 'string') {
+        searchInput.value = st.search;
+        currentSearchTerm = st.search || '';
+        clearSearchBtn.style.display = (st.search || '').trim() ? '' : 'none';
+      }
+
+      // advanced
+      if (typeof st.advIssuer === 'string') {
+        advIssuer = st.advIssuer;
+        advIssuerInput.value = advIssuer;
+      }
+      if (typeof st.advConfidentiality === 'string') {
+        advConfidentiality = st.advConfidentiality;
+        advConfSelect.value = advConfidentiality;
+      }
+      if (typeof st.advConfidence === 'string') {
+        advConfidence = st.advConfidence;
+        advConfidenceSelect.value = advConfidence;
+      }
+      if (typeof st.advVerifiedMode === 'string') {
+        advVerifiedMode = st.advVerifiedMode || 'all';
+        advVerifiedSelect.value = advVerifiedMode;
+      }
+
+      // ✅ Optional UX: view + sort
+      if (typeof st.viewMode === 'string') {
+        viewMode = (st.viewMode === 'table') ? 'table' : 'cards';
+      }
+      if (typeof st.sortMode === 'string' && st.sortMode) {
+        const v = (st.sortMode === 'oldest') ? 'oldest' : 'latest';
+        sortMode = v;          // ✅ حدّث المتغير
+        sortSelect.value = v;  // ✅ حدّث الـ UI
+        sortSources(person, v); // ✅ طبّق الفرز فعلياً
+      }
+
+    }
+  }
+
+  // 3) الآن hasActiveFilters آمن لأنه يعتمد على عناصر معرفة مسبقاً
+function hasActiveFilters() {
+  const typeActive = (typeFilterSelect.value || 'all') !== 'all';
+  const pinnedActive = (pinnedFilterSelect.value || 'all') !== 'all';
+
+  const tagActive = (currentTagFilter || '').trim() !== '';
+  const expiryActive = (expiryFocusMode || 'all') !== 'all';
+
+  const advIssuerActive = (advIssuerInput.value || '').trim() !== '';
+  const advConfActive = (advConfSelect.value || '').trim() !== '';
+  const advConfidenceActive = (advConfidenceSelect.value || '').trim() !== '';
+  const advVerifiedActive = (advVerifiedSelect.value || 'all') !== 'all';
+
+  return (
+    typeActive ||
+    pinnedActive ||
+    tagActive ||
+    expiryActive ||
+    advIssuerActive ||
+    advConfActive ||
+    advConfidenceActive ||
+    advVerifiedActive
+  );
+
+}
+
+// ✅ إظهار/إخفاء زر "إعادة ضبط الفلاتر" حسب وجود فلاتر مفعّلة
+function syncClearFiltersBtnVisibility() {
+  advClearBtn.style.display = hasActiveFilters() ? '' : 'none';
+}
+
+  // 4) أنشئ الكنترولر بعد تعريف كل شيء
+  const filtersCtrl = createFiltersCollapseController({
+    storageKey: FILTERS_COLLAPSE_LS_KEY,
+    panelEl: toolsLeft,
+    toggleBtnEl: filtersToggleBtn,
+    hasActiveFilters,
+    labels: { show: 'إظهار الفلاتر', hide: 'إخفاء الفلاتر' },
+    iconHtml: '<i class="fa-solid fa-sliders" aria-hidden="true"></i>',
+    onBlockedHide: () => {
+      showWarning?.('لا يمكن إخفاء الفلاتر لأن هناك فلاتر مفعّلة حالياً. قم بإرجاعها للوضع الافتراضي أو اضغط "مسح الفلاتر" أولاً.');
+    }
+  });
+  
+filtersCtrl.applyInitialState({ autoOpenIfActive: true });
+// ✅ طبّق الحالة الأولية لزر إعادة ضبط الفلاتر
+syncClearFiltersBtnVisibility();
+
+  // 5) Listener واحد فقط
+  filtersToggleBtn.addEventListener('click', () => {
+    filtersCtrl.toggle();
+  });
+  
+// عرض (Cards / Table)
+
+const viewToggleWrap = el(
+  'div',
+  'biosec-tools-field sources-tools-field sources-tools-field--view'
+);
+
+// (اختياري للوصولية) بدل عنوان/أيقونة:
+viewToggleWrap.setAttribute('aria-label', 'تبديل طريقة العرض');
+
+const viewToggle = el('div', 'sources-view-toggle');
+
+const viewBtnCards = el('button', 'sources-view-btn is-active');
+viewBtnCards.type = 'button';
+viewBtnCards.dataset.mode = 'cards';
+viewBtnCards.innerHTML =
+  '<i class="fa-solid fa-table-cells-large" aria-hidden="true"></i><span>بطاقات</span>';
+
+const viewBtnTable = el('button', 'sources-view-btn');
+viewBtnTable.type = 'button';
+viewBtnTable.dataset.mode = 'table';
+viewBtnTable.innerHTML =
+  '<i class="fa-solid fa-list-ul" aria-hidden="true"></i><span>جدول</span>';
+
+viewToggle.append(viewBtnCards, viewBtnTable);
+
+viewToggleWrap.append(viewToggle);
+
+  const addBtn = el('button', 'biosec-add-btn sources-add-btn');
   addBtn.type = 'button';
 
-  toolsLeft.append(typeFilterSelect, sortSelect, searchInput);
-  toolsRight.append(pinnedFilterLabel, viewToggle, addBtn);
+toolsLeft.append(
+  // 1) نوع الوثيقة
+  wrapToolsLeftItem({
+    title: 'نوع الوثيقة',
+    icon: '<i class="fa-solid fa-filter" aria-hidden="true"></i>',
+    child: typeFilterSelect,
+    extraClass: 'sources-tools-field--type'
+  }),
+  
+   // 2) الترتي
+  wrapToolsLeftItem({
+    title: 'الترتيب',
+    icon: '<i class="fa-solid fa-arrow-down-wide-short" aria-hidden="true"></i>',
+    child: sortSelect,
+    extraClass: 'sources-tools-field--sort'
+  }),
+
+
+  // 3) الأهمية
+  wrapToolsLeftItem({
+    title: 'الأهمية',
+    icon: '<i class="fa-solid fa-thumbtack" aria-hidden="true"></i>',
+    child: pinnedFilterSelect,
+    extraClass: 'sources-tools-field--pinned'
+  }),
+
+  // 4) فلاتر متقدمة (من العام للأكثر تخصيصاً)
+  wrapToolsLeftItem({
+    title: 'الجهة',
+    icon: '<i class="fa-solid fa-landmark" aria-hidden="true"></i>',
+    child: advIssuerInput
+  }),
+  wrapToolsLeftItem({
+    title: 'السرية',
+    icon: '<i class="fa-solid fa-lock" aria-hidden="true"></i>',
+    child: advConfSelect
+  }),
+  wrapToolsLeftItem({
+    title: 'الاعتماد',
+    icon: '<i class="fa-solid fa-circle-check" aria-hidden="true"></i>',
+    child: advConfidenceSelect
+  }),
+  wrapToolsLeftItem({
+    title: 'توثيق',
+    icon: '<i class="fa-solid fa-file-circle-check" aria-hidden="true"></i>',
+    child: advVerifiedSelect
+  }),
+
+  // 5) مسح الفلاتر (آخر شيء)
+  wrapToolsLeftItem({
+    title: '',
+    icon: '',
+    child: advClearBtn,
+    extraClass: 'sources-tools-field--clear'
+  })
+);
+toolsRight.append(filtersToggleBtn, searchWrap, viewToggleWrap, addBtn);
+
   tools.append(toolsLeft, toolsRight);
   header.appendChild(tools);
   root.appendChild(header);
 
+// ✅ طبّق viewMode المسترجع (لو كان table مثلاً)
+viewBtnCards.classList.toggle('is-active', viewMode === 'cards');
+viewBtnTable.classList.toggle('is-active', viewMode === 'table');
+
+  /* ----------------------------
+     شريط الإحصاءات + شريط تنبيه الانتهاء
+  ----------------------------- */
+
+  const expiryBar = el('div', 'sources-expiry-bar');
+  expiryBar.style.display = 'none';
+  root.appendChild(expiryBar);
+
   const statsBar = el('div', 'sources-stats-bar');
   root.appendChild(statsBar);
 
-  const list = el('div', 'sources-list');
+  const list = el('div', 'biosec-list sources-list');
   root.appendChild(list);
 
   function updateAddButtonLabel() {
@@ -522,7 +867,7 @@ const tempSourceFilesCache = new Map(); // tmpRef -> { file, url, meta }
     if (!count) {
       addBtn.innerHTML =
         '<i class="fa-solid fa-file-circle-plus" aria-hidden="true"></i><span> إضافة أول وثيقة</span>';
-      addBtn.title = 'ابدأ بتوثيق أول شهادة أو صك أو وثيقة لهذا الشخص';
+      addBtn.title = 'ابدأ بتوثيق أول شهادة/صك/وثيقة لهذا الشخص';
     } else {
       addBtn.innerHTML =
         '<i class="fa-solid fa-file-circle-plus" aria-hidden="true"></i><span> إضافة وثيقة جديدة</span>';
@@ -530,49 +875,68 @@ const tempSourceFilesCache = new Map(); // tmpRef -> { file, url, meta }
     }
   }
 
-  function rebuildSourceTypeFilterOptions() {
-    ensureSources(person);
-    const sources = person.sources || [];
+  function updateExpiryBar(allSources) {
+    const sources = Array.isArray(allSources) ? allSources : [];
+    let expired = 0;
+    let near = 0;
 
-    const usedTypesSet = new Set();
     for (const s of sources) {
-      const t = (s.type || '').trim();
-      if (t) usedTypesSet.add(t);
+      const st = getExpiryStatus(s, Number(s?.expiryAlertDays) || DEFAULT_EXPIRY_ALERT_DAYS);
+      if (st.status === 'expired') expired++;
+      else if (st.status === 'near') near++;
     }
 
-    const prevValue = typeFilterSelect.value || currentTypeFilter || 'all';
-    typeFilterSelect.innerHTML = '';
+    if (!expired && !near) {
+      expiryBar.textContent = '';
+      expiryBar.style.display = 'none';
+      expiryFocusMode = 'all';
+      return;
+    }
 
-    const optAll = el('option');
-    optAll.value = 'all';
-    optAll.textContent = 'كل الأنواع';
-    typeFilterSelect.appendChild(optAll);
+    expiryBar.style.display = '';
 
-    const order = Object.fromEntries(
-      SOURCE_TYPE_OPTIONS
-        .filter(([val]) => val && val !== 'all')
-        .map(([val], i) => [val, i])
-    );
+    expiryBar.innerHTML = '';
+    const msg = el('div', 'sources-expiry-msg');
+    msg.innerHTML =
+      `<i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+       <span>تنبيه الصلاحية:</span>
+       <strong>${expired}</strong> منتهية • <strong>${near}</strong> قريبة الانتهاء`;
 
-    const usedTypes = Array.from(usedTypesSet);
-    usedTypes.sort((a, b) => {
-      const ia = (order[a] !== undefined ? order[a] : 999);
-      const ib = (order[b] !== undefined ? order[b] : 999);
-      if (ia !== ib) return ia - ib;
-      return String(a).localeCompare(String(b), 'ar');
-    });
+    const actions = el('div', 'sources-expiry-actions');
 
-    usedTypes.forEach(code => {
-      const opt = el('option');
-      opt.value = code;
-      opt.textContent = getSourceTypeLabel(code) || code;
-      typeFilterSelect.appendChild(opt);
-    });
+    const btnAll = el('button', 'sources-expiry-btn' + (expiryFocusMode === 'all' ? ' is-active' : ''));
+    btnAll.type = 'button';
+    btnAll.textContent = 'عرض الكل';
 
-    const canKeepPrev = prevValue && prevValue !== 'all' && usedTypes.includes(prevValue);
-    const nextValue = canKeepPrev ? prevValue : 'all';
-    typeFilterSelect.value = nextValue;
-    currentTypeFilter = nextValue;
+    const btnExpired = el('button', 'sources-expiry-btn' + (expiryFocusMode === 'expired' ? ' is-active' : ''));
+    btnExpired.type = 'button';
+    btnExpired.textContent = 'المنتهية';
+
+    const btnNear = el('button', 'sources-expiry-btn' + (expiryFocusMode === 'near' ? ' is-active' : ''));
+    btnNear.type = 'button';
+    btnNear.textContent = 'القريبة';
+
+btnAll.onclick = () => {
+  expiryFocusMode = 'all';
+  syncClearFiltersBtnVisibility();
+  persistSourcesFiltersState(); // ✅
+  renderList();
+};
+btnExpired.onclick = () => {
+  expiryFocusMode = 'expired';
+  syncClearFiltersBtnVisibility();
+  persistSourcesFiltersState(); // ✅
+  renderList();
+};
+btnNear.onclick = () => {
+  expiryFocusMode = 'near';
+  syncClearFiltersBtnVisibility();
+  persistSourcesFiltersState(); // ✅
+  renderList();
+};
+
+    actions.append(btnAll, btnExpired, btnNear);
+    expiryBar.append(msg, actions);
   }
 
   function updateStatsBar(allSources) {
@@ -583,20 +947,53 @@ const tempSourceFilesCache = new Map(); // tmpRef -> { file, url, meta }
       statsBar.style.display = 'none';
       return;
     }
-    const counts = {};
+
+    // إحصاءات موسعة
+    let verifiedYes = 0;
+    let verifiedNo = 0;
+    let pinnedYes = 0;
+    let noFiles = 0;
+
+    const confCounts = { public: 0, private: 0, sensitive: 0, none: 0 };
+
+    const typeCounts = {};
     for (const s of sources) {
       const t = (s.type || 'generic').trim() || 'generic';
-      counts[t] = (counts[t] || 0) + 1;
+      typeCounts[t] = (typeCounts[t] || 0) + 1;
+
+      if (s.verified) verifiedYes++; else verifiedNo++;
+      if (s.pinned) pinnedYes++;
+      if (!Array.isArray(s.files) || s.files.length === 0) noFiles++;
+
+      const c = (s.confidentiality || '').trim();
+      if (!c) confCounts.none++;
+      else if (c === 'public' || c === 'private' || c === 'sensitive') confCounts[c]++;
+      else confCounts.none++;
     }
-    const parts = Object.entries(counts).map(([code, count]) => {
-      const label = getSourceTypeLabel(code) || code;
-      return `${label}: ${count}`;
-    });
+
+    const typePart = Object.entries(typeCounts)
+      .map(([code, count]) => `${sourceType.getLabel(code) || code}: ${count}`)
+      .join(' | ');
+
+    const confPart =
+      `سرية: عام ${confCounts.public} • خاص ${confCounts.private} • حساس ${confCounts.sensitive}`;
+
+    const parts = [
+      typePart,
+      `موثّق ${verifiedYes} • غير موثّق ${verifiedNo}`,
+      `مهم ${pinnedYes}`,
+      confPart,
+      `بدون ملفات ${noFiles}`
+    ].filter(Boolean);
+
     statsBar.textContent = parts.join(' | ');
     statsBar.style.display = '';
   }
 
-  /* ---------- تنبيه: بيانات موجودة بدون وثائق (مثال ميلاد/وفاة) ---------- */
+  /* ----------------------------
+     تنبيه نقص وثائق (مثال ميلاد/وفاة)
+  ----------------------------- */
+
   const missingWarningEl = el('div', 'sources-missing-warning');
   missingWarningEl.style.display = 'none';
   root.appendChild(missingWarningEl);
@@ -608,17 +1005,15 @@ const tempSourceFilesCache = new Map(); // tmpRef -> { file, url, meta }
     const hasBirthDoc = sources.some(s => (s.type || '').trim() === 'birth');
     const hasDeathDoc = sources.some(s => (s.type || '').trim() === 'death');
 
-    const hasBirthData =
-      person.birthDate || person.birthYear || person.birthPlace || person.birth;
-    const hasDeathData =
-      person.deathDate || person.deathYear || person.deathPlace || person.death;
+    const hasBirthData = person.birthDate || person.birthYear || person.birthPlace || person.birth;
+    const hasDeathData = person.deathDate || person.deathYear || person.deathPlace || person.death;
 
     const msgs = [];
     if (hasBirthData && !hasBirthDoc) {
-      msgs.push('لا توجد وثيقة ميلاد موثقة لهذا الشخص. يمكنك إضافة شهادة الميلاد أو ما يقوم مقامها هنا.');
+      msgs.push('لا توجد وثيقة ميلاد موثقة لهذا الشخص. يمكنك إضافة شهادة الميلاد هنا.');
     }
     if (hasDeathData && !hasDeathDoc) {
-      msgs.push('لا توجد وثيقة وفاة موثقة لهذا الشخص. يمكنك إضافة شهادة الوفاة أو ما يقوم مقامها هنا.');
+      msgs.push('لا توجد وثيقة وفاة موثقة لهذا الشخص. يمكنك إضافة شهادة الوفاة هنا.');
     }
 
     if (!msgs.length) {
@@ -631,17 +1026,14 @@ const tempSourceFilesCache = new Map(); // tmpRef -> { file, url, meta }
     missingWarningEl.style.display = '';
   }
 
-  /* ==========================================================================
-     6.1) كاش الميتا لـ idb:... (تسخين + قراءة kind)
-     ========================================================================== */
+  /* ----------------------------
+     ميتاداتا ملفات idb:...
+  ----------------------------- */
 
   function collectAllSourceRefs() {
     const out = [];
     const sources = Array.isArray(person?.sources) ? person.sources : [];
-    for (const s of sources) {
-      const files = Array.isArray(s?.files) ? s.files : [];
-      out.push(...files);
-    }
+    for (const s of sources) out.push(...(Array.isArray(s?.files) ? s.files : []));
     return out;
   }
 
@@ -649,7 +1041,7 @@ const tempSourceFilesCache = new Map(); // tmpRef -> { file, url, meta }
     const list = Array.isArray(refs) ? refs : [];
     const need = list
       .map(r => String(r))
-      .filter(r => r.startsWith('idb:') && !sourceFileMetaCache.has(r));
+      .filter(r => isIdbRef(r) && !sourceFileMetaCache.has(r));
 
     if (!need.length) return false;
     if (typeof DB?.getSourceFileMeta !== 'function') return false;
@@ -668,77 +1060,14 @@ const tempSourceFilesCache = new Map(); // tmpRef -> { file, url, meta }
     return changed;
   }
 
-  function genTmpRef() {
-  if (window.crypto?.randomUUID) return 'tmp:' + window.crypto.randomUUID();
-  return 'tmp:' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-}
-
-function makeTempMetaFromFile(file) {
-  const mime = (file?.type || '').toLowerCase();
-  const name = (file?.name || '');
-  const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : mimeToExt(mime);
-  const kind = inferFileKind({ mime, ext });
-  return { mime, name, ext, kind };
-}
-
-function addTempFile(file) {
-  const tmpRef = genTmpRef();
-  const url = URL.createObjectURL(file);
-  const meta = makeTempMetaFromFile(file);
-
-  tempSourceFilesCache.set(tmpRef, { file, url, meta });
-
-  // مهم: حتى thumb classification يشتغل فوراً
-  sourceFileMetaCache.set(tmpRef, meta);
-
-  return tmpRef;
-}
-
-function revokeTempRef(tmpRef) {
-  const rec = tempSourceFilesCache.get(tmpRef);
-  if (rec?.url) {
-    try { URL.revokeObjectURL(rec.url); } catch {}
-  }
-  tempSourceFilesCache.delete(tmpRef);
-  sourceFileMetaCache.delete(tmpRef);
-}
-
-async function resolveSourceFileUrlLocal(ref) {
-  if (!ref) return null;
-  const s = String(ref);
-
-  // روابط جاهزة
-  if (/^(data:|blob:|https?:)/.test(s)) return s;
-
-  // tmp:... (قبل الحفظ)
-  if (s.startsWith('tmp:')) {
-    const rec = tempSourceFilesCache.get(s);
-    return rec?.url || null;
-  }
-
-  // idb:...
-  if (typeof DB?.getSourceFileURL === 'function') {
-    try {
-      const url = await DB.getSourceFileURL(s);
-      return url || null;
-    } catch (e) {
-      console.error('resolveSourceFileUrl failed', e);
-      return null;
-    }
-  }
-
-  return s;
-}
-
   async function ensureMetaForRef(ref) {
     const raw = String(ref || '');
-    if (raw.startsWith('tmp:')) {
-  return sourceFileMetaCache.get(raw) || tempSourceFilesCache.get(raw)?.meta || null;
-}
+    if (isTmpRef(raw)) {
+      return sourceFileMetaCache.get(raw) || sourceTempCache.get(raw)?.meta || null;
+    }
+    if (!isIdbRef(raw)) return null;
 
-    if (!raw.startsWith('idb:')) return null;
-
-    let cached = sourceFileMetaCache.get(raw);
+    const cached = sourceFileMetaCache.get(raw);
     if (cached) return cached;
 
     if (typeof DB?.getSourceFileMeta !== 'function') return null;
@@ -757,82 +1086,63 @@ async function resolveSourceFileUrlLocal(ref) {
 
   function getSourceFileKind(ref) {
     const raw = String(ref || '');
-    const lower = raw.toLowerCase();
-if (lower.startsWith('tmp:')) {
-  const meta = sourceFileMetaCache.get(raw) || tempSourceFilesCache.get(raw)?.meta || {};
-  return meta.kind || inferFileKind({ ext: meta.ext || '', mime: meta.mime || '', ref: raw }) || 'other';
-}
 
-    // idb:... نعتمد على الكاش/الميتا
-    if (lower.startsWith('idb:')) {
+    if (isTmpRef(raw)) {
+      const meta = sourceFileMetaCache.get(raw) || sourceTempCache.get(raw)?.meta || {};
+      return meta.kind || inferFileKind({ ext: meta.ext || '', mime: meta.mime || '', ref: raw }) || 'other';
+    }
+
+    if (isIdbRef(raw)) {
       const cached = sourceFileMetaCache.get(raw) || {};
       const kind = cached.kind || inferFileKind({ ext: cached.ext || '', mime: cached.mime || '', ref: raw });
       return kind || 'other';
     }
 
-    // روابط عادية: استنتج من ref
     return inferFileKind({ ref: raw, ext: getRefExt(raw) });
   }
 
-  // ترتيب: صور أولاً ثم باقي الأنواع (مع الحفاظ على ترتيب كل مجموعة)
-  function groupRefsByKind(refs = []) {
-    const list = Array.isArray(refs) ? refs.slice() : [];
-    const images = [];
-    const others = [];
-    for (const r of list) {
-      (getSourceFileKind(r) === 'image' ? images : others).push(r);
-    }
-    return images.concat(others);
-  }
-
-  function findImageIndex(imagesOnly, ref) {
-    const r = String(ref);
-    for (let i = 0; i < imagesOnly.length; i++) {
-      if (String(imagesOnly[i]) === r) return i;
-    }
-    return -1;
-  }
-
-  /* ==========================================================================
-     6.2) رسم الثمبنيل + فتح/تحميل
-     ========================================================================== */
-
   function classifyFileThumb(thumb, ref) {
     const raw = String(ref || '');
-    const lower = raw.toLowerCase();
 
     thumb.classList.remove(
-      'source-file-thumb--image',
-      'source-file-thumb--pdf',
-      'source-file-thumb--word',
-      'source-file-thumb--excel',
-      'source-file-thumb--other'
+      'source-file-thumb--image', 'source-file-thumb--pdf', 'source-file-thumb--word', 'source-file-thumb--excel', 'source-file-thumb--other',
+      'biosec-file-thumb--image', 'biosec-file-thumb--pdf', 'biosec-file-thumb--word', 'biosec-file-thumb--excel', 'biosec-file-thumb--other'
     );
-// tmp:... (قبل الحفظ)
-if (lower.startsWith('tmp:')) {
-  const meta = sourceFileMetaCache.get(raw) || tempSourceFilesCache.get(raw)?.meta || {};
-  const kind = meta.kind || inferFileKind({ ext: meta.ext || '', mime: meta.mime || '', ref: raw });
-  const ext = (meta.ext || '').toLowerCase();
 
-  const cls =
-    kind === 'image' ? 'source-file-thumb--image' :
-    kind === 'pdf' ? 'source-file-thumb--pdf' :
-    kind === 'word' ? 'source-file-thumb--word' :
-    kind === 'excel' ? 'source-file-thumb--excel' :
-    'source-file-thumb--other';
+    const applyCls = (kind, ext) => {
+      const cls =
+        kind === 'image' ? 'source-file-thumb--image' :
+          kind === 'pdf' ? 'source-file-thumb--pdf' :
+            kind === 'word' ? 'source-file-thumb--word' :
+              kind === 'excel' ? 'source-file-thumb--excel' :
+                'source-file-thumb--other';
 
-  thumb.classList.add(cls);
+      thumb.classList.add(cls);
 
-  if (ext) {
-    const badge = el('span', 'source-file-ext');
-    badge.textContent = ext.toUpperCase();
-    thumb.appendChild(badge);
-  }
-  return;
-}
+      const sharedCls =
+        cls === 'source-file-thumb--image' ? 'biosec-file-thumb--image' :
+          cls === 'source-file-thumb--pdf' ? 'biosec-file-thumb--pdf' :
+            cls === 'source-file-thumb--word' ? 'biosec-file-thumb--word' :
+              cls === 'source-file-thumb--excel' ? 'biosec-file-thumb--excel' :
+                'biosec-file-thumb--other';
 
-    // idb: بدون امتداد ظاهر -> نحتاج meta
-    if (lower.startsWith('idb:')) {
+      thumb.classList.add(sharedCls);
+
+      if (ext) {
+        const badge = el('span', 'biosec-file-ext source-file-ext');
+        badge.textContent = String(ext).toUpperCase();
+        thumb.appendChild(badge);
+      }
+    };
+
+    if (isTmpRef(raw)) {
+      const meta = sourceFileMetaCache.get(raw) || sourceTempCache.get(raw)?.meta || {};
+      const kind = meta.kind || inferFileKind({ ext: meta.ext || '', mime: meta.mime || '', ref: raw });
+      applyCls(kind, (meta.ext || '').toLowerCase());
+      return;
+    }
+
+    if (isIdbRef(raw)) {
       const cached = sourceFileMetaCache.get(raw);
 
       if (!cached && typeof DB?.getSourceFileMeta === 'function') {
@@ -840,8 +1150,6 @@ if (lower.startsWith('tmp:')) {
           .then(meta => {
             if (!meta) return;
             sourceFileMetaCache.set(raw, meta);
-
-            // إعادة رسم بسيطة لنفس thumb بعد وصول الميتا
             thumb.innerHTML = '';
             classifyFileThumb(thumb, raw);
           })
@@ -850,82 +1158,28 @@ if (lower.startsWith('tmp:')) {
 
       const meta = cached || {};
       const kind = meta.kind || inferFileKind({ ext: meta.ext || '', mime: meta.mime || '', ref: raw });
-      const ext = (meta.ext || '').toLowerCase();
-
-      const cls =
-        kind === 'image' ? 'source-file-thumb--image' :
-        kind === 'pdf' ? 'source-file-thumb--pdf' :
-        kind === 'word' ? 'source-file-thumb--word' :
-        kind === 'excel' ? 'source-file-thumb--excel' :
-        'source-file-thumb--other';
-
-      thumb.classList.add(cls);
-
-      if (ext) {
-        const badge = el('span', 'source-file-ext');
-        badge.textContent = ext.toUpperCase();
-        thumb.appendChild(badge);
-      }
+      applyCls(kind, (meta.ext || '').toLowerCase());
       return;
     }
 
-    // روابط عادية: استخرج ext
     const ext = getRefExt(raw);
     const kind = inferFileKind({ ext, ref: raw });
-
-    const cls =
-      kind === 'image' ? 'source-file-thumb--image' :
-      kind === 'pdf' ? 'source-file-thumb--pdf' :
-      kind === 'word' ? 'source-file-thumb--word' :
-      kind === 'excel' ? 'source-file-thumb--excel' :
-      'source-file-thumb--other';
-
-    thumb.classList.add(cls);
-
-    if (ext) {
-      const badge = el('span', 'source-file-ext');
-      badge.textContent = ext.toUpperCase();
-      thumb.appendChild(badge);
-    }
+    applyCls(kind, ext);
   }
-
-function buildDownloadName(baseTitle, ref, mime, index, total) {
-  const isSingle = (total || 0) === 1;
-
-  const cached = sourceFileMetaCache.get(String(ref)) || {};
-
-  // لازم قبل safeBase
-  const baseFromName =
-    (cached.name && cached.name.trim()) ? cached.name.replace(/\.[^/.]+$/, '')
-      : '';
-
-  const safeBase = (baseFromName || String(baseTitle || 'الوثيقة').trim() || 'الوثيقة');
-
-  const extFromCache = cached.ext || '';
-  const extFromRef = getRefExt(ref);
-  const extFromMime = mimeToExt(mime);
-
-  const ext = (extFromCache || extFromRef || extFromMime || '').replace(/^\./, '');
-  const suffix = isSingle ? '' : ` (${(index || 0) + 1})`;
-
-  return ext ? `${safeBase}${suffix}.${ext}` : `${safeBase}${suffix}`;
-}
 
   async function openOrDownloadRef(ref, { preferDownload = false, baseTitle = '', index = 0, total = 1 } = {}) {
     const preOpened = (!preferDownload) ? window.open('about:blank', '_blank') : null;
     if (preOpened) preOpened.opener = null;
 
-const url = await resolveSourceFileUrlLocal(ref);
+    const url = await resolveSourceFileUrlLocal(ref);
     if (!url) {
-      try { preOpened?.close(); } catch {}
+      try { preOpened?.close(); } catch { }
       return;
     }
 
-    // تأكد من meta عند idb (خصوصاً بعد refresh)
     const meta = await ensureMetaForRef(ref);
     const mime = meta?.mime || (sourceFileMetaCache.get(String(ref))?.mime || '');
-
-    const name = buildDownloadName(baseTitle, ref, mime, index, total);
+    const name = buildDownloadName(baseTitle, ref, mime, index, total, meta || {});
 
     if (preferDownload) {
       const a = document.createElement('a');
@@ -937,15 +1191,32 @@ const url = await resolveSourceFileUrlLocal(ref);
       return;
     }
 
-    try { preOpened.location.href = url; } catch {}
+    try { preOpened.location.href = url; } catch { }
   }
 
-  /* ==========================================================================
-     6.3) renderList (قلب الواجهة)
-     ========================================================================== */
+  /* ============================================================================
+     القلب: renderList
+  ============================================================================ */
+
+    // (A) تطبيق التنقل بعد إعادة الرسم (Bio Nav)
+  function applyNavAfterRender() {
+    const nav = handlers.__consumeBioNav?.();
+    if (!nav) return;
+
+    const sourceId = safeStr(nav.sourceId || nav.itemId || '');
+    if (!sourceId) return;
+
+    const card = list.querySelector(`.source-card[data-source-id="${sourceId}"]`);
+    if (!card) return;
+
+    try { card.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
+    catch (e) { card.scrollIntoView(true); }
+
+    card.classList.add('biosec-card--jump-highlight');
+    setTimeout(() => card.classList.remove('biosec-card--jump-highlight'), 1500);
+  }
 
   async function renderList() {
-    // تسخين الميتا لملفات idb قبل الرسم (لتحسين تصنيف الثمبنيلات)
     await warmSourceFileMetaCache(collectAllSourceRefs());
 
     list.innerHTML = '';
@@ -953,105 +1224,298 @@ const url = await resolveSourceFileUrlLocal(ref);
 
     updateSourcesCountBadge();
     updateAddButtonLabel();
-    rebuildSourceTypeFilterOptions();
+
+    // إعادة بناء خيارات فلتر النوع حسب الأنواع المستخدمة
+    {
+      const usedTypesSet = new Set(
+        (person.sources || [])
+          .map(s => String(s.type || '').trim())
+          .filter(Boolean)
+      );
+      const prevValue = typeFilterSelect.value || currentTypeFilter || 'all';
+      const nextValue = sourceType.rebuildSelectFromUsed(typeFilterSelect, usedTypesSet, prevValue, 'ar');
+      currentTypeFilter = nextValue;
+    }
+
+    updateExpiryBar(person.sources);
     updateStatsBar(person.sources);
     updateMissingSourcesWarning();
+    pinnedFilterSelect.value = pinnedFilterMode;
 
+    // تطبيق البحث والتصفية
     const search = (currentSearchTerm || '').toLowerCase();
 
     const filtered = person.sources.filter(src => {
-      const typeOk =
-        currentTypeFilter === 'all' ||
-        !currentTypeFilter ||
-        (src.type || '') === currentTypeFilter;
+      const typeOk = currentTypeFilter === 'all' || !currentTypeFilter || (src.type || '') === currentTypeFilter;
+      const tagOk = !currentTagFilter || (Array.isArray(src.tags) && src.tags.includes(currentTagFilter));
+      const pinnedOk = (pinnedFilterMode !== 'pinned') || !!src.pinned;
 
-      const tagOk =
-        !currentTagFilter ||
-        (Array.isArray(src.tags) && src.tags.includes(currentTagFilter));
+      // فلتر انتهاء
+      let expiryOk = true;
+      if (expiryFocusMode !== 'all') {
+        const st = getExpiryStatus(src, Number(src?.expiryAlertDays) || DEFAULT_EXPIRY_ALERT_DAYS);
+        expiryOk = (expiryFocusMode === st.status);
+      }
 
-      const pinnedOk = !onlyPinned || !!src.pinned;
-
+      // بحث سريع
       let textOk = true;
       if (search) {
         const hay = [
           src.title || '',
           src.issuer || '',
           src.referenceCode || '',
-          src.note || ''
+          src.note || '',
+          src.holderName || '',
+          src.nationalId || '',
+          src.civilRegistryNo || ''
         ].join(' ').toLowerCase();
         textOk = hay.includes(search);
       }
+let advOk = true;
+      // بحث متقدم
+      if (advIssuer) {
+        const iss = (src.issuer || '').toLowerCase();
+        advOk = advOk && iss.includes(advIssuer.toLowerCase());
+      }
+      if (advConfidentiality) {
+        advOk = advOk && ((src.confidentiality || '').trim() === advConfidentiality);
+      }
+       if (advVerifiedMode === 'verified') {
+        advOk = advOk && !!src.verified;
+      } else if (advVerifiedMode === 'unverified') {
+        advOk = advOk && !src.verified;
+      }
 
-      return typeOk && tagOk && pinnedOk && textOk;
+      if (advConfidence) {
+        advOk = advOk && ((src.confidenceLevel || '').trim() === advConfidence);
+      }
+
+      return typeOk && tagOk && pinnedOk && expiryOk && textOk && advOk;
     });
 
     if (!filtered.length) {
-      const empty = el('div', 'sources-empty');
+      const empty = el('div', 'biosec-empty sources-empty');
       empty.textContent = person.sources.length ? 'لا توجد وثائق مطابقة لخيارات التصفية الحالية.'
-        : 'ابدأ بتسجيل الوثائق الرسمية: مثل شهادة الميلاد، عقد الزواج، صكوك الملكية أو وثائق الهوية.';
+        : 'ابدأ بتسجيل الوثائق الرسمية: شهادة ميلاد، عقد زواج، صك ملكية أو وثائق هوية.';
       list.appendChild(empty);
       return;
     }
 
-    /* ---------- وضع الجدول المختصر ---------- */
-    if (viewMode === 'table') {
-      const table = el('div', 'sources-table-view');
+    /* ----------------------------
+       وضع الجدول المختصر
+    ----------------------------- */
+if (viewMode === 'table') {
+  const table = el('div', 'sources-table-view');
 
-      const headerRow = el('div', 'sources-table-header');
-      const h1 = el('div', 'sources-table-cell sources-table-cell--title');
-      h1.textContent = 'العنوان / النوع';
-      const h2 = el('div', 'sources-table-cell sources-table-cell--meta');
-      h2.textContent = 'الجهة / المكان';
-      const h3 = el('div', 'sources-table-cell sources-table-cell--meta');
-      h3.textContent = 'التاريخ / رقم المرجع';
-      headerRow.append(h1, h2, h3);
-      table.appendChild(headerRow);
+  const headerRow = el('div', 'sources-table-header');
+  const h1 = el('div', 'sources-table-cell sources-table-cell--title'); h1.textContent = 'العنوان / النوع';
+  const h2 = el('div', 'sources-table-cell sources-table-cell--meta');  h2.textContent = 'الجهة / المكان';
+  const h3 = el('div', 'sources-table-cell sources-table-cell--meta');  h3.textContent = 'التاريخ / المرجع';
 
-      filtered.forEach((src) => {
-        const typeLabel = getSourceTypeLabel((src.type || '').trim());
+const h4 = el('div', 'sources-table-cell sources-table-cell--meta');
+h4.textContent = 'الإجراء';
 
-        const rowTitle = el('div', 'sources-table-cell sources-table-cell--title');
-        rowTitle.textContent = (src.title || 'وثيقة بدون عنوان') + (typeLabel ? ` – ${typeLabel}` : '');
+headerRow.append(h1, h2, h3, h4);
+  table.appendChild(headerRow);
 
-        const rowMeta1 = el('div', 'sources-table-cell sources-table-cell--meta');
-        const issuer = (src.issuer || '').trim();
-        const place = (src.place || '').trim();
-        rowMeta1.textContent = [issuer, place].filter(Boolean).join(' • ');
+filtered.forEach((src) => {
+  const row = el('div', 'sources-table-row');
+  row.tabIndex = 0;
+  row.dataset.sourceId = src.id;
 
-        const rowMeta2 = el('div', 'sources-table-cell sources-table-cell--meta');
-        const dText = formatShortDateBadge(src.date || src.createdAt || src.updatedAt || null) || '';
-        const ref = (src.referenceCode || '').trim();
-        rowMeta2.textContent = [dText, ref].filter(Boolean).join(' • ');
+  const typeLabel = sourceType.getLabel((src.type || '').trim());
 
-        table.append(rowTitle, rowMeta1, rowMeta2);
-      });
+  /* ===== العمود 1: العنوان + النوع + chips ===== */
 
-      list.appendChild(table);
-      return;
-    }
+  const filesCount = Array.isArray(src.files) ? src.files.length : 0;
+  const st = getExpiryStatus(src, Number(src?.expiryAlertDays) || DEFAULT_EXPIRY_ALERT_DAYS);
 
-    /* ---------- وضع البطاقات ---------- */
+  const chips = [];
+  if (src.pinned) chips.push(`<span class="sources-chip" data-kind="pinned">مهم</span>`);
+  if (src.verified) chips.push(`<span class="sources-chip" data-kind="verified">موثّق</span>`);
+  if (src.confidentiality && src.confidentiality !== 'public') {
+    chips.push(`<span class="sources-chip" data-kind="conf">${safeStr(CONFIDENTIALITY_LABELS[src.confidentiality] || 'خاص')}</span>`);
+  }
+  if (st.status === 'expired' || st.status === 'near') {
+    chips.push(
+      `<span class="sources-chip" data-kind="expiry" data-level="${st.status}">
+        ${st.status === 'expired' ? 'منتهية'
+          : (st.days === 0 ? 'تنتهي اليوم' : `قريبة (${st.days}ي)`)}
+      </span>`
+    );
+  }
+  if (filesCount) chips.push(`<span class="sources-chip" data-kind="files">📎 ${filesCount}</span>`);
+
+  const rowTitle = el('div', 'sources-table-cell sources-table-cell--title');
+rowTitle.setAttribute('data-label', 'العنوان / النوع');
+
+  rowTitle.innerHTML = `
+    <div class="sources-table-title">
+      <div class="sources-table-title-line">
+        <span class="sources-table-title-text">${safeStr(src.title || 'وثيقة بدون عنوان')}</span>
+        ${typeLabel ? `<span class="sources-table-type">— ${safeStr(typeLabel)}</span>` : ''}
+      </div>
+      ${chips.length ? `<div class="sources-table-chips">${chips.join('')}</div>` : ''}
+    </div>
+  `;
+
+  /* ===== العمود 2 ===== */
+  const rowMeta1 = el('div', 'sources-table-cell sources-table-cell--meta');
+  rowMeta1.setAttribute('data-label', 'الجهة / المكان');
+
+  rowMeta1.textContent =
+    [(src.issuer || '').trim(), (src.place || '').trim()]
+      .filter(Boolean)
+      .join(' • ');
+
+  /* ===== العمود 3 ===== */
+  const rowMeta2 = el('div', 'sources-table-cell sources-table-cell--meta');
+  rowMeta2.setAttribute('data-label', 'التاريخ / المرجع');
+  const dText = formatShortDateBadge(src.date || src.createdAt || src.updatedAt || null) || '';
+  const ref = (src.referenceCode || '').trim();
+  rowMeta2.textContent = [dText, ref].filter(Boolean).join(' • ');
+
+/* ===== فتح البطاقة عند الضغط (FIX: await + scroll/highlight بدون nav) ===== */
+const openRow = async () => {
+  // ✅ افتح في وضع البطاقات عبر setViewMode لتحديث الـ toggle
+  // ✅ ولا تجعلها “تعديل” => lastEditedId يجب أن يكون null
+  lastEditedId = null;
+
+  await setViewMode('cards');
+
+  const card = list.querySelector(`.source-card[data-source-id="${src.id}"]`);
+  if (!card) return;
+
+  try { card.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
+  catch { card.scrollIntoView(true); }
+
+  card.classList.add('biosec-card--jump-highlight');
+  setTimeout(() => card.classList.remove('biosec-card--jump-highlight'), 1500);
+};
+
+
+
+row.tabIndex = -1;      
+row.style.cursor = 'default';
+
+  /* ===== العمود 4: الإجراءات ===== */
+const rowActions = el('div', 'sources-table-cell sources-table-cell--actions');
+rowActions.setAttribute('data-label', 'الإجراء');
+
+const btnOpen = el('button', 'sources-row-action');
+btnOpen.type = 'button';
+btnOpen.textContent = 'فتح';
+btnOpen.onclick = (e) => {
+  e.stopPropagation();
+  openRow();
+};
+
+const btnDl = el('button', 'sources-row-action');
+btnDl.type = 'button';
+btnDl.textContent = 'تحميل';
+btnDl.disabled = !(Array.isArray(src.files) && src.files.length);
+btnDl.onclick = async (e) => {
+  e.stopPropagation();
+
+  const files = Array.isArray(src.files) ? src.files : [];
+  if (!files.length) {
+    showWarning?.('لا توجد أي ملفات مرفقة لهذه الوثيقة بعد.');
+    return;
+  }
+
+  const baseTitle = (src.title || 'الوثيقة').trim() || 'الوثيقة';
+
+  for (let i = 0; i < files.length; i++) {
+    await openOrDownloadRef(files[i], {
+      preferDownload: true,
+      baseTitle,
+      index: i,
+      total: files.length
+    });
+  }
+};
+
+rowActions.append(btnOpen, btnDl);
+rowActions.addEventListener('click', (e) => e.stopPropagation());
+
+row.append(rowTitle, rowMeta1, rowMeta2, rowActions);
+  table.appendChild(row);
+});
+
+
+  list.appendChild(table);
+  return;
+}
+
+
+    /* ----------------------------
+       وضع البطاقات
+    ----------------------------- */
+// helper: عدّاد الأحداث المرتبطة بهذه الوثيقة
+function countLinkedEventsForSource(sourceId) {
+  const sid = String(sourceId || '').trim();
+  const evs = Array.isArray(person?.events) ? person.events : [];
+  if (!sid || !evs.length) return 0;
+  return evs.filter(ev =>
+    Array.isArray(ev?.sourceIds) && ev.sourceIds.includes(sid)
+  ).length;
+}
+
+    // helper: عدّاد التعليم المرتبط بهذه الوثيقة
+function countLinkedEducationForSource(sourceId) {
+  const sid = String(sourceId || '').trim();
+  const items = Array.isArray(person?.education) ? person.education : [];
+  if (!sid || !items.length) return 0;
+
+  return items.filter(it =>
+    Array.isArray(it?.sourceIds) && it.sourceIds.includes(sid)
+  ).length;
+}
+    
+// helper: عدّاد الوظائف المرتبطة بهذه الوثيقة
+function countLinkedCareerForSource(sourceId) {
+  const sid = String(sourceId || '').trim();
+  const items = Array.isArray(person?.career) ? person.career : [];
+  if (!sid || !items.length) return 0;
+
+  return items.filter(it =>
+    Array.isArray(it?.sourceIds) && it.sourceIds.includes(sid)
+  ).length;
+}
+
+// helper: عدّاد القصص المرتبطة بهذه الوثيقة
+function countLinkedStoriesForSource(sourceId) {
+  const sid = String(sourceId || '').trim();
+  const items = Array.isArray(person?.stories) ? person.stories : [];
+  if (!sid || !items.length) return 0;
+
+  return items.filter(it =>
+    Array.isArray(it?.sourceIds) && it.sourceIds.includes(sid)
+  ).length;
+}
+
     filtered.forEach((src, index) => {
       const serial = index + 1;
-      const card = el('article', 'source-card');
+
+      const card = el('article', 'biosec-card source-card');
       card.dataset.sourceId = src.id;
 
-      const indexBadge = el('div', 'source-card-index');
+      const indexBadge = el('div', 'biosec-card-index source-card-index');
       indexBadge.textContent = `الوثيقة ${serial}`;
 
       let pinnedBadge = null;
       if (src.pinned) {
-        pinnedBadge = el('div', 'source-pinned-badge');
-        pinnedBadge.textContent = 'وثيقة أساسية';
-        card.classList.add('source-card--pinned');
+        pinnedBadge = el('div', 'biosec-pinned-badge source-pinned-badge');
+        pinnedBadge.textContent = 'وثيقة مهمة';
+        card.classList.add('biosec-card--pinned');
       }
 
-      const topRow = el('div', 'source-card-top');
+      const topRow = el('div', 'biosec-card-top source-card-top');
       topRow.appendChild(indexBadge);
       if (pinnedBadge) topRow.appendChild(pinnedBadge);
       card.appendChild(topRow);
 
-      // نسخة أصلية للمقارنة (Dirty check)
+      // Snapshot للمقارنة
       const original = {
         title: src.title || '',
         type: (src.type || '').trim(),
@@ -1071,444 +1535,570 @@ const url = await resolveSourceFileUrlLocal(ref);
         verified: !!src.verified,
         verifiedBy: (src.verifiedBy || '').trim(),
         verifiedAt: src.verifiedAt || null,
-        confidentiality: (src.confidentiality || '').trim()
+        confidentiality: (src.confidentiality || '').trim(),
+
+        // جديد
+        validUntil: src.validUntil || null,
+        expiryAlertDays: Number.isFinite(Number(src.expiryAlertDays)) ? Number(src.expiryAlertDays) : DEFAULT_EXPIRY_ALERT_DAYS,
+        holderName: (src.holderName || '').trim(),
+        nationalId: (src.nationalId || '').trim(),
+        civilRegistryNo: (src.civilRegistryNo || '').trim(),
+
+        history: Array.isArray(src.history) ? src.history.map(h => ({ ...h })) : []
       };
 
-      const dateBadge = formatShortDateBadge(original.date);
-      let currentFiles = Array.isArray(original.files) ? [...original.files] : [];
-      let isEditing = lastEditedId === src.id;
+let currentFiles = Array.isArray(original.files) ? [...original.files] : [];
+
+      let isEditing =
+        (lastEditedId === src.id) ||
+        (draftNewMap.has(src.id) && isEmptySourceDraft(src));
+
       let isDirty = false;
-      let pendingDeletedFiles = []; // refs تُحذف من IndexedDB عند الحفظ فقط
+      let pendingDeletedFiles = [];
 
-      /* =======================
-         A) المعاينة (Preview)
-         ======================= */
+/* ----------------------------
+   المعاينة (هيكل أوضح)
+----------------------------- */
 
-      const previewBox = el('div', 'source-preview');
-      const previewMeta = el('div', 'source-preview-meta');
+const previewBox = el('div', 'biosec-preview source-preview');
 
-      const createdLabel = el('span', 'source-preview-date');
-      createdLabel.textContent = src.createdAt ? `أضيفت في ${formatFullDateTime(src.createdAt) || ''}` : '';
+/** 1) العنوان + أيقونات الحالة بجانبه */
+const previewHead = el('div', 'source-preview-head');
 
-      const lengthLabel = el('span', 'source-length-chip');
-      const lenInfo = getNoteLengthInfo(original.note.length);
-      if (lenInfo.level === 0) {
-        lengthLabel.textContent = 'لم تُكتب ملاحظات بعد';
-      } else {
-        const meter = el('span', 'source-length-meter');
-        meter.dataset.level = String(lenInfo.level);
-        const bar = el('span', 'source-length-meter-bar');
-        meter.appendChild(bar);
-        const txtSpan = el('span');
-        txtSpan.textContent = lenInfo.label;
-        lengthLabel.innerHTML = '';
-        lengthLabel.append(meter, txtSpan);
-      }
+const previewTitle = el('div', 'biosec-preview-title source-preview-title');
+previewTitle.textContent = original.title || 'وثيقة بدون عنوان';
 
-      previewMeta.append(createdLabel, lengthLabel);
+// القفل (سرّية) ممتاز مكانه عند العنوان
+if (original.confidentiality && original.confidentiality !== 'public') {
+  const lockIcon = el('span', 'source-lock-icon');
+  lockIcon.innerHTML = '<i class="fa-solid fa-lock" aria-hidden="true"></i>';
+  previewTitle.appendChild(lockIcon);
+}
 
-      const badgesWrap = el('div', 'source-preview-badges');
+// إذا “منتهية/قريبة” تظهر جنب العنوان كبادج واضح
+const titleBadges = el('div', 'source-title-badges');
 
-      if (original.place) {
-        const placeBadge = el('span', 'source-badge source-badge--place badge--place');
-        placeBadge.textContent = original.place;
-        badgesWrap.appendChild(placeBadge);
-      }
+{
+  const st = getExpiryStatus(original, original.expiryAlertDays || DEFAULT_EXPIRY_ALERT_DAYS);
+  if (st.status === 'expired' || st.status === 'near') {
+    const b = el('span', 'biosec-badge source-badge source-badge--expiry');
+    b.dataset.level = st.status;
+    b.textContent =
+      st.status === 'expired' ? 'منتهية'
+        : (st.days === 0 ? 'تنتهي اليوم' : `قريبة (${st.days} يوم)`);
+    titleBadges.appendChild(b);
+  }
+}
 
-      if (dateBadge) {
-        const yearBadge = el('span', 'source-badge source-badge--year badge--year');
-        yearBadge.textContent = dateBadge;
-        badgesWrap.appendChild(yearBadge);
-      } else {
-        const undatedBadge = el('span', 'source-badge source-badge--undated');
-        undatedBadge.textContent = 'بدون تاريخ محدّد';
-        badgesWrap.appendChild(undatedBadge);
-      }
+previewHead.append(previewTitle, titleBadges);
 
-      const typeLabel = getSourceTypeLabel(original.type);
-      if (typeLabel) {
-        const typeBadge = el('span', 'source-badge source-badge--type badge--type');
-        typeBadge.dataset.sourceId = src.id;
-        typeBadge.dataset.type = original.type || 'generic';
-        typeBadge.textContent = typeLabel;
-        badgesWrap.appendChild(typeBadge);
-      }
+/** 2) سطر ميتا واحد فقط (بدون تكرار): نوع • تاريخ • جهة • رقم (+ اختياري مكان) */
+const previewMetaLine = el('div', 'source-preview-meta-line');
 
-      if (original.issuer) {
-        const issuerBadge = el('span', 'source-badge source-badge--issuer');
-        issuerBadge.textContent = original.issuer;
-        badgesWrap.appendChild(issuerBadge);
-      }
+const typeLabel = sourceType.getLabel((original.type || '').trim());
+const dateBadge = formatShortDateBadge(original.date) || 'بدون تاريخ';
+const metaParts = [
+  typeLabel || null,
+  dateBadge || null,
+  (original.issuer || '').trim() || null,
+  (original.referenceCode || '').trim() || null,
+  // (اختياري) المكان يكون آخر شيء ثانوي أو ضمن نفس السطر:
+  (original.place || '').trim() || null
+].filter(Boolean);
 
-      if (original.referenceCode) {
-        const refBadge = el('span', 'source-badge source-badge--reference');
-        refBadge.textContent = original.referenceCode;
-        badgesWrap.appendChild(refBadge);
-      }
+previewMetaLine.textContent = metaParts.join(' • ');
 
-      if (original.files && original.files.length) {
-        const filesBadge = el('span', 'source-badge source-badge--files');
-        filesBadge.textContent = `${original.files.length} ملف مرفق`;
-        badgesWrap.appendChild(filesBadge);
-      }
+let idInfoEl = null;
 
-      if (original.confidenceLevel) {
-        const confCode = original.confidenceLevel;
-        const confBadge = el('span', 'source-badge source-badge--confidence');
-        confBadge.dataset.level = confCode;
-        const confLabel = CONFIDENCE_LEVEL_LABELS[confCode] || 'درجة اعتماد غير محددة';
-        confBadge.textContent = confLabel;
-        badgesWrap.appendChild(confBadge);
-      }
+const t = (original.type || '').trim();
+const isIdType = (t === 'id' || t === 'birth');
 
-      if (original.confidentiality) {
-        const confCode = original.confidentiality;
-        const confBadge = el('span', 'source-badge source-badge--confidentiality');
-        confBadge.dataset.level = confCode;
-        const confLabel = CONFIDENTIALITY_LABELS[confCode] || 'مستوى خصوصية غير محدد';
-        confBadge.textContent = confLabel;
-        badgesWrap.appendChild(confBadge);
-      }
+if (isIdType) {
+  const rows = [
+    ['اسم صاحب الوثيقة', (original.holderName || '').trim()],
+    ['رقم الهوية', (original.nationalId || '').trim()],
+    ['رقم السجل المدني', (original.civilRegistryNo || '').trim()]
+  ].filter(([, val]) => String(val || '').trim());
 
-      if (original.verified) {
-        const verBadge = el('span', 'source-badge source-badge--verified');
-        verBadge.textContent = 'موثَّق';
-        badgesWrap.appendChild(verBadge);
-      }
+  if (rows.length) {
+    idInfoEl = el('div', 'source-preview-idinfo');
 
-      const previewTitle = el('div', 'source-preview-title');
-      previewTitle.textContent = original.title || 'وثيقة بدون عنوان';
+    rows.forEach(([k, v]) => {
+      const r = el('div', 'source-preview-idrow');
+      const kk = el('span', 'source-preview-idkey');
+      kk.textContent = k + ':';
+      const vv = el('span', 'source-preview-idval');
+      vv.textContent = v;
+      r.append(kk, vv);
+      idInfoEl.appendChild(r);
+    });
+  }
+}
 
-      if (original.confidentiality && original.confidentiality !== 'public') {
-        const lockIcon = el('span', 'source-lock-icon');
-        lockIcon.innerHTML = '<i class="fa-solid fa-lock" aria-hidden="true"></i>';
-        previewTitle.appendChild(lockIcon);
-      }
 
-      const previewMetaLine = el('div', 'source-preview-meta-line');
-      const metaParts = [];
-      if (typeLabel) metaParts.push(typeLabel);
-      if (original.issuer) metaParts.push(original.issuer);
-      if (original.referenceCode) metaParts.push(original.referenceCode);
-      if (metaParts.length) previewMetaLine.textContent = metaParts.join(' • ');
+/** 3) بادجات الحالة فقط (Status chips) بالترتيب: expiry → verified → confidentiality → confidence */
+const statusChips = el('div', 'source-status-chips');
 
-      const previewNote = el('div', 'source-preview-note');
-      previewNote.textContent =
-        original.note ||
-        'لم تُكتب ملاحظات عن هذه الوثيقة بعد. يمكنك فتح وضع التحرير لإضافة وصف مختصر.';
+// expiry (اختياري كـ chip ثانية أيضًا — لو تبيها “فقط عند العنوان” احذف هذا الجزء)
+{
+  const st = getExpiryStatus(original, original.expiryAlertDays || DEFAULT_EXPIRY_ALERT_DAYS);
+  if (st.status === 'expired' || st.status === 'near') {
+    const b = el('span', 'biosec-badge source-badge source-badge--expiry');
+    b.dataset.level = st.status;
+    b.textContent =
+      st.status === 'expired' ? 'منتهية الصلاحية'
+        : (st.days === 0 ? 'تنتهي اليوم' : `قريبة الانتهاء (${st.days} يوم)`);
+    statusChips.appendChild(b);
+  }
+}
 
-      const tagsWrap = el('div', 'source-tags-list');
-      if (original.tags && original.tags.length) {
-        original.tags.forEach(tag => {
-          const chip = el(
-            'button',
-            'source-tag-chip' + (tag === currentTagFilter ? ' is-active' : '')
-          );
-          chip.type = 'button';
-          chip.textContent = tag;
-          chip.addEventListener('click', () => {
-            currentTagFilter = currentTagFilter === tag ? '' : tag;
-            renderList();
-          });
-          tagsWrap.appendChild(chip);
-        });
-      }
+// verified
+if (original.verified) {
+  const b = el('span', 'biosec-badge source-badge source-badge--verified');
+  b.textContent = 'موثّق';
+  statusChips.appendChild(b);
+}
 
-      const previewFilesWrap = el('div', 'source-preview-images');
+// confidentiality
+if (original.confidentiality) {
+  const confCode = original.confidentiality;
+  const b = el('span', 'biosec-badge source-badge source-badge--confidentiality');
+  b.dataset.level = confCode;
+  b.textContent = CONFIDENTIALITY_LABELS[confCode] || 'خصوصية غير محددة';
+  statusChips.appendChild(b);
+}
 
-      const sliderBtn = el('button', 'source-files-slider-btn');
-      sliderBtn.type = 'button';
-      sliderBtn.innerHTML =
-        '<i class="fa-solid fa-images" aria-hidden="true"></i> ' +
-        '<span>عرض الصور كشرائح</span>';
+// confidence
+if (original.confidenceLevel) {
+  const lvl = original.confidenceLevel;
+  const b = el('span', 'biosec-badge source-badge source-badge--confidence');
+  b.dataset.level = lvl;
+  b.textContent = CONFIDENCE_LEVEL_LABELS[lvl] || 'اعتماد غير محدد';
+  statusChips.appendChild(b);
+}
 
-      function makeGroupTitle(txt) {
-        const t = el('div', 'source-files-group-title');
-        t.textContent = txt;
-        return t;
-      }
-      function makeDivider() {
-        return el('div', 'source-files-group-divider');
-      }
+/** 4) ملخص/الوصف (previewNote) */
+const previewNote = el('div', 'biosec-preview-text source-preview-note');
+previewNote.textContent =
+  original.note ||
+  'لم تُكتب ملاحظات عن هذه الوثيقة بعد. يمكنك فتح وضع التحرير لإضافة وصف مختصر.';
 
-      function renderPreviewFiles() {
-        previewFilesWrap.innerHTML = '';
+/** 5) الوسوم */
+const tagsWrap = el('div', 'biosec-tags-list source-tags-list');
+if (original.tags && original.tags.length) {
+  original.tags.forEach(tag => {
+    const chip = el(
+      'button',
+      'biosec-tag-chip source-tag-chip' + (tag === currentTagFilter ? ' is-active' : '')
+    );
+    chip.type = 'button';
+    chip.textContent = tag;
+    chip.addEventListener('click', () => {
+      currentTagFilter = currentTagFilter === tag ? '' : tag;
+      syncClearFiltersBtnVisibility();
+      persistSourcesFiltersState();
+      renderList();
+    });
+    tagsWrap.appendChild(chip);
+  });
+}
 
-        const orderedRefs = groupRefsByKind(original.files || []);
-        const images = orderedRefs.filter(r => getSourceFileKind(r) === 'image');
-        const others = orderedRefs.filter(r => getSourceFileKind(r) !== 'image');
-        const hasTwoGroups = images.length && others.length;
+/** 6) المرفقات (مصغرات + زر الشرائح) */
+const previewFilesWrap = el('div', 'biosec-images-thumbs source-preview-images');
 
-        if (hasTwoGroups && images.length) previewFilesWrap.appendChild(makeGroupTitle('الصور'));
+const sliderBtn = el('button', 'biosec-images-slider-btn source-files-slider-btn');
+sliderBtn.type = 'button';
+sliderBtn.innerHTML = '<i class="fa-solid fa-images" aria-hidden="true"></i> <span>عرض الصور كشرائح</span>';
 
-        const renderThumb = (ref, idx, totalRefs, imagesOnly) => {
-          const thumb = el('div', 'source-file-thumb source-file-thumb--preview');
-          classifyFileThumb(thumb, ref);
+/** 7) الإجراءات (تحميل) */
+const actionsWrap = el('div', 'source-actions');
 
-          const kind = getSourceFileKind(ref);
-          const isDoc = (kind === 'word' || kind === 'excel');
+const downloadBtn = el('button', 'source-download-btn');
+downloadBtn.type = 'button';
 
-          const footerRow = el('div', 'source-file-thumb-footer');
-          const label = el('span', 'source-file-label');
-          label.textContent =
-            kind === 'image' ? 'صورة' :
-            kind === 'pdf' ? 'PDF' :
-            kind === 'word' ? 'Word' :
-            kind === 'excel' ? 'Excel' : 'ملف';
+const filesCount = Array.isArray(original.files) ? original.files.length : 0;
+const downloadLabel = filesCount > 1 ? 'تحميل الوثائق' : 'تحميل الوثيقة';
 
-          const actionBtn = el('button', 'source-file-thumb-view');
-          actionBtn.type = 'button';
-          actionBtn.textContent = kind === 'image' ? 'معاينة' : (isDoc ? 'تحميل' : 'فتح');
+downloadBtn.innerHTML =
+  `<span class="source-download-btn-icon"><i class="fa-solid fa-download" aria-hidden="true"></i></span><span>${downloadLabel}</span>`;
 
-          footerRow.append(label, actionBtn);
+downloadBtn.addEventListener('click', async () => {
+  if (!original.files || !original.files.length) {
+    showWarning?.('لا توجد أي ملفات مرفقة لهذه الوثيقة بعد.');
+    return;
+  }
+  const files = original.files;
+  const baseTitle = (original.title || 'الوثيقة').trim() || 'الوثيقة';
 
-          if (kind === 'image') {
-            const imgEl = el('img');
-            imgEl.alt = 'صورة مرفقة';
-            resolveSourceFileUrlLocal(ref).then(url => { if (url) imgEl.src = url; });
-
-            const imageIndex = findImageIndex(imagesOnly, ref);
-
-            actionBtn.title = 'معاينة الصورة بحجم أكبر';
-        actionBtn.addEventListener('click', e => {
-  e.stopPropagation();
-  if (imageIndex >= 0) openSourceSlider(imagesOnly, imageIndex, resolveSourceFileUrlLocal);
-});
-imgEl.addEventListener('click', () => {
-  if (imageIndex >= 0) openSourceSlider(imagesOnly, imageIndex, resolveSourceFileUrlLocal);
+  for (let i = 0; i < files.length; i++) {
+    await openOrDownloadRef(files[i], { preferDownload: true, baseTitle, index: i, total: files.length });
+  }
 });
 
+if (filesCount) actionsWrap.append(downloadBtn);
 
-            thumb.append(imgEl, footerRow);
-          } else {
-            const icon = el('div', 'source-file-icon');
-            icon.innerHTML = {
-              pdf: '<i class="fa-solid fa-file-pdf"></i>',
-              word: '<i class="fa-solid fa-file-word"></i>',
-              excel: '<i class="fa-solid fa-file-excel"></i>',
-              other: '<i class="fa-solid fa-file"></i>'
-            }[kind] || '<i class="fa-solid fa-file"></i>';
+// زر عرض الأحداث المرتبطة (يظهر فقط إذا يوجد أحداث)
+const linkedCount = countLinkedEventsForSource(src.id);
 
-            actionBtn.addEventListener('click', (e) => {
-              e.stopPropagation();
-              if (isDoc) {
-                openOrDownloadRef(ref, {
-                  preferDownload: true,
-                  baseTitle: original.title || 'الوثيقة',
-                  index: idx,
-                  total: totalRefs
-                });
-                return;
-              }
-              openInNewTabSafe(resolveSourceFileUrlLocal(ref));
-            });
+if (linkedCount > 0) {
+  const viewLinkedBtn = el('button', 'source-view-linked-btn source-view-linked-events-btn');
+  viewLinkedBtn.type = 'button';
+  viewLinkedBtn.innerHTML =
+    `<span class="source-view-linked-icon"><i class="fa-solid fa-link" aria-hidden="true"></i></span>
+     <span>عرض الأحداث المرتبطة (${linkedCount})</span>`;
 
-            thumb.style.cursor = 'pointer';
-            thumb.addEventListener('click', (e) => {
-              if (e.target === actionBtn) return;
-              if (isDoc) {
-                openOrDownloadRef(ref, {
-                  preferDownload: true,
-                  baseTitle: original.title || 'الوثيقة',
-                  index: idx,
-                  total: totalRefs
-                });
-              } else {
-                openInNewTabSafe(resolveSourceFileUrlLocal(ref));
-              }
-            });
+  viewLinkedBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    handlers.onBioShortcutClick?.('timeline', { sourceId: src.id });
+  });
 
-            thumb.append(icon, footerRow);
-          }
+  actionsWrap.append(viewLinkedBtn);
+}
 
-          previewFilesWrap.appendChild(thumb);
-        };
+// زر عرض التعليم المرتبط (يظهر فقط إذا يوجد عناصر تعليم مرتبطة)
+const linkedEduCount = countLinkedEducationForSource(src.id);
 
-        // صور
-        images.forEach((ref, idx) => renderThumb(ref, idx, images.length, images));
+if (linkedEduCount > 0) {
+  const viewEduBtn = el('button', 'source-view-linked-btn source-view-linked-education-btn');
+  viewEduBtn.type = 'button';
+  viewEduBtn.innerHTML =
+    `<span class="source-view-linked-icon"><i class="fa-solid fa-graduation-cap" aria-hidden="true"></i></span>
+     <span>عرض التعليم المرتبط (${linkedEduCount})</span>`;
 
-        // زر الشرائح: يظهر فقط إذا عندنا صورتين أو أكثر
-        sliderBtn.style.display = images.length < 2 ? 'none' : '';
-        sliderBtn.onclick = () => {
-          if (images.length < 2) return;
-          openSourceSlider(images, 0, resolveSourceFileUrlLocal);
-        };
+  viewEduBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    handlers.onBioShortcutClick?.('education', { sourceId: src.id });
+  });
 
-        if (images.length) {
-          const sliderRow = el('div', 'source-files-slider-row');
-          sliderRow.appendChild(sliderBtn);
-          previewFilesWrap.appendChild(sliderRow);
-        } else {
-          sliderBtn.style.display = 'none';
-        }
+  actionsWrap.append(viewEduBtn);
+}
 
-        // ملفات أخرى
-        if (hasTwoGroups) {
-          previewFilesWrap.appendChild(makeDivider());
-          previewFilesWrap.appendChild(makeGroupTitle('الملفات'));
-        }
-        others.forEach((ref, idx) => renderThumb(ref, idx, others.length, images));
-      }
+// زر عرض الوظائف المرتبطة (يظهر فقط إذا يوجد عناصر وظيفة مرتبطة)
+const linkedCareerCount = countLinkedCareerForSource(src.id);
 
-      renderPreviewFiles();
+if (linkedCareerCount > 0) {
+  const viewCareerBtn = el('button', 'source-view-linked-btn source-view-linked-career-btn');
+  viewCareerBtn.type = 'button';
+  viewCareerBtn.innerHTML =
+    `<span class="source-view-linked-icon"><i class="fa-solid fa-briefcase" aria-hidden="true"></i></span>
+     <span>عرض الوظائف المرتبطة (${linkedCareerCount})</span>`;
 
-      const actionsWrap = el('div', 'source-actions');
+  viewCareerBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    handlers.onBioShortcutClick?.('career', { sourceId: src.id });
+  });
 
-      const downloadBtn = el('button', 'source-download-btn');
-      downloadBtn.type = 'button';
-      const filesCount = Array.isArray(original.files) ? original.files.length : 0;
-      const downloadLabel = filesCount > 1 ? 'تحميل الوثائق' : 'تحميل الوثيقة';
-      downloadBtn.innerHTML =
-        `<span class="source-download-btn-icon"><i class="fa-solid fa-download" aria-hidden="true"></i></span><span>${downloadLabel}</span>`;
+  actionsWrap.append(viewCareerBtn);
+}
 
-      downloadBtn.addEventListener('click', async () => {
-        if (!original.files || !original.files.length) {
-          showWarning?.('لا توجد أي ملفات مرفقة لهذه الوثيقة بعد.');
+      // زر عرض القصص المرتبطة (يظهر فقط إذا يوجد قصص مرتبطة)
+const linkedStoriesCount = countLinkedStoriesForSource(src.id);
+
+if (linkedStoriesCount > 0) {
+  const viewStoriesBtn = el('button', 'source-view-linked-btn source-view-linked-stories-btn');
+  viewStoriesBtn.type = 'button';
+  viewStoriesBtn.innerHTML =
+    `<span class="source-view-linked-icon"><i class="fa-solid fa-book-open" aria-hidden="true"></i></span>
+     <span>عرض القصص المرتبطة (${linkedStoriesCount})</span>`;
+
+  viewStoriesBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    handlers.onBioShortcutClick?.('stories', { sourceId: src.id });
+  });
+
+  actionsWrap.append(viewStoriesBtn);
+}
+
+/** (اختياري) تاريخ الإضافة + آخر تعديل + طول الوصف (ثانوي) */
+const previewMeta = el('div', 'biosec-preview-meta source-preview-meta source-preview-meta--secondary');
+
+const createdLabel = el('span', 'biosec-preview-date source-preview-date');
+createdLabel.textContent = src.createdAt ? formatCreatedAtLabel(src.createdAt, 'أضيفت', formatFullDateTime)
+  : '';
+
+// ✅ جديد: آخر تعديل
+const updatedLabel = el('span', 'biosec-preview-date source-preview-date source-preview-date--updated');
+updatedLabel.textContent = src.updatedAt ? `آخر تعديل: ${formatFullDateTime(src.updatedAt)}`
+  : '';
+
+
+const lengthLabel = el('span', 'biosec-length-chip source-length-chip');
+const lenInfo = getSourceNoteLengthInfo(original.note.length);
+
+if (lenInfo.level === 0) {
+  lengthLabel.textContent = 'بدون وصف';
+} else {
+  const meter = el('span', 'biosec-length-meter source-length-meter');
+  meter.dataset.level = String(lenInfo.level);
+  const bar = el('span', 'biosec-length-meter-bar source-length-meter-bar');
+  meter.appendChild(bar);
+  const txtSpan = el('span');
+  txtSpan.textContent = lenInfo.label;
+  lengthLabel.innerHTML = '';
+  lengthLabel.append(meter, txtSpan);
+}
+
+// ✅ ضفنا updatedLabel بين createdLabel و lengthLabel
+previewMeta.append(createdLabel, lengthLabel, updatedLabel);
+
+/* إعادة استخدام دالة العرض الحالية للمرفقات */
+function renderPreviewFiles() {
+  previewFilesWrap.innerHTML = '';
+
+  const orderedRefs = groupRefsByKind(original.files || [], getSourceFileKind);
+  const images = orderedRefs.filter(r => getSourceFileKind(r) === 'image');
+  const others = orderedRefs.filter(r => getSourceFileKind(r) !== 'image');
+  const hasTwoGroups = images.length && others.length;
+
+  if (hasTwoGroups && images.length) {
+    const gt = makeGroupTitle('الصور');
+    gt.classList.add('biosec-files-group-title', 'source-files-group-title');
+    previewFilesWrap.appendChild(gt);
+  }
+
+  const renderThumb = (ref, idx, totalRefs, imagesOnly) => {
+    const thumb = el('div', 'biosec-image-thumb biosec-file-thumb source-file-thumb source-file-thumb--preview');
+    classifyFileThumb(thumb, ref);
+
+    const kind = getSourceFileKind(ref);
+    const isDoc = (kind === 'word' || kind === 'excel');
+
+    const footerRow = el('div', 'biosec-file-thumb-footer source-file-thumb-footer');
+    const label = el('span', 'biosec-file-label source-file-label');
+    label.textContent =
+      kind === 'image' ? 'صورة' :
+      kind === 'pdf' ? 'PDF' :
+      kind === 'word' ? 'Word' :
+      kind === 'excel' ? 'Excel' : 'ملف';
+
+    const actionBtn = el('button', 'biosec-image-thumb-view biosec-file-thumb-view source-file-thumb-view');
+    actionBtn.type = 'button';
+    actionBtn.textContent = kind === 'image' ? 'معاينة' : (isDoc ? 'تحميل' : 'فتح');
+
+    footerRow.append(label, actionBtn);
+
+    if (kind === 'image') {
+      const imgEl = el('img');
+      imgEl.alt = 'صورة مرفقة';
+      resolveSourceFileUrlLocal(ref).then(url => { if (url) imgEl.src = url; });
+
+      const imageIndex = findImageIndex(imagesOnly, ref);
+
+      actionBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        if (imageIndex >= 0) openSourceSlider(imagesOnly, imageIndex, resolveSourceFileUrlLocal);
+      });
+      imgEl.addEventListener('click', () => {
+        if (imageIndex >= 0) openSourceSlider(imagesOnly, imageIndex, resolveSourceFileUrlLocal);
+      });
+
+      thumb.append(imgEl, footerRow);
+    } else {
+      const icon = el('div', 'biosec-file-icon source-file-icon');
+      icon.innerHTML = {
+        pdf: '<i class="fa-solid fa-file-pdf"></i>',
+        word: '<i class="fa-solid fa-file-word"></i>',
+        excel: '<i class="fa-solid fa-file-excel"></i>',
+        other: '<i class="fa-solid fa-file"></i>'
+      }[kind] || '<i class="fa-solid fa-file"></i>';
+
+      actionBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (isDoc) {
+          openOrDownloadRef(ref, { preferDownload: true, baseTitle: original.title || 'الوثيقة', index: idx, total: totalRefs });
           return;
         }
-        const files = original.files;
-        const baseTitle = (original.title || 'الوثيقة').trim() || 'الوثيقة';
+        openInNewTabSafe(resolveSourceFileUrlLocal(ref));
+      });
 
-        for (let i = 0; i < files.length; i++) {
-          await openOrDownloadRef(files[i], {
-            preferDownload: true,
-            baseTitle,
-            index: i,
-            total: files.length
-          });
+      thumb.style.cursor = 'pointer';
+      thumb.addEventListener('click', (e) => {
+        if (e.target === actionBtn) return;
+        if (isDoc) {
+          openOrDownloadRef(ref, { preferDownload: true, baseTitle: original.title || 'الوثيقة', index: idx, total: totalRefs });
+        } else {
+          openInNewTabSafe(resolveSourceFileUrlLocal(ref));
         }
       });
 
-      if (original.files && original.files.length) actionsWrap.append(downloadBtn);
+      thumb.append(icon, footerRow);
+    }
 
-      previewBox.append(
-        previewTitle,
-        previewMetaLine,
-        badgesWrap,
-        previewMeta,
-        previewNote,
-        tagsWrap,
-        previewFilesWrap,
-        actionsWrap
-      );
-      card.appendChild(previewBox);
+    previewFilesWrap.appendChild(thumb);
+  };
 
-      /* =======================
-         B) التحرير (Edit)
-         ======================= */
+  images.forEach((ref, idx) => renderThumb(ref, idx, images.length, images));
 
-      const editBox = el('div', 'source-edit');
-      const head = el('div', 'source-head');
+  sliderBtn.style.display = images.length < 2 ? 'none' : '';
+  sliderBtn.onclick = () => {
+    if (images.length < 2) return;
+    openSourceSlider(images, 0, resolveSourceFileUrlLocal);
+  };
 
-      const titleInput = el('input', 'source-title-input');
+  if (images.length) {
+    const sliderRow = el('div', 'biosec-files-slider-row source-files-slider-row');
+    sliderRow.appendChild(sliderBtn);
+    previewFilesWrap.appendChild(sliderRow);
+  } else {
+    sliderBtn.style.display = 'none';
+  }
+
+  if (hasTwoGroups) {
+    const div = makeDivider();
+    div.classList.add('biosec-files-group-divider', 'source-files-group-divider');
+    previewFilesWrap.appendChild(div);
+
+    const gt2 = makeGroupTitle('الملفات');
+    gt2.classList.add('biosec-files-group-title', 'source-files-group-title');
+    previewFilesWrap.appendChild(gt2);
+  }
+
+  others.forEach((ref, idx) => renderThumb(ref, idx, others.length, images));
+}
+
+renderPreviewFiles();
+
+/** التجميع النهائي حسب الترتيب المطلوب */
+previewBox.append(previewHead, previewMetaLine);
+
+if (idInfoEl) previewBox.appendChild(idInfoEl);
+
+previewBox.append(
+  statusChips,
+  previewNote,
+  tagsWrap,
+  actionsWrap,
+  previewMeta
+);
+previewBox.appendChild(previewFilesWrap);
+
+card.appendChild(previewBox);
+
+      /* ----------------------------
+         التحرير
+      ----------------------------- */
+
+      const editBox = el('div', 'biosec-edit source-edit');
+      const head = el('div', 'biosec-head source-head');
+
+      const titleInput = el('input', 'biosec-title-input source-title-input');
       titleInput.type = 'text';
       titleInput.name = `source_title_${src.id}`;
       titleInput.placeholder = 'اسم الوثيقة (مثلاً: شهادة ميلاد، صك ملكية...)';
       titleInput.value = original.title;
 
-      const editIcon = el('span', 'source-edit-icon');
-      editIcon.innerHTML = '<i class="fa-solid fa-pen-to-square" aria-hidden="true"></i>';
+      // عنوان + أيقونة مثل بقية الحقول (بدلاً من source-edit-icon)
+      const titleField = el('div', 'biosec-meta-field source-meta-field source-title-field');
+      const titleLabel = el('div', 'biosec-meta-label source-meta-label');
+      titleLabel.innerHTML =
+        '<span class="biosec-meta-icon source-meta-icon"><i class="fa-solid fa-file-signature" aria-hidden="true"></i></span> عنوان الوثيقة';
+      titleField.append(titleLabel, titleInput);
 
-      const dates = el('div', 'source-dates');
-      dates.textContent = src.createdAt ? `أضيفت في ${formatFullDateTime(src.createdAt) || ''}` : '';
+      const dates = el('div', 'biosec-dates source-dates');
+      dates.textContent = src.createdAt ? formatCreatedAtLabel(src.createdAt, 'أضيفت', formatFullDateTime) : '';
 
-      head.append(titleInput, editIcon, dates);
+head.append(dates);
+
       editBox.appendChild(head);
 
-      const body = el('div', 'source-body');
-      const metaRow = el('div', 'source-meta-row');
+      const body = el('div', 'biosec-body source-body');
+      const metaRow = el('div', 'biosec-meta-row source-meta-row');
+const primaryTitle = el('div', 'biosec-subtitle source-edit-subtitle');
+primaryTitle.innerHTML =
+  '<i class="fa-solid fa-circle-info" aria-hidden="true"></i> ' +
+  '<span>بينات أساسية</span>';
 
-      const typeSelect = el('select', 'source-type-select');
+metaRow.classList.add('source-meta-row--primary');
+
+const detailsTitle = el('div', 'biosec-subtitle source-edit-subtitle');
+detailsTitle.innerHTML =
+  '<i class="fa-solid fa-list-check" aria-hidden="true"></i> ' +
+  '<span>تفاصيل إضافية</span>';
+
+const detailsRow = el('div', 'biosec-meta-row source-meta-row source-meta-row--details');
+
+      const typeSelect = el('select', 'biosec-select source-type-select');
       typeSelect.name = `source_type_${src.id}`;
       SOURCE_TYPE_OPTIONS.filter(([val]) => val && val !== 'all').forEach(([val, label]) => {
-        const opt = el('option');
-        opt.value = val;
-        opt.textContent = label;
-        typeSelect.appendChild(opt);
+        const opt = el('option'); opt.value = val; opt.textContent = label; typeSelect.appendChild(opt);
       });
       typeSelect.value = original.type || 'generic';
 
-      const typeField = el('div', 'source-meta-field');
-      const typeLabelBox = el('div', 'source-meta-label');
+      const typeField = el('div', 'biosec-meta-field source-meta-field');
+      const typeLabelBox = el('div', 'biosec-meta-label source-meta-label');
       typeLabelBox.innerHTML =
-        '<span class="source-meta-icon"><i class="fa-solid fa-tag" aria-hidden="true"></i></span> نوع الوثيقة';
+        '<span class="biosec-meta-icon source-meta-icon"><i class="fa-solid fa-tag" aria-hidden="true"></i></span> نوع الوثيقة';
       typeField.append(typeLabelBox, typeSelect);
 
-      const dateInput = el('input');
+      const dateInput = el('input', 'biosec-input biosec-date-input source-date-input');
       dateInput.type = 'date';
       dateInput.name = `source_date_${src.id}`;
       dateInput.value = original.date || '';
 
-      const dateField = el('div', 'source-meta-field');
-      const dateLabel = el('div', 'source-meta-label');
+      const dateField = el('div', 'biosec-meta-field source-meta-field');
+      const dateLabel = el('div', 'biosec-meta-label source-meta-label');
       dateLabel.innerHTML =
-        '<span class="source-meta-icon"><i class="fa-solid fa-calendar-day" aria-hidden="true"></i></span> تاريخ الوثيقة';
+        '<span class="biosec-meta-icon source-meta-icon"><i class="fa-solid fa-calendar-day" aria-hidden="true"></i></span> تاريخ الوثيقة';
       dateField.append(dateLabel, dateInput);
 
-      const placeInput = el('input');
+      const placeInput = el('input', 'biosec-input biosec-place-input source-place-input');
       placeInput.type = 'text';
       placeInput.name = `source_place_${src.id}`;
       placeInput.placeholder = 'مكان الإصدار (مدينة / دولة)...';
       placeInput.value = original.place;
 
-      const placeField = el('div', 'source-meta-field');
-      const placeLabel = el('div', 'source-meta-label');
+      const placeField = el('div', 'biosec-meta-field source-meta-field');
+      const placeLabel = el('div', 'biosec-meta-label source-meta-label');
       placeLabel.innerHTML =
-        '<span class="source-meta-icon"><i class="fa-solid fa-location-dot" aria-hidden="true"></i></span> مكان الإصدار';
+        '<span class="biosec-meta-icon source-meta-icon"><i class="fa-solid fa-location-dot" aria-hidden="true"></i></span> مكان الإصدار';
       placeField.append(placeLabel, placeInput);
 
-      const forFieldInput = el('input');
+      const forFieldInput = el('input', 'biosec-input source-for-field-input');
       forFieldInput.type = 'text';
       forFieldInput.name = `source_for_${src.id}`;
       forFieldInput.placeholder = 'هذه الوثيقة متعلقة بماذا؟ (مثلاً: الميلاد، الزواج، النسب...)';
       forFieldInput.value = original.forField;
 
-      const referenceInput = el('input');
+      const referenceInput = el('input', 'biosec-input source-reference-input');
       referenceInput.type = 'text';
       referenceInput.name = `source_ref_${src.id}`;
       referenceInput.placeholder = 'رقم الصك / رقم الوثيقة / رقم المعاملة...';
       referenceInput.value = original.referenceCode;
 
-      const issuerInput = el('input');
+      const issuerInput = el('input', 'biosec-input source-issuer-input');
       issuerInput.type = 'text';
       issuerInput.name = `source_issuer_${src.id}`;
       issuerInput.placeholder = 'الجهة المصدرة (مثلاً: وزارة العدل، الأحوال المدنية...)';
       issuerInput.value = original.issuer;
 
-      const pagesInput = el('input');
+      const pagesInput = el('input', 'biosec-input source-pages-input');
       pagesInput.type = 'text';
       pagesInput.name = `source_pages_${src.id}`;
       pagesInput.placeholder = 'عدد الصفحات أو نطاقها (اختياري)';
       pagesInput.value = original.pages;
 
-      const confidenceSelect = el('select');
+      const confidenceSelect = el('select', 'biosec-select source-confidence-select');
       confidenceSelect.name = `source_confidence_${src.id}`;
       [
         ['', 'بدون تحديد'],
-        ['official', 'رسمي'],
-        ['family', 'عائلي موثوق'],
-        ['oral', 'رواية شفوية'],
-        ['copy', 'نسخة غير أصلية']
+        ['official', CONFIDENCE_LEVEL_LABELS.official],
+        ['family', CONFIDENCE_LEVEL_LABELS.family],
+        ['oral', CONFIDENCE_LEVEL_LABELS.oral],
+        ['copy', CONFIDENCE_LEVEL_LABELS.copy]
       ].forEach(([val, label]) => {
-        const opt = el('option');
-        opt.value = val;
-        opt.textContent = label;
-        confidenceSelect.appendChild(opt);
+        const opt = el('option'); opt.value = val; opt.textContent = label; confidenceSelect.appendChild(opt);
       });
       confidenceSelect.value = original.confidenceLevel || '';
 
-      const confidentialitySelect = el('select');
+      const confidentialitySelect = el('select', 'biosec-select source-confidentiality-select');
       confidentialitySelect.name = `source_confidentiality_${src.id}`;
       [
         ['', 'بدون تحديد'],
-        ['public', 'عام للأقارب'],
-        ['private', 'خاص (للمالك فقط)'],
-        ['sensitive', 'حساس']
+        ['public', CONFIDENTIALITY_LABELS.public],
+        ['private', CONFIDENTIALITY_LABELS.private],
+        ['sensitive', CONFIDENTIALITY_LABELS.sensitive]
       ].forEach(([val, label]) => {
-        const opt = el('option');
-        opt.value = val;
-        opt.textContent = label;
-        confidentialitySelect.appendChild(opt);
+        const opt = el('option'); opt.value = val; opt.textContent = label; confidentialitySelect.appendChild(opt);
       });
       confidentialitySelect.value = original.confidentiality || '';
 
@@ -1517,75 +2107,223 @@ imgEl.addEventListener('click', () => {
       verifiedCheckbox.name = `source_verified_${src.id}`;
       verifiedCheckbox.checked = original.verified;
 
-      const verifiedByInput = el('input');
+      const verifiedByInput = el('input', 'biosec-input source-verified-by-input');
       verifiedByInput.type = 'text';
       verifiedByInput.name = `source_verified_by_${src.id}`;
       verifiedByInput.placeholder = 'تم التوثيق بواسطة من؟ (مثلاً: كبير الأسرة، جهة رسمية)';
       verifiedByInput.value = original.verifiedBy;
 
-      const verifiedAtInput = el('input');
+      const verifiedAtInput = el('input', 'biosec-input biosec-date-input source-verified-at-input');
       verifiedAtInput.type = 'date';
       verifiedAtInput.name = `source_verified_at_${src.id}`;
       verifiedAtInput.value = original.verifiedAt || '';
 
-      const verifiedWrap = el('div', 'source-details-field source-details-field--full');
-      const verifiedLabel = el('div', 'source-details-label');
-      verifiedLabel.innerHTML =
-        '<span class="source-details-icon"><i class="fa-solid fa-file-circle-check" aria-hidden="true"></i></span> حالة التحقق من الوثيقة';
+// ✅ حالة التحقق (Checkbox فقط)
+const verifiedWrap = el('div', 'biosec-meta-field source-details-field');
 
-      const verifiedInlineTop = el('div', 'source-verified-inline');
-      const verifiedChkLabel = el('label', 'source-verified-check-label');
-      verifiedChkLabel.append(
-        verifiedCheckbox,
-        textEl('span', 'تم التحقق من صحة هذا المصدر')
-      );
-      verifiedInlineTop.append(verifiedChkLabel);
+const verifiedLabel = el('div', 'source-details-label');
+verifiedLabel.innerHTML =
+  '<span class="source-details-icon"><i class="fa-solid fa-file-circle-check" aria-hidden="true"></i></span> حالة التحقق من الوثيقة';
 
-      const verifiedByWrap = el('div', 'source-details-field');
-      const verifiedByLabel = el('div', 'source-details-label');
-      verifiedByLabel.innerHTML =
-        '<span class="source-details-icon"><i class="fa-solid fa-user-check" aria-hidden="true"></i></span> تم التوثيق بواسطة';
-      verifiedByWrap.append(verifiedByLabel, verifiedByInput);
+const verifiedInlineTop = el('div', 'source-verified-inline');
+const verifiedChkLabel = el('label', 'source-verified-check-label');
+verifiedChkLabel.append(verifiedCheckbox, textEl('span', 'تم التحقق من صحة هذا المصدر'));
+verifiedInlineTop.append(verifiedChkLabel);
 
-      const verifiedAtWrap = el('div', 'source-details-field');
-      const verifiedAtLabel = el('div', 'source-details-label');
-      verifiedAtLabel.innerHTML =
-        '<span class="source-details-icon"><i class="fa-solid fa-calendar-check" aria-hidden="true"></i></span> تاريخ التوثيق';
-      verifiedAtWrap.append(verifiedAtLabel, verifiedAtInput);
+verifiedWrap.append(verifiedLabel, verifiedInlineTop);
 
-      verifiedWrap.append(
-        verifiedLabel,
-        verifiedInlineTop,
-        verifiedByWrap,
-        verifiedAtWrap
-      );
+// ✅ حقول منفصلة (ليتم ترتيبها بعد السرية)
+const verifiedByWrap = el('div', 'biosec-meta-field source-details-field');
+const verifiedByLabel = el('div', 'biosec-meta-label source-details-label');
+verifiedByLabel.innerHTML =
+  '<span class="source-details-icon"><i class="fa-solid fa-user-check" aria-hidden="true"></i></span> تم التوثيق بواسطة';
+verifiedByWrap.append(verifiedByLabel, verifiedByInput);
 
-      const noteInput = el('textarea', 'source-note-input');
+const verifiedAtWrap = el('div', 'biosec-meta-field source-details-field');
+const verifiedAtLabel = el('div', 'biosec-meta-label source-details-label');
+verifiedAtLabel.innerHTML =
+  '<span class="source-details-icon"><i class="fa-solid fa-calendar-check" aria-hidden="true"></i></span> تاريخ التوثيق';
+verifiedAtWrap.append(verifiedAtLabel, verifiedAtInput);
+
+      // جديد: صلاحية/انتهاء + عدد أيام التنبيه
+      const validUntilInput = el('input', 'biosec-input biosec-date-input source-valid-until-input');
+      validUntilInput.type = 'date';
+      validUntilInput.name = `source_valid_until_${src.id}`;
+      validUntilInput.value = original.validUntil || '';
+
+      const alertDaysInput = el('input', 'biosec-input source-expiry-alert-days');
+      alertDaysInput.name = 'source-expiry-alert-days';
+
+      alertDaysInput.type = 'number';
+      alertDaysInput.min = '1';
+      alertDaysInput.max = '3650';
+      alertDaysInput.placeholder = String(DEFAULT_EXPIRY_ALERT_DAYS);
+      alertDaysInput.value = String(original.expiryAlertDays || DEFAULT_EXPIRY_ALERT_DAYS);
+
+// ✅ تاريخ الانتهاء (حقل عادي مثل البقية)
+const validUntilWrap = el('div', 'biosec-meta-field source-details-field');
+const validUntilLabel = el('div', 'biosec-meta-label source-details-label');
+validUntilLabel.innerHTML =
+  '<span class="source-details-icon"><i class="fa-solid fa-calendar-xmark" aria-hidden="true"></i></span> تاريخ الانتهاء';
+validUntilWrap.append(validUntilLabel, validUntilInput);
+
+// ✅ تنبيه قبل أيام (حقل عادي مثل البقية)
+const alertDaysWrap = el('div', 'biosec-meta-field source-details-field');
+const alertDaysLabel = el('div', 'biosec-meta-label source-details-label');
+alertDaysLabel.innerHTML =
+  '<span class="source-details-icon"><i class="fa-solid fa-bell" aria-hidden="true"></i></span> تنبيه قبل (أيام)';
+alertDaysWrap.append(alertDaysLabel, alertDaysInput);
+
+      // جديد: حقول الهوية/الميلاد (ديناميكي حسب النوع)
+      const holderNameInput = el('input', 'biosec-input source-holder-name-input');
+      holderNameInput.name = 'source-holder-name-input';
+      holderNameInput.type = 'text';
+      holderNameInput.placeholder = 'اسم صاحب الوثيقة';
+      holderNameInput.value = original.holderName;
+
+      const nationalIdInput = el('input', 'biosec-input source-national-id-input');
+      nationalIdInput.name = 'source-national-id-input';
+      nationalIdInput.type = 'text';
+      nationalIdInput.placeholder = 'رقم الهوية';
+      nationalIdInput.value = original.nationalId;
+
+      const civilRegistryInput = el('input', 'biosec-input source-civil-registry-input');
+      civilRegistryInput.name = 'source-civil-registry-input';
+      civilRegistryInput.type = 'text';
+      civilRegistryInput.placeholder = 'رقم السجل المدني';
+      civilRegistryInput.value = original.civilRegistryNo;
+
+// ✅ حقول هوية/ميلاد بدون Grid (مثل بقية الحقول)
+const holderNameWrap = el('div', 'biosec-meta-field source-details-field');
+const holderNameLabel = el('div', 'biosec-meta-label source-details-label');
+holderNameLabel.innerHTML =
+  '<span class="source-details-icon"><i class="fa-solid fa-user" aria-hidden="true"></i></span> اسم صاحب الوثيقة';
+holderNameWrap.append(holderNameLabel, holderNameInput);
+
+const nationalIdWrap = el('div', 'biosec-meta-field source-details-field');
+const nationalIdLabel = el('div', 'biosec-meta-label source-details-label');
+nationalIdLabel.innerHTML =
+  '<span class="source-details-icon"><i class="fa-solid fa-id-card" aria-hidden="true"></i></span> رقم الهوية';
+nationalIdWrap.append(nationalIdLabel, nationalIdInput);
+
+const civilRegistryWrap = el('div', 'biosec-meta-field source-details-field');
+const civilRegistryLabel = el('div', 'biosec-meta-label source-details-label');
+civilRegistryLabel.innerHTML =
+  '<span class="source-details-icon"><i class="fa-solid fa-hashtag" aria-hidden="true"></i></span> رقم السجل المدني';
+civilRegistryWrap.append(civilRegistryLabel, civilRegistryInput);
+
+function toggleIdFields() {
+  const t = (typeSelect.value || '').trim();
+  const show = (t === 'id' || t === 'birth');
+
+  holderNameWrap.style.display = show ? '' : 'none';
+  nationalIdWrap.style.display = show ? '' : 'none';
+  civilRegistryWrap.style.display = show ? '' : 'none';
+}
+toggleIdFields();
+
+      const noteInput = el('textarea', 'biosec-textarea source-note-input');
       noteInput.name = `source_note_${src.id}`;
       noteInput.placeholder = 'ملخص محتوى الوثيقة، أو ما يثبته هذا المستند من معلومات.';
       noteInput.value = original.note;
 
-      const tagsInput = el('input');
+      const tagsInput = el('input', 'biosec-tags-input source-tags-input');
       tagsInput.type = 'text';
       tagsInput.name = `source_tags_${src.id}`;
-      tagsInput.placeholder = 'وسوم الوثيقة (افصل بينها بفواصل مثل: ميلاد, رسمية, محكمة)';
+      tagsInput.placeholder = 'وسوم الوثيقة (مثال: ميلاد, رسمي, محكمة)';
       tagsInput.value = original.tags.join(', ');
 
-      /* ---------- ملفات الوثيقة (إرفاق + عرض + ترتيب) ---------- */
-      const filesBlock = el('div', 'source-files-block');
-      const emptyFilesHint = el('div', 'source-files-empty-hint');
-      const filesRow = el('div', 'source-files-row');
-      const filesThumbs = el('div', 'source-files-thumbs');
+      // جديد: اقتراح وسوم ذكية
+      const tagSuggestWrap = el('div', 'sources-tag-suggest');
+      const tagSuggestLabel = el('div', 'sources-tag-suggest-label');
+      tagSuggestLabel.innerHTML =
+        '<i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> اقتراح وسوم';
 
-      const addFileLabel = el('label', 'source-file-add-btn');
+      const tagSuggestChips = el('div', 'sources-tag-suggest-chips');
+      tagSuggestWrap.append(tagSuggestLabel, tagSuggestChips);
+
+      function computeTagSuggestions() {
+        const t = (typeSelect.value || '').trim();
+        const iss = (issuerInput.value || '').trim();
+
+        const sugg = new Set();
+
+        // حسب النوع
+        if (t === 'birth') {
+          ['ميلاد', 'أحوال', 'رسمي'].forEach(x => sugg.add(x));
+        }
+        if (t === 'id') {
+          ['هوية', 'رسمي'].forEach(x => sugg.add(x));
+        }
+        if (t === 'marriage') {
+          ['زواج', 'عقد', 'رسمي'].forEach(x => sugg.add(x));
+        }
+        if (t === 'death') {
+          ['وفاة', 'رسمي'].forEach(x => sugg.add(x));
+        }
+
+        // حسب الجهة
+        if (iss.includes('وزارة العدل')) {
+          ['عدلي', 'محكمة'].forEach(x => sugg.add(x));
+        }
+        if (iss.includes('الأحوال') || iss.includes('الأحوال المدنية')) {
+          ['أحوال', 'مدني'].forEach(x => sugg.add(x));
+        }
+
+        // استبعاد الموجود
+        const existing = new Set(splitCommaTags(tagsInput.value).map(x => x.trim()));
+        const out = [...sugg].filter(x => x && !existing.has(x));
+
+        return out.slice(0, 8);
+      }
+
+      function renderTagSuggestions() {
+        tagSuggestChips.innerHTML = '';
+        const sugg = computeTagSuggestions();
+        if (!sugg.length) {
+          tagSuggestWrap.style.display = 'none';
+          return;
+        }
+        tagSuggestWrap.style.display = '';
+
+        sugg.forEach(tag => {
+          const chip = el('button', 'sources-tag-suggest-chip');
+          chip.type = 'button';
+          chip.textContent = tag;
+          chip.addEventListener('click', () => {
+            const cur = splitCommaTags(tagsInput.value);
+            if (!cur.includes(tag)) cur.push(tag);
+            tagsInput.value = cur.join(', ');
+            renderTagSuggestions();
+            recomputeDirty();
+          });
+          tagSuggestChips.appendChild(chip);
+        });
+      }
+
+      renderTagSuggestions();
+
+      /* ----------------------------
+         ملفات الوثيقة
+      ----------------------------- */
+
+      const filesBlock = el('div', 'biosec-images-block source-files-block');
+      const emptyFilesHint = el('div', 'biosec-images-empty-hint source-files-empty-hint');
+      const filesRow = el('div', 'biosec-images-row source-files-row');
+      const filesThumbs = el('div', 'biosec-images-thumbs source-files-thumbs');
+
+      const addFileLabel = el('label', 'biosec-add-btn source-file-add-btn');
       const addFileIcon = el('span', 'source-file-add-icon');
       addFileIcon.innerHTML = '<i class="fa-solid fa-file-circle-plus" aria-hidden="true"></i>';
 
       const addFileText = el('span', 'source-file-add-text');
-      addFileText.textContent = 'إرفاق صور للوثيقة';
+      addFileText.textContent = 'إرفاق مرفقات للوثيقة';
 
-      const fileInput = el('input');
-      fileInput.type = 'file';
+    const fileInput = el('input');
+fileInput.type = 'file';
+fileInput.name = `source_files_${src.id}`;
+fileInput.id = `source_files_${src.id}`;
+
       fileInput.accept = [
         'image/*',
         'application/pdf',
@@ -1600,27 +2338,30 @@ imgEl.addEventListener('click', () => {
 
       addFileLabel.append(addFileIcon, addFileText, fileInput);
       filesRow.appendChild(filesThumbs);
-      filesBlock.append(emptyFilesHint, filesRow, addFileLabel);
+filesBlock.append(filesRow, addFileLabel, emptyFilesHint);
 
-      const pinWrap = el('label', 'source-pin-toggle');
+      const pinWrap = el('label', 'biosec-pin-toggle biosec-toggle--pinned');
       const pinCheckbox = el('input');
       pinCheckbox.type = 'checkbox';
       pinCheckbox.name = `source_pinned_${src.id}`;
       pinCheckbox.checked = original.pinned;
-      const pinText = textEl('span', 'تعيين هذه الوثيقة كمرجع أساسي لهذا الشخص');
+      const pinText = textEl('span', 'وثيقة مهمة');
       pinWrap.append(pinCheckbox, pinText);
+
+      const pinRow = el('div', 'biosec-toggles-row');
+      pinRow.append(pinWrap);
 
       function updateAddFileLabel() {
         const count = currentFiles.length || 0;
         if (!count) {
-          addFileText.textContent = 'إرفاق صور للوثيقة';
-          addFileLabel.title = 'أرفق أول صورة أو مسح ضوئي لهذه الوثيقة';
+          addFileText.textContent = 'إرفاق أول مرفق للوثيقة';
+          addFileLabel.title = 'أرفق أول مرفق لهذه الوثيقة';
         } else if (count === 1) {
           addFileText.textContent = 'إضافة وثيقة أخرى';
-          addFileLabel.title = 'أضف صورة أخرى لنفس الوثيقة (صفحة ثانية مثلاً)';
+          addFileLabel.title = 'أضف صفحة ثانية مثلاً';
         } else {
           addFileText.textContent = 'إضافة مزيد من الوثائق';
-          addFileLabel.title = `هناك ${count} صور مرفقة حاليًا`;
+          addFileLabel.title = `هناك ${count} ملفات مرفقة حاليًا`;
         }
       }
 
@@ -1632,11 +2373,10 @@ imgEl.addEventListener('click', () => {
         attachHorizontalSortable({
           container: filesThumbs,
           itemSelector: '.source-file-thumb',
-          ghostClass: 'source-file-thumb--ghost',
-          dragClass: 'source-file-thumb--drag',
+          ghostClass: 'biosec-image-thumb--ghost source-file-thumb--ghost',
+          dragClass: 'biosec-image-thumb--drag source-file-thumb--drag',
           onSorted(orderedRefs) {
-            // حافظ على التجميع: صور ثم غير صور (مع السماح بالترتيب داخل كل مجموعة)
-            currentFiles = groupRefsByKind(orderedRefs);
+            currentFiles = groupRefsByKind(orderedRefs, getSourceFileKind);
             renderThumbs();
             recomputeDirty();
           }
@@ -1646,7 +2386,7 @@ imgEl.addEventListener('click', () => {
       function renderThumbs() {
         filesThumbs.innerHTML = '';
 
-        const ordered = groupRefsByKind(currentFiles);
+        const ordered = groupRefsByKind(currentFiles, getSourceFileKind);
         currentFiles = ordered;
 
         const images = ordered.filter(r => getSourceFileKind(r) === 'image');
@@ -1654,7 +2394,7 @@ imgEl.addEventListener('click', () => {
         const hasTwoGroups = images.length && others.length;
 
         if (!currentFiles.length) {
-          emptyFilesHint.textContent = 'لم تُرفق صور بعد لهذه الوثيقة.';
+          emptyFilesHint.textContent = 'لم تُرفق ملفات بعد لهذه الوثيقة.';
           emptyFilesHint.style.display = '';
           updateAddFileLabel();
           return;
@@ -1662,17 +2402,20 @@ imgEl.addEventListener('click', () => {
 
         emptyFilesHint.style.display = 'none';
 
-        if (hasTwoGroups && images.length) filesThumbs.appendChild(makeGroupTitle('الصور'));
+        if (hasTwoGroups && images.length) {
+          const gt = makeGroupTitle('الصور');
+          gt.classList.add('biosec-files-group-title', 'source-files-group-title');
+          filesThumbs.appendChild(gt);
+        }
 
         const renderOneThumb = (ref, idx, totalRefs, imagesOnly) => {
-          const thumb = el('div', 'source-file-thumb');
+          const thumb = el('div', 'biosec-image-thumb biosec-file-thumb source-file-thumb');
           thumb.dataset.ref = ref;
           classifyFileThumb(thumb, ref);
 
           const kind = getSourceFileKind(ref);
           const isDoc = (kind === 'word' || kind === 'excel');
 
-          // المحتوى: صورة أو أيقونة
           let thumbContent = null;
 
           if (kind === 'image') {
@@ -1680,15 +2423,14 @@ imgEl.addEventListener('click', () => {
             imgEl.alt = 'صورة مرفقة';
             resolveSourceFileUrlLocal(ref).then(url => { if (url) imgEl.src = url; });
 
-         const imageIndex = findImageIndex(imagesOnly, ref);
-imgEl.addEventListener('click', () => {
-  if (imageIndex >= 0) openSourceSlider(imagesOnly, imageIndex, resolveSourceFileUrlLocal);
-});
-
+            const imageIndex = findImageIndex(imagesOnly, ref);
+            imgEl.addEventListener('click', () => {
+              if (imageIndex >= 0) openSourceSlider(imagesOnly, imageIndex, resolveSourceFileUrlLocal);
+            });
 
             thumbContent = imgEl;
           } else {
-            const icon = el('div', 'source-file-icon');
+            const icon = el('div', 'biosec-file-icon source-file-icon');
             icon.innerHTML = {
               pdf: '<i class="fa-solid fa-file-pdf"></i>',
               word: '<i class="fa-solid fa-file-word"></i>',
@@ -1698,12 +2440,7 @@ imgEl.addEventListener('click', () => {
 
             const openIt = () => {
               if (isDoc) {
-                openOrDownloadRef(ref, {
-                  preferDownload: true,
-                  baseTitle: original.title || 'الوثيقة',
-                  index: idx,
-                  total: totalRefs
-                });
+                openOrDownloadRef(ref, { preferDownload: true, baseTitle: original.title || 'الوثيقة', index: idx, total: totalRefs });
               } else {
                 openInNewTabSafe(resolveSourceFileUrlLocal(ref));
               }
@@ -1716,8 +2453,7 @@ imgEl.addEventListener('click', () => {
             thumbContent = icon;
           }
 
-          // زر الحذف
-          const removeBtn = el('button', 'source-file-thumb-remove');
+          const removeBtn = el('button', 'biosec-image-thumb-remove source-file-thumb-remove');
           removeBtn.type = 'button';
           removeBtn.title = 'إزالة هذا الملف';
           removeBtn.textContent = '×';
@@ -1725,43 +2461,29 @@ imgEl.addEventListener('click', () => {
             e.stopPropagation();
             const removeRef = ref;
 
-            if (removeRef && String(removeRef).startsWith('idb:')) {
-              pendingDeletedFiles.push(removeRef);
-            }
-if (removeRef && String(removeRef).startsWith('tmp:')) {
-  revokeTempRef(removeRef);
-}
+            if (removeRef && isIdbRef(removeRef)) pendingDeletedFiles.push(removeRef);
+            if (removeRef && isTmpRef(removeRef)) revokeTempRef(removeRef);
 
             currentFiles = currentFiles.filter(r => r !== removeRef);
             renderThumbs();
             recomputeDirty();
           });
 
-          // زر "معاينة/فتح/تحميل"
-          const viewBtn = el('button', 'source-file-thumb-view');
+          const viewBtn = el('button', 'biosec-image-thumb-view biosec-file-thumb-view source-file-thumb-view');
           viewBtn.type = 'button';
-          viewBtn.textContent =
-            kind === 'image' ? 'معاينة' :
-            isDoc ? 'تحميل' :
-            'فتح';
+          viewBtn.textContent = kind === 'image' ? 'معاينة' : (isDoc ? 'تحميل' : 'فتح');
 
           viewBtn.addEventListener('click', (e) => {
             e.stopPropagation();
 
-           if (kind === 'image') {
-  const imageIndex = findImageIndex(imagesOnly, ref);
-  if (imageIndex >= 0) openSourceSlider(imagesOnly, imageIndex, resolveSourceFileUrlLocal);
-  return;
-}
-
+            if (kind === 'image') {
+              const imageIndex = findImageIndex(imagesOnly, ref);
+              if (imageIndex >= 0) openSourceSlider(imagesOnly, imageIndex, resolveSourceFileUrlLocal);
+              return;
+            }
 
             if (isDoc) {
-              openOrDownloadRef(ref, {
-                preferDownload: true,
-                baseTitle: original.title || 'الوثيقة',
-                index: idx,
-                total: totalRefs
-              });
+              openOrDownloadRef(ref, { preferDownload: true, baseTitle: original.title || 'الوثيقة', index: idx, total: totalRefs });
               return;
             }
 
@@ -1772,14 +2494,18 @@ if (removeRef && String(removeRef).startsWith('tmp:')) {
           filesThumbs.appendChild(thumb);
         };
 
-        // صور
         images.forEach((ref, idx) => renderOneThumb(ref, idx, images.length, images));
 
-        // ملفات أخرى
         if (hasTwoGroups) {
-          filesThumbs.appendChild(makeDivider());
-          filesThumbs.appendChild(makeGroupTitle('الملفات'));
+          const div = makeDivider();
+          div.classList.add('biosec-files-group-divider', 'source-files-group-divider');
+          filesThumbs.appendChild(div);
+
+          const gt2 = makeGroupTitle('الملفات');
+          gt2.classList.add('biosec-files-group-title', 'source-files-group-title');
+          filesThumbs.appendChild(gt2);
         }
+
         others.forEach((ref, idx) => renderOneThumb(ref, idx, others.length, images));
 
         updateAddFileLabel();
@@ -1788,7 +2514,6 @@ if (removeRef && String(removeRef).startsWith('tmp:')) {
 
       renderThumbs();
 
-      // إضافة ملفات جديدة
       fileInput.addEventListener('change', async () => {
         let files = Array.from(fileInput.files || []);
         if (!files.length) return;
@@ -1798,148 +2523,191 @@ if (removeRef && String(removeRef).startsWith('tmp:')) {
           files = files.slice(0, MAX_FILES_PER_PICK);
         }
 
- for (const file of files) {
-  const check = isAllowedSourceFile(file);
-  if (!check.ok) {
-    showWarning?.(`${file.name || 'ملف'}: ${check.reason}`);
-    continue;
-  }
+        for (const file of files) {
+          const check = isAllowedFile(file, {
+            maxSizeMB: MAX_FILE_SIZE_MB,
+            allowedMime: Array.from(ALLOWED_MIME),
+            allowedExt: [
+              'pdf', 'doc', 'docx', 'xls', 'xlsx',
+              'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg',
+              'heic', 'heif'
+            ],
+            allowImages: true
+          });
 
-  try {
-    const tmpRef = addTempFile(file);
+          if (!check.ok) {
+            showWarning?.(`${file.name || 'ملف'}: ${check.reason}`);
+            continue;
+          }
 
-    // لا تكرر push
-    currentFiles.push(tmpRef);
-  } catch (e) {
-    console.error('failed to add temp file', e);
-    showError?.(`تعذّر تجهيز الملف للمعاينة: ${file.name || 'غير معروف'}`);
-  }
-}
-
+          try {
+            const tmpRef = addTempFile(file);
+            currentFiles.push(tmpRef);
+          } catch (e) {
+            console.error('failed to add temp file', e);
+            showError?.(`تعذّر تجهيز الملف للمعاينة: ${file.name || 'غير معروف'}`);
+          }
+        }
 
         renderThumbs();
         recomputeDirty();
         fileInput.value = '';
       });
 
-      /* ---------- تفاصيل إضافية ---------- */
-      const detailsGrid = el('div', 'source-details-grid');
-
-      const forFieldWrap = el('div', 'source-details-field');
-      const forFieldLabel = el('div', 'source-details-label');
+      /* ----------------------------
+         تفاصيل إضافية
+      ----------------------------- */
+      const forFieldWrap = el('div', 'biosec-meta-field source-details-field');
+      const forFieldLabel = el('div', 'biosec-meta-label source-details-label');
       forFieldLabel.innerHTML =
         '<span class="source-details-icon"><i class="fa-solid fa-bullseye" aria-hidden="true"></i></span> هذه الوثيقة متعلقة بـ';
       forFieldWrap.append(forFieldLabel, forFieldInput);
 
-      const issuerWrap = el('div', 'source-meta-field');
-      const issuerLabel = el('div', 'source-details-label');
+      const issuerWrap = el('div', 'biosec-meta-field source-meta-field');
+      const issuerLabel = el('div', 'biosec-meta-label source-details-label');
       issuerLabel.innerHTML =
         '<span class="source-details-icon"><i class="fa-solid fa-landmark" aria-hidden="true"></i></span> الجهة المصدرة';
       issuerWrap.append(issuerLabel, issuerInput);
 
-      const refWrap = el('div', 'source-meta-field');
-      const refLabel = el('div', 'source-details-label');
+      const refWrap = el('div', 'biosec-meta-field source-meta-field');
+      const refLabel = el('div', 'biosec-meta-label source-details-label');
       refLabel.innerHTML =
         '<span class="source-details-icon"><i class="fa-solid fa-hashtag" aria-hidden="true"></i></span> رقم الصك / رقم الوثيقة';
       refWrap.append(refLabel, referenceInput);
 
-      const pagesWrap = el('div', 'source-details-field');
-      const pagesLabel = el('div', 'source-details-label');
+      const pagesWrap = el('div', 'biosec-meta-field source-details-field');
+      const pagesLabel = el('div', 'biosec-meta-label source-details-label');
       pagesLabel.innerHTML =
         '<span class="source-details-icon"><i class="fa-solid fa-file-lines" aria-hidden="true"></i></span> عدد الصفحات (اختياري)';
       pagesWrap.append(pagesLabel, pagesInput);
 
-      const noteWrap = el('div', 'source-details-field source-details-field--full');
-      const noteLabel = el('div', 'source-details-label');
+      const noteWrap = el('div', 'biosec-meta-field source-details-field');
+      const noteLabel = el('div', 'biosec-meta-label source-details-label');
       noteLabel.innerHTML =
         '<span class="source-details-icon"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></span> ملخص محتوى الوثيقة';
       noteWrap.append(noteLabel, noteInput);
 
-      const tagsWrapField = el('div', 'source-details-field source-details-field--full');
-      const tagsLabel = el('div', 'source-details-label');
+      const tagsWrapField = el('div', 'biosec-meta-field source-details-field');
+      const tagsLabel = el('div', 'biosec-meta-label source-details-label');
       tagsLabel.innerHTML =
         '<span class="source-details-icon"><i class="fa-solid fa-tag" aria-hidden="true"></i></span> وسوم الوثيقة';
-      tagsWrapField.append(tagsLabel, tagsInput);
+      tagsWrapField.append(tagsLabel, tagsInput, tagSuggestWrap);
+
+const noteRow = el('div', 'biosec-meta-row source-meta-row source-meta-row--note');
+noteRow.append(noteWrap);
+
+const tagsRow = el('div', 'biosec-meta-row source-meta-row source-meta-row--tags');
+tagsRow.append(tagsWrapField);
 
       typeField.classList.add('source-meta-field--primary');
       issuerWrap.classList.add('source-meta-field--primary');
       refWrap.classList.add('source-meta-field--primary');
+      forFieldWrap.classList.add('source-meta-field--primary');
+dateField.classList.add('source-meta-field--primary');
+placeField.classList.add('source-meta-field--primary');
 
-      metaRow.append(typeField, issuerWrap, refWrap, dateField, placeField);
+validUntilWrap.classList.add('source-meta-field--primary');
+alertDaysWrap.classList.add('source-meta-field--primary');
 
-      const confWrap = el('div', 'source-details-field');
-      const confLabel = el('div', 'source-details-label');
+holderNameWrap.classList.add('source-meta-field--primary');
+nationalIdWrap.classList.add('source-meta-field--primary');
+civilRegistryWrap.classList.add('source-meta-field--primary');
+
+metaRow.append(
+  // 1) تعريف الوثيقة (Identity)
+  titleField,
+  typeField,
+  forFieldWrap,
+  dateField,
+
+  // 2) بيانات المرجع/الإصدار (Reference & Issuance)
+  issuerWrap,
+  refWrap,
+  placeField,
+
+  // 3) الصلاحية (Validity)
+  validUntilWrap,
+  alertDaysWrap,
+
+  // 4) بيانات صاحب الوثيقة (ديناميكية)
+  holderNameWrap,
+  nationalIdWrap,
+  civilRegistryWrap
+);
+
+      const confWrap = el('div', 'biosec-meta-field source-details-field');
+      const confLabel = el('div', 'biosec-meta-label source-details-label');
       confLabel.innerHTML =
-        '<span class="source-details-icon"><i class="fa-solid fa-circle-check" aria-hidden="true"></i></span> درجة الاعتماد على المصدر';
+        '<span class="source-details-icon"><i class="fa-solid fa-circle-check" aria-hidden="true"></i></span> درجة الاعتماد';
       confWrap.append(confLabel, confidenceSelect);
 
-      const confPrivWrap = el('div', 'source-details-field');
-      const confPrivLabel = el('div', 'source-details-label');
+      const confPrivWrap = el('div', 'biosec-meta-field source-details-field');
+      const confPrivLabel = el('div', 'biosec-meta-label source-details-label');
       confPrivLabel.innerHTML =
-        '<span class="source-details-icon"><i class="fa-solid fa-lock" aria-hidden="true"></i></span> مستوى السرية / الخصوصية';
+        '<span class="source-details-icon"><i class="fa-solid fa-lock" aria-hidden="true"></i></span> مستوى السرية';
       confPrivWrap.append(confPrivLabel, confidentialitySelect);
 
-      detailsGrid.append(
-        forFieldWrap,
-        pagesWrap,
-        confWrap,
-        confPrivWrap,
-        verifiedWrap,
-        noteWrap,
-        tagsWrapField
-      );
+detailsRow.append(
+  // تفاصيل إضافية
+  pagesWrap,
+  confWrap,
+  confPrivWrap,
 
-      body.append(metaRow, detailsGrid, filesBlock, pinWrap);
+  // مجموعة التحقق/التوثيق (منطقي)
+  verifiedWrap,     // 1) حالة التحقق (checkbox)
+  verifiedByWrap,   // 2) تم التوثيق بواسطة
+  verifiedAtWrap    // 3) تاريخ التوثيق
+);
+
+body.append(
+  primaryTitle,
+  metaRow,
+  detailsTitle,
+  detailsRow,
+  noteRow,
+  tagsRow,
+  filesBlock,
+  pinRow
+);
+
       editBox.appendChild(body);
       card.appendChild(editBox);
 
-      /* =======================
-         C) Footer (Actions)
-         ======================= */
+      
+      /* ----------------------------
+         تذييل البطاقة (Actions)
+      ----------------------------- */
 
-      const footer = el('div', 'source-footer');
+      const footer = el('div', 'biosec-footer source-footer');
 
-      const saveBtn = el('button', 'source-save-btn');
+      const saveBtn = el('button', 'biosec-save-btn source-save-btn');
       saveBtn.type = 'button';
-      saveBtn.innerHTML =
-        '<i class="fa-solid fa-pen-to-square" aria-hidden="true"></i><span>تعديل</span>';
+      saveBtn.innerHTML = '<i class="fa-solid fa-pen-to-square" aria-hidden="true"></i><span>تعديل</span>';
 
-      const cancelBtn = el('button', 'source-cancel-btn');
+      const cancelBtn = el('button', 'biosec-cancel-btn source-cancel-btn');
       cancelBtn.type = 'button';
-      cancelBtn.innerHTML =
-        '<i class="fa-solid fa-rotate-left" aria-hidden="true"></i><span>إلغاء التعديل</span>';
+      cancelBtn.innerHTML = '<i class="fa-solid fa-rotate-left" aria-hidden="true"></i><span>إلغاء التعديل</span>';
 
-      const delBtn = el('button', 'source-delete-btn');
+      const delBtn = el('button', 'biosec-delete-btn source-delete-btn');
       delBtn.type = 'button';
-      delBtn.innerHTML =
-        '<i class="fa-solid fa-trash-can" aria-hidden="true"></i><span>حذف الوثيقة</span>';
+      delBtn.innerHTML = '<i class="fa-solid fa-trash-can" aria-hidden="true"></i><span>حذف الوثيقة</span>';
 
       footer.append(saveBtn, cancelBtn, delBtn);
       card.appendChild(footer);
 
       function applyMode() {
-        const toEdit = !!isEditing;
-
-        card.classList.toggle('source-card--edit', toEdit);
-        card.classList.toggle('source-card--preview', !toEdit);
-
-        if (previewBox) previewBox.style.display = toEdit ? 'none' : '';
-        if (editBox) editBox.style.display = toEdit ? '' : 'none';
-
-        if (dates) dates.style.display = toEdit ? 'none' : '';
-
-        if (!toEdit) {
-          saveBtn.innerHTML =
-            '<i class="fa-solid fa-pen-to-square" aria-hidden="true"></i><span>تعديل</span>';
-        } else if (!isDirty) {
-          saveBtn.innerHTML =
-            '<i class="fa-solid fa-xmark" aria-hidden="true"></i><span>إغلاق</span>';
-        } else {
-          saveBtn.innerHTML =
-            '<i class="fa-solid fa-floppy-disk" aria-hidden="true"></i><span>حفظ</span>';
-        }
-
-        cancelBtn.style.display = toEdit && isDirty ? '' : 'none';
+        applyCardEditMode({
+          card,
+          isEditing,
+          isDirty,
+          previewBox,
+          editBox,
+          datesEl: dates,
+          saveBtn,
+          cancelBtn,
+          classes: { edit: 'source-card--edit', preview: 'source-card--preview' },
+          labels: { edit: 'تعديل', close: 'إغلاق', save: 'حفظ' }
+        });
       }
 
       function recomputeDirty() {
@@ -1952,7 +2720,7 @@ if (removeRef && String(removeRef).startsWith('tmp:')) {
         const curIssuer = issuerInput.value.trim();
         const curPages = pagesInput.value.trim();
         const curNote = noteInput.value.trim();
-        const curTags = tagsInput.value.split(',').map(t => t.trim()).filter(Boolean);
+        const curTags = splitCommaTags(tagsInput.value);
         const curPinned = !!pinCheckbox.checked;
 
         const curConfidence = confidenceSelect.value.trim();
@@ -1960,6 +2728,14 @@ if (removeRef && String(removeRef).startsWith('tmp:')) {
         const curVerified = !!verifiedCheckbox.checked;
         const curVerifiedBy = verifiedByInput.value.trim();
         const curVerifiedAt = verifiedAtInput.value || null;
+
+        // جديد
+        const curValidUntil = validUntilInput.value || null;
+        const curAlertDays = Number(alertDaysInput.value || DEFAULT_EXPIRY_ALERT_DAYS) || DEFAULT_EXPIRY_ALERT_DAYS;
+
+        const curHolderName = holderNameInput.value.trim();
+        const curNationalId = nationalIdInput.value.trim();
+        const curCivilReg = civilRegistryInput.value.trim();
 
         isDirty =
           curTitle !== original.title ||
@@ -1978,91 +2754,150 @@ if (removeRef && String(removeRef).startsWith('tmp:')) {
           curConfidentiality !== (original.confidentiality || '') ||
           curVerified !== original.verified ||
           curVerifiedBy !== original.verifiedBy ||
-          curVerifiedAt !== (original.verifiedAt || null);
+          curVerifiedAt !== (original.verifiedAt || null) ||
+          curValidUntil !== (original.validUntil || null) ||
+          curAlertDays !== (original.expiryAlertDays || DEFAULT_EXPIRY_ALERT_DAYS) ||
+          curHolderName !== original.holderName ||
+          curNationalId !== original.nationalId ||
+          curCivilReg !== original.civilRegistryNo;
 
         applyMode();
       }
 
       applyMode();
 
-      // مراقبة تغييرات الحقول (Dirty)
+      // مراقبة تغييرات
       titleInput.addEventListener('input', recomputeDirty);
-      typeSelect.addEventListener('change', recomputeDirty);
+      typeSelect.addEventListener('change', () => {
+        toggleIdFields();
+        renderTagSuggestions();
+        recomputeDirty();
+      });
       dateInput.addEventListener('change', recomputeDirty);
       placeInput.addEventListener('input', recomputeDirty);
       forFieldInput.addEventListener('input', recomputeDirty);
       referenceInput.addEventListener('input', recomputeDirty);
-      issuerInput.addEventListener('input', recomputeDirty);
+      issuerInput.addEventListener('input', () => {
+        renderTagSuggestions();
+        recomputeDirty();
+      });
       pagesInput.addEventListener('input', recomputeDirty);
       noteInput.addEventListener('input', recomputeDirty);
-      tagsInput.addEventListener('input', recomputeDirty);
+      tagsInput.addEventListener('input', () => { renderTagSuggestions(); recomputeDirty(); });
       pinCheckbox.addEventListener('change', recomputeDirty);
+
       confidenceSelect.addEventListener('change', recomputeDirty);
       confidentialitySelect.addEventListener('change', recomputeDirty);
+
       verifiedCheckbox.addEventListener('change', recomputeDirty);
       verifiedByInput.addEventListener('input', recomputeDirty);
       verifiedAtInput.addEventListener('change', recomputeDirty);
 
-      /* ---------- حفظ/إغلاق ---------- */
+      validUntilInput.addEventListener('change', recomputeDirty);
+      alertDaysInput.addEventListener('input', recomputeDirty);
+
+      holderNameInput.addEventListener('input', recomputeDirty);
+      nationalIdInput.addEventListener('input', recomputeDirty);
+      civilRegistryInput.addEventListener('input', recomputeDirty);
+
+      /* ----------------------------
+         حفظ/إغلاق
+      ----------------------------- */
+
       saveBtn.addEventListener('click', async () => {
         if (!isEditing) {
           isEditing = true;
           lastEditedId = src.id;
           applyMode();
-          showInfo?.('يمكنك الآن تعديل بيانات الوثيقة ثم الضغط على "حفظ" لتثبيت التعديلات.');
+          showInfo?.('يمكنك تعديل بيانات الوثيقة ثم الضغط على "حفظ".');
           return;
         }
 
         if (isEditing && !isDirty) {
+          const isDraft = draftNewMap.has(src.id);
+
+          const currentSnapshot = {
+            title: titleInput.value.trim(),
+            forField: forFieldInput.value.trim(),
+            date: dateInput.value || null,
+            place: placeInput.value.trim(),
+            referenceCode: referenceInput.value.trim(),
+            issuer: issuerInput.value.trim(),
+            pages: pagesInput.value.trim(),
+            files: Array.isArray(currentFiles) ? currentFiles : [],
+            tags: splitCommaTags(tagsInput.value),
+            note: noteInput.value.trim(),
+            pinned: !!pinCheckbox.checked,
+            confidenceLevel: confidenceSelect.value.trim(),
+            relatedEventId: src.relatedEventId || null,
+            verified: !!verifiedCheckbox.checked,
+            verifiedBy: verifiedByInput.value.trim(),
+            verifiedAt: verifiedAtInput.value || null,
+            confidentiality: confidentialitySelect.value.trim(),
+
+            validUntil: validUntilInput.value || null,
+            holderName: holderNameInput.value.trim(),
+            nationalId: nationalIdInput.value.trim(),
+            civilRegistryNo: civilRegistryInput.value.trim()
+          };
+
+          if (isDraft && isEmptySourceDraft(currentSnapshot)) {
+            sourceSectionTmp.cleanupTmp(currentFiles);
+            pendingDeletedFiles = [];
+            deleteSource(person, src.id, {
+              onChange: (sources, removed) => {
+                if (typeof handlers.onDirty === 'function') handlers.onDirty(sources, removed);
+                emitSourcesToHost();
+              }
+            });
+            draftNewMap.delete(src.id);
+            if (lastEditedId === src.id) lastEditedId = null;
+
+            renderList();
+            showInfo?.('تم إلغاء إنشاء الوثيقة لأنها كانت مسودة فارغة.');
+            return;
+          }
+
           isEditing = false;
           lastEditedId = null;
           applyMode();
-          showInfo?.('لا توجد تعديلات جديدة لحفظها. تم إغلاق محرّر الوثيقة.');
+          showInfo?.('لا توجد تعديلات جديدة لحفظها. تم إغلاق المحرّر.');
           return;
         }
+
         const hasTmp = currentFiles.some(r => String(r || '').startsWith('tmp:'));
-if (hasTmp && typeof DB?.putSourceFile !== 'function') {
-  showError?.('ميزة حفظ الملفات غير متاحة حالياً (DB.putSourceFile غير موجود).');
-  return;
-}
+        if (hasTmp && typeof DB?.putSourceFile !== 'function') {
+          showError?.('ميزة حفظ الملفات غير متاحة حالياً (DB.putSourceFile غير موجود).');
+          return;
+        }
 
-// 1) حوّل tmp:... إلى idb:... قبل تثبيت البيانات
-const upgradedFiles = [];
-for (const r of currentFiles) {
-  const ref = String(r || '');
+        const up = await upgradeTmpRefs(currentFiles, {
+          tempCache: sourceSectionTmp.tempCache,
+          putFn: async (rec) => {
+            return DB.putSourceFile({
+              file: rec.file,
+              personId,
+              sourceId: src.id,
+              meta: rec.meta
+            });
+          },
+          onAfterPut: async (idbRef, rec) => {
+            sourceFileMetaCache.set(String(idbRef), rec.meta);
+          },
+          onFail: (ref, e) => {
+            console.error('Failed to store temp file', ref, e);
+          },
+          revokeFn: (ref) => sourceSectionTmp.revokeTemp(ref)
+        });
 
-  if (!ref.startsWith('tmp:')) {
-    upgradedFiles.push(ref);
-    continue;
-  }
+        if (!up.ok) {
+          showError?.('تعذّر حفظ أحد الملفات. لم يتم حفظ التعديلات.');
+          return;
+        }
 
-  const rec = tempSourceFilesCache.get(ref);
-  if (!rec?.file) continue;
+        currentFiles = up.refs;
 
-  try {
-    const idbRef = await DB.putSourceFile({
-      file: rec.file,
-      personId,
-      sourceId: src.id,
-      meta: rec.meta
-    });
-
-    if (idbRef) {
-      // سخّن كاش الميتا ليتعرف عليه UI فوراً
-      sourceFileMetaCache.set(String(idbRef), rec.meta);
-      upgradedFiles.push(String(idbRef));
-    }
-  } catch (e) {
-    console.error('Failed to store temp file', ref, e);
-    showError?.('تعذّر حفظ أحد الملفات. لم يتم حفظ التعديلات.');
-    return; // مهم: أوقف الحفظ إذا فشل أي ملف
-  } finally {
-    // نظّف tmp
-    revokeTempRef(ref);
-  }
-}
-
-currentFiles = upgradedFiles;
+        const actor = getActorName();
 
         const updated = updateSource(
           person,
@@ -2077,7 +2912,7 @@ currentFiles = upgradedFiles;
             issuer: issuerInput.value.trim(),
             pages: pagesInput.value.trim(),
             note: noteInput.value.trim(),
-            tags: tagsInput.value.split(',').map(t => t.trim()).filter(Boolean),
+            tags: splitCommaTags(tagsInput.value),
             files: currentFiles,
             pinned: !!pinCheckbox.checked,
 
@@ -2085,19 +2920,27 @@ currentFiles = upgradedFiles;
             confidentiality: confidentialitySelect.value.trim(),
             verified: !!verifiedCheckbox.checked,
             verifiedBy: verifiedByInput.value.trim(),
-            verifiedAt: verifiedAtInput.value || null
+            verifiedAt: verifiedAtInput.value || null,
+
+            // جديد
+            validUntil: validUntilInput.value || null,
+            expiryAlertDays: Number(alertDaysInput.value || DEFAULT_EXPIRY_ALERT_DAYS) || DEFAULT_EXPIRY_ALERT_DAYS,
+            holderName: holderNameInput.value.trim(),
+            nationalId: nationalIdInput.value.trim(),
+            civilRegistryNo: civilRegistryInput.value.trim()
           },
           {
             onChange: (sources, changed) => {
               if (typeof handlers.onDirty === 'function') handlers.onDirty(sources, changed);
               emitSourcesToHost();
-            }
+            },
+            by: actor
           }
         );
 
         const effective = updated || src;
 
-        // تحديث الأصل بعد الحفظ
+        // تحديث snapshot
         original.title = effective.title || '';
         original.type = (effective.type || '').trim();
         original.date = effective.date || null;
@@ -2117,30 +2960,36 @@ currentFiles = upgradedFiles;
         original.verifiedAt = effective.verifiedAt || null;
         original.confidentiality = (effective.confidentiality || '').trim();
 
+        original.validUntil = effective.validUntil || null;
+        original.expiryAlertDays = Number(effective.expiryAlertDays || DEFAULT_EXPIRY_ALERT_DAYS) || DEFAULT_EXPIRY_ALERT_DAYS;
+        original.holderName = (effective.holderName || '').trim();
+        original.nationalId = (effective.nationalId || '').trim();
+        original.civilRegistryNo = (effective.civilRegistryNo || '').trim();
+
+        original.history = Array.isArray(effective.history) ? effective.history.map(h => ({ ...h })) : [];
+
         currentFiles = [...original.files];
 
-        // حذف الملفات المؤجلة من IndexedDB
+        // حذف ملفات مؤجلة
         for (const ref of pendingDeletedFiles) {
           try {
-            if (typeof DB?.deleteSourceFile === 'function') {
-              await DB.deleteSourceFile(ref);
-            }
+            if (typeof DB?.deleteSourceFile === 'function') await DB.deleteSourceFile(ref);
           } catch (e) {
             console.error('Failed to delete source file from DB', ref, e);
           }
         }
         pendingDeletedFiles = [];
 
-        // تحديث واجهة المعاينة
+        // تحديث معاينة
         previewTitle.textContent = original.title || 'وثيقة بدون عنوان';
 
-        const info2 = getNoteLengthInfo(original.note.length);
+        const info2 = getSourceNoteLengthInfo(original.note.length);
         if (info2.level === 0) {
           lengthLabel.textContent = 'لم تُكتب ملاحظات بعد';
         } else {
-          const meter2 = el('span', 'source-length-meter');
+          const meter2 = el('span', 'biosec-length-meter source-length-meter');
           meter2.dataset.level = String(info2.level);
-          const bar2 = el('span', 'source-length-meter-bar');
+          const bar2 = el('span', 'biosec-length-meter-bar source-length-meter-bar');
           meter2.appendChild(bar2);
           const txtSpan2 = el('span');
           txtSpan2.textContent = info2.label;
@@ -2152,24 +3001,33 @@ currentFiles = upgradedFiles;
           original.note ||
           'لم تُكتب ملاحظات عن هذه الوثيقة بعد. يمكنك فتح وضع التحرير لإضافة وصف مختصر.';
 
-        if (effective.createdAt) {
-          const lbl = `أضيفت في ${formatFullDateTime(effective.createdAt) || ''}`;
-          dates.textContent = lbl;
-          createdLabel.textContent = lbl;
-        }
+  if (effective.createdAt) {
+  const lbl = formatCreatedAtLabel(effective.createdAt, 'أضيفت', formatFullDateTime);
+  dates.textContent = lbl;
+  createdLabel.textContent = lbl;
+}
+
+// ✅ جديد: تحديث “آخر تعديل” بعد الحفظ
+if (effective.updatedAt) {
+updatedLabel.textContent = `آخر تعديل: ${formatFullDateTime(effective.updatedAt)}`;
+}
 
         renderPreviewFiles();
 
         isEditing = false;
         lastEditedId = null;
         isDirty = false;
+        draftNewMap.delete(src.id);
 
         sortSources(person, sortMode);
         renderList();
         showSuccess?.('تم حفظ بيانات الوثيقة بنجاح.');
       });
 
-      /* ---------- إلغاء ---------- */
+      /* ----------------------------
+         إلغاء
+      ----------------------------- */
+
       cancelBtn.addEventListener('click', () => {
         if (!isEditing) return;
 
@@ -2190,10 +3048,17 @@ currentFiles = upgradedFiles;
         verifiedCheckbox.checked = original.verified;
         verifiedByInput.value = original.verifiedBy;
         verifiedAtInput.value = original.verifiedAt || '';
-// امسح أي tmp refs كانت مضافة خلال جلسة التحرير
-for (const r of currentFiles) {
-  if (String(r).startsWith('tmp:')) revokeTempRef(String(r));
-}
+
+        validUntilInput.value = original.validUntil || '';
+        alertDaysInput.value = String(original.expiryAlertDays || DEFAULT_EXPIRY_ALERT_DAYS);
+        holderNameInput.value = original.holderName || '';
+        nationalIdInput.value = original.nationalId || '';
+        civilRegistryInput.value = original.civilRegistryNo || '';
+
+        toggleIdFields();
+        renderTagSuggestions();
+
+        sourceSectionTmp.cleanupTmp(currentFiles);
 
         currentFiles = [...original.files];
         pendingDeletedFiles = [];
@@ -2201,7 +3066,7 @@ for (const r of currentFiles) {
         renderPreviewFiles();
 
         if (src.createdAt) {
-          const lbl = `أضيفت في ${formatFullDateTime(src.createdAt) || ''}`;
+          const lbl = formatCreatedAtLabel(src.createdAt, 'أضيفت', formatFullDateTime);
           dates.textContent = lbl;
           createdLabel.textContent = lbl;
         }
@@ -2211,82 +3076,125 @@ for (const r of currentFiles) {
         isDirty = false;
         applyMode();
 
-        showInfo?.('تم تجاهل التعديلات والرجوع لآخر نسخة محفوظة من الوثيقة.');
+        showInfo?.('تم تجاهل التعديلات والرجوع لآخر نسخة محفوظة.');
       });
 
-      /* ---------- حذف وثيقة ---------- */
- delBtn.addEventListener('click', async () => {
-  const res = await showConfirmModal?.({
-    title: 'حذف الوثيقة',
-    message: 'هل تريد بالتأكيد حذف هذه الوثيقة؟ لا يمكن التراجع عن هذا الإجراء.',
-    variant: 'danger',
-    confirmText: 'حذف',
-    cancelText: 'إلغاء'
-  });
+      /* ----------------------------
+         حذف وثيقة
+      ----------------------------- */
 
-  if (res !== 'confirm') {
-    showInfo?.('تم إلغاء حذف الوثيقة.');
-    return;
-  }
+      delBtn.addEventListener('click', async () => {
+        const res = await showConfirmModal?.({
+          title: 'حذف الوثيقة',
+          message: 'هل تريد بالتأكيد حذف هذه الوثيقة؟ لا يمكن التراجع عن هذا الإجراء.',
+          variant: 'danger',
+          confirmText: 'حذف',
+          cancelText: 'إلغاء'
+        });
 
-  // احذف ملفات الوثيقة من IndexedDB قبل حذف الوثيقة نفسها
-  const refs = Array.isArray(src.files) ? src.files : [];
-  for (const ref of refs) {
-    if (!String(ref).startsWith('idb:')) continue;
-    try {
-      await DB?.deleteSourceFile?.(ref);
-    } catch (e) {
-      console.error('deleteSourceFile failed', ref, e);
-    }
-  }
+        if (res !== 'confirm') {
+          showInfo?.('تم إلغاء حذف الوثيقة.');
+          return;
+        }
 
-  const success = deleteSource(person, src.id, {
-    onChange: (sources, removed) => {
-      if (typeof handlers.onDirty === 'function') handlers.onDirty(sources, removed);
-      emitSourcesToHost();
-    }
-  });
+        const refs = Array.isArray(src.files) ? src.files : [];
+        for (const ref of refs) {
+          if (!isIdbRef(ref)) continue;
+          try { await DB?.deleteSourceFile?.(ref); } catch (e) { console.error('deleteSourceFile failed', ref, e); }
+        }
 
-  if (!success) {
-    showError?.('تعذر حذف الوثيقة. حاول مرة أخرى.');
-    return;
-  }
+        const success = deleteSource(person, src.id, {
+          onChange: (sources, removed) => {
+            if (typeof handlers.onDirty === 'function') handlers.onDirty(sources, removed);
+            emitSourcesToHost();
+          }
+        });
 
-  if (lastEditedId === src.id) lastEditedId = null;
-  renderList();
-  showSuccess?.('تم حذف الوثيقة بنجاح.');
-});
+        if (!success) {
+          showError?.('تعذر حذف الوثيقة. حاول مرة أخرى.');
+          return;
+        }
 
+        if (lastEditedId === src.id) lastEditedId = null;
+        draftNewMap.delete(src.id);
+
+        renderList();
+        showSuccess?.('تم حذف الوثيقة بنجاح.');
+      });
 
       list.appendChild(card);
     });
 
-    autoResizeSourceTextareas(list);
+    autoResizeTextareas(list, '.source-note-input');
+        // (C) طبّق nav بعد ما تكتمل القائمة وتترسم
+    applyNavAfterRender();
+
   }
 
-  /* ==========================================================================
-     6.4) أحداث القسم العامة (إضافة/فرز/تصفية/عرض)
-     ========================================================================== */
+  /* ============================================================================
+     أحداث عامة للقسم
+  ============================================================================ */
+
+  function syncAdvStateFromUI() {
+    advIssuer = advIssuerInput.value || '';
+    advConfidentiality = advConfSelect.value || '';
+    advConfidence = advConfidenceSelect.value || '';
+    advVerifiedMode = advVerifiedSelect.value || 'all';
+    syncClearFiltersBtnVisibility();
+    persistSourcesFiltersState();
+  }
+
+
+  advIssuerInput.addEventListener('input', () => { syncAdvStateFromUI(); renderList(); });
+  advConfSelect.addEventListener('change', () => { syncAdvStateFromUI(); renderList(); });
+  advConfidenceSelect.addEventListener('change', () => { syncAdvStateFromUI(); renderList(); });
+  advVerifiedSelect.addEventListener('change', () => { syncAdvStateFromUI(); renderList(); });
+
+  advClearBtn.addEventListener('click', () => {
+    // الفلاتر الأساسية
+    currentTypeFilter = 'all';
+    typeFilterSelect.value = 'all';
+    pinnedFilterMode = 'all';
+    pinnedFilterSelect.value = 'all';
+
+    currentTagFilter = '';
+
+    // فلاتر إضافية
+    advIssuerInput.value = '';
+    advConfSelect.value = '';
+    advConfidenceSelect.value = '';
+    advVerifiedSelect.value = 'all';
+    advVerifiedMode = 'all';
+
+    // إعادة وضع شريط الانتهاء لو كان مفعلاً
+    expiryFocusMode = 'all';
+    // ✅ صفّر الترتيب إلى الافتراضي (latest)
+    sortMode = 'latest';
+    sortSelect.value = 'latest';
+    sortSources(person, 'latest');
+
+    syncAdvStateFromUI();
+    syncClearFiltersBtnVisibility();
+    clearSourcesFiltersState();
+    renderList();
+    showInfo?.('تم إعادة ضبط جميع الفلاتر إلى الوضع الإفتراضي.');
+  });
 
   addBtn.addEventListener('click', () => {
     ensureSources(person);
 
-    const draft = person.sources.find(s => {
-      const t = String(s.title || '').trim();
-      const ref = String(s.referenceCode || '').trim();
-      const files = Array.isArray(s.files) ? s.files : [];
-      return !t && !ref && files.length === 0;
-    });
-
+    const draft = (person.sources || []).find(s => draftNewMap.has(s.id) && isEmptySourceDraft(s));
     if (draft) {
       lastEditedId = draft.id;
       renderList();
       const card = list.querySelector(`.source-card[data-source-id="${draft.id}"]`);
       const input = card?.querySelector('.source-title-input');
       if (input) input.focus();
-      showWarning?.('لديك مسودة وثيقة مفتوحة بالفعل. أكمل تعبئتها أولاً قبل إضافة وثيقة جديدة.');
+      showWarning?.('لديك مسودة وثيقة مفتوحة بالفعل. أكملها قبل إضافة وثيقة جديدة.');
       return;
     }
+
+    const actor = getActorName();
 
     const src = addSource(
       person,
@@ -2301,13 +3209,29 @@ for (const r of currentFiles) {
         pages: '',
         note: '',
         tags: [],
-        files: []
+        files: [],
+        pinned: false,
+        confidenceLevel: '',
+        relatedEventId: null,
+        verified: false,
+        verifiedBy: '',
+        verifiedAt: null,
+        confidentiality: '',
+
+        // جديد
+        validUntil: null,
+        expiryAlertDays: DEFAULT_EXPIRY_ALERT_DAYS,
+        holderName: '',
+        nationalId: '',
+        civilRegistryNo: '',
+        history: []
       },
       {
         onChange: (sources, changed) => {
           if (typeof handlers.onDirty === 'function') handlers.onDirty(sources, changed);
           emitSourcesToHost();
-        }
+        },
+        by: actor
       }
     );
 
@@ -2316,45 +3240,62 @@ for (const r of currentFiles) {
       return;
     }
 
+    draftNewMap.set(src.id, true);
+
     lastEditedId = src.id;
     renderList();
-    showSuccess?.('تمت إضافة وثيقة جديدة. أدخل بياناتها ثم اضغط "حفظ" لتثبيتها.');
+
+    const card = list.querySelector(`.source-card[data-source-id="${src.id}"]`);
+    const input = card?.querySelector('.source-title-input');
+    if (input) input.focus();
+
+    showSuccess?.('تمت إضافة مسودة وثيقة جديدة. أدخل بياناتها ثم اضغط "حفظ".');
   });
 
   sortSelect.addEventListener('change', () => {
     const mode = sortSelect.value === 'oldest' ? 'oldest' : 'latest';
+    sortMode = mode; // ✅
+
     sortSources(person, mode);
     if (typeof handlers.onDirty === 'function') handlers.onDirty(person.sources);
     emitSourcesToHost();
+    persistSourcesFiltersState();
     renderList();
-    showInfo?.(
-      mode === 'latest' ? 'تم ترتيب الوثائق من الأحدث إلى الأقدم.'
-        : 'تم ترتيب الوثائق من الأقدم إلى الأحدث.'
-    );
+    showInfo?.(mode === 'latest' ? 'تم ترتيب الوثائق من الأحدث إلى الأقدم.' : 'تم ترتيب الوثائق من الأقدم إلى الأحدث.');
   });
 
   typeFilterSelect.addEventListener('change', () => {
-    const val = typeFilterSelect.value;
-    currentTypeFilter = val || 'all';
+    currentTypeFilter = typeFilterSelect.value || 'all';
+    syncClearFiltersBtnVisibility();
+    persistSourcesFiltersState();
     renderList();
   });
 
-  searchInput.addEventListener('input', () => {
-    currentSearchTerm = searchInput.value || '';
+searchInput.addEventListener('input', () => {
+  const raw = searchInput.value || '';
+  currentSearchTerm = raw;
+
+  // ✅ أظهر/أخف زر المسح حسب وجود نص
+  clearSearchBtn.style.display = raw.trim() ? '' : 'none';
+persistSourcesFiltersState();
+  renderList();
+});
+
+  pinnedFilterSelect.addEventListener('change', () => {
+    pinnedFilterMode = pinnedFilterSelect.value === 'pinned' ? 'pinned' : 'all';
+    syncClearFiltersBtnVisibility();
+    persistSourcesFiltersState();
     renderList();
   });
 
-  pinnedFilterCheckbox.addEventListener('change', () => {
-    onlyPinned = !!pinnedFilterCheckbox.checked;
-    renderList();
-  });
+async function setViewMode(mode) {
+  viewMode = mode === 'table' ? 'table' : 'cards';
+  viewBtnCards.classList.toggle('is-active', viewMode === 'cards');
+  viewBtnTable.classList.toggle('is-active', viewMode === 'table');
+  persistSourcesFiltersState(); 
+  await renderList();
+}
 
-  function setViewMode(mode) {
-    viewMode = mode === 'table' ? 'table' : 'cards';
-    viewBtnCards.classList.toggle('is-active', viewMode === 'cards');
-    viewBtnTable.classList.toggle('is-active', viewMode === 'table');
-    renderList();
-  }
 
   viewBtnCards.addEventListener('click', () => setViewMode('cards'));
   viewBtnTable.addEventListener('click', () => setViewMode('table'));

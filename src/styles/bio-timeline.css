@@ -1,90 +1,19 @@
-/* ===== bio-timeline.css — قسم الخط الزمني للأحداث ===== */
 
-/* === هيدر القسم + مبدّل العرض === */
-.timeline-header{
-  display:flex;
-  align-items:flex-start;
-  justify-content:space-between;
-  gap:.75rem;
-  margin-bottom:.75rem;
-  flex-wrap:wrap;
-}
+/* ========================================================================== */
+/* bio-timeline.css */
+/* ========================================================================== */
 
-.timeline-title-block{
-  display:flex;
-  flex-direction:column;
-  gap:.15rem;
-}
-
-.timeline-helper-text{
-  margin:0;
-  font-size:.8rem;
-  color:var(--text-muted);
-  max-width:32rem;
-}
-
-/* أدوات رأس الخط الزمني */
-.timeline-tools{
-  display:flex;
-  flex-wrap:wrap;
-  align-items:center;
-  gap:.55rem;
-}
-
-.timeline-tools-left,
-.timeline-tools-right{
-  display:flex;
-  align-items:center;
-  gap:.4rem;
-  flex-wrap: wrap
-}
-
-/* ===== بحث الخط الزمني ===== */
-.timeline-search-wrap{
-  position:relative;
-  display:flex;
-  align-items:center;
-}
-
-.timeline-search-input{
-  padding:.35rem .9rem;
-  border-radius:.7rem;
-  border:1px solid color-mix(in oklab,var(--surface-border)80%,transparent);
-  background:color-mix(in oklab,var(--panel-bg)96%,#fff);
-  font-size:.8rem;
-  color:var(--text-main);
-  width: 100%;
-  transition:border-color .16s, box-shadow .16s, background-color .16s;
-}
-
-.timeline-search-input::placeholder{
-  color:var(--text-muted);
-}
-
-.timeline-search-input:focus-visible{
-  outline:none;
-  border-color:var(--modal-primary);
-  box-shadow:0 0 0 .09rem
-    color-mix(in oklab,var(--modal-primary)40%,transparent);
-  background:var(--card-bg);
-}
-
-.timeline-type-filter,
-.timeline-sort{
-  min-width:0;
-}
-
-.timeline-view-toggle{
+/* أدوات تبديل العرض (خاص بالتايملاين) */
+.bio-section-timeline .timeline-view-toggle{
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  border-radius:.7rem; /* نفس حواف زر الإضافة */
+  border-radius:.7rem;
   border:1px solid color-mix(in oklab,var(--accent-soft)70%,transparent);
   overflow:hidden;
   background:color-mix(in oklab,var(--panel-bg)90%,#fff);
 }
-
-.timeline-view-btn{
+.bio-section-timeline .timeline-view-btn{
   position:relative;
   border:0;background:transparent;
   padding:.35rem .9rem;
@@ -92,27 +21,22 @@
   cursor:pointer;
   white-space:nowrap;
   color:var(--text-main);
-  transition:
-    background-color .18s ease,
-    color .18s ease,
-    box-shadow .18s ease,
-    transform .12s ease;
-  width: 100%
-  
+  transition:background-color .18s ease,color .18s ease,box-shadow .18s ease,transform .12s ease;
+  width:100%;
 }
-.timeline-view-btn:is(:hover,:focus-visible){
+.bio-section-timeline .timeline-view-btn:is(:hover,:focus-visible){
   background:color-mix(in oklab,var(--accent-soft)25%,#fff);
   transform:translateY(-1px);
   box-shadow:0 .08rem .24rem rgba(0,0,0,.08);
   outline:none;
 }
-.timeline-view-btn.is-active{
+.bio-section-timeline .timeline-view-btn.is-active{
   background:color-mix(in oklab,var(--accent-soft)70%,#fff);
   color:var(--arrow-color);
   font-weight:600;
   box-shadow:0 .1rem .3rem rgba(0,0,0,.12);
 }
-.timeline-view-btn.is-active::before{
+.bio-section-timeline .timeline-view-btn.is-active::before{
   content:"";
   position:absolute;
   inset:.06rem;
@@ -121,59 +45,60 @@
   pointer-events:none;
 }
 
-
-/* === تبديل وضع القائمة / الخط الزمني === */
-.bio-section-timeline[data-view="list"] .events-list{display:block}
+/* تبديل العرض */
+.bio-section-timeline[data-view="list"] .events-list{display:flex}
 .bio-section-timeline[data-view="list"] .events-timeline{display:none}
 .bio-section-timeline[data-view="timeline"] .events-list{display:none}
 .bio-section-timeline[data-view="timeline"] .events-timeline{display:block}
 
-/* === القوائم + الحالة الفارغة === */
-.events-list,.events-timeline{max-width:100%}
-.events-empty,.timeline-empty{
-  padding:1rem .5rem;font-size:.86rem;opacity:.85;color:var(--text-muted)
+/* بادج نوع الحدث (emoji حسب النوع) — هذا خاص بالتايملاين */
+.bio-section-timeline .timeline-badge--type[data-type="birth"]::before{content:"🎉"}
+.bio-section-timeline .timeline-badge--type[data-type="marriage"]::before{content:"💍"}
+.bio-section-timeline .timeline-badge--type[data-type="child"]::before{content:"👶"}
+.bio-section-timeline .timeline-badge--type[data-type="move"]::before{content:"📦"}
+.bio-section-timeline .timeline-badge--type[data-type="job"]::before{content:"💼"}
+.bio-section-timeline .timeline-badge--type[data-type="hajj"]::before{content:"🕋"}
+.bio-section-timeline .timeline-badge--type[data-type="death"]::before{content:"🕊️"}
+.bio-section-timeline .timeline-badge--type[data-type="custom"]::before{content:"⭐"}
+
+/* الخط الزمني */
+.bio-section-timeline .events-timeline{margin-top:.6rem;position:relative}
+.bio-section-timeline .timeline-vertical{
+  border-inline-start:2px solid color-mix(in oklab,var(--accent-soft)70%,#000);
+  padding-inline-start:1.5rem
 }
-
-/* ميتا المعاينة: تاريخ الإضافة + طول التفاصيل */
-.event-preview-meta{
-  display:flex;
-  flex-wrap:wrap;
-  gap:.35rem;
-  font-size:.78rem;
-  color:var(--text-muted);
+.bio-section-timeline .timeline-item{
+  position:relative;
+  padding:.5rem 0 .6rem;
+  cursor:pointer;
+  margin:.8rem 0
 }
-
-/* سطر تاريخ الحدث في المعاينة */
-.event-preview-eventdate{
-  margin-top:.15rem;
-  font-size:.8rem;
-  color:var(--text-muted);
+.bio-section-timeline .timeline-marker{
+  position:absolute;inset-inline-start:-1.1rem;top:.7rem;
+  width:1.3rem;height:1.3rem;border-radius:999px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:.8rem;background:var(--card-bg);
+  box-shadow:0 .15rem .4rem rgba(0,0,0,.12);
 }
-
-/* العمر التقريبي في المعاينة والخط الزمني */
-.timeline-age,
-.event-preview-age{
-  margin-top:.05rem;
-  font-size:.78rem;
-  color:var(--text-muted);
-  font-style:italic;
+.bio-section-timeline .timeline-item.is-pinned .timeline-marker{
+  border:2px solid color-mix(in oklab,var(--arrow-color) 80%,#fff)
 }
-
-/* === كروت الأحداث (وضع القائمة) === */
-.event-card{margin-bottom:.65rem}
-.event-card--preview .event-edit{display:none}
-.event-card--edit .event-preview{display:none}
-
-.event-card-top{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:.5rem;
-  margin-bottom:.35rem;
+.bio-section-timeline .timeline-item.is-pinned .timeline-content{
+  background:color-mix(in oklab,var(--panel-bg)96%,#fff);
+  border-radius:.9rem;
+  padding:.4rem .6rem
 }
+.bio-section-timeline .timeline-content{font-size:.85rem;color:var(--text-main); margin-right: 1rem}
+.bio-section-timeline .timeline-date{font-weight:600;margin-bottom:.1rem;color:var(--title-color)}
+.bio-section-timeline .timeline-title-row{display:flex;align-items:center;gap:.25rem;margin-bottom:.15rem}
+.bio-section-timeline .timeline-title-icon{font-size:.9rem}
+.bio-section-timeline .timeline-title{font-weight:500}
+.bio-section-timeline .timeline-place{font-size:.8rem;opacity:.85;color:var(--text-muted)}
+.bio-section-timeline .timeline-description{margin:.15rem 0 0;font-size:.84rem}
 
-.timeline-jump-btn{
-  border:0;
+/* زر القفز لعرض الخط الزمني */
+.bio-section-timeline .timeline-jump-btn{
+  border:1px solid color-mix(in oklab,var(--arrow-color) 45%,transparent);
   background:color-mix(in oklab,var(--panel-bg) 95%,#fff);
   border-radius:999px;
   padding:.15rem .6rem;
@@ -183,92 +108,82 @@
   display:inline-flex;
   align-items:center;
   gap:.25rem;
-  transition:
-    background-color .16s ease,
-    box-shadow .16s ease,
-    transform .12s ease;
+  transition:background-color .16s ease,box-shadow .16s ease,transform .12s ease;
 }
-.timeline-jump-btn:hover,
-.timeline-jump-btn:focus-visible{
+.bio-section-timeline .timeline-jump-btn:hover,
+.bio-section-timeline .timeline-jump-btn:focus-visible{
   background:color-mix(in oklab,var(--accent-soft) 20%,#fff);
   transform:translateY(-1px);
   box-shadow:0 .08rem .24rem rgba(0,0,0,.1);
   outline:none;
 }
 
-/* === بادجات أنواع أحداث الخط الزمني === */
-.timeline-badge--type[data-type="birth"]::before{content:"🎉"}
-.timeline-badge--type[data-type="marriage"]::before{content:"💍"}
-.timeline-badge--type[data-type="child"]::before{content:"👶"}
-.timeline-badge--type[data-type="move"]::before{content:"📦"}
-.timeline-badge--type[data-type="job"]::before{content:"💼"}
-.timeline-badge--type[data-type="hajj"]::before{content:"🕋"}
-.timeline-badge--type[data-type="death"]::before{content:"🕊️"}
-.timeline-badge--type[data-type="custom"]::before{content:"⭐"}
+/* ألوان حدود الماركر حسب نوع الحدث */
+.bio-section-timeline .timeline-item[data-type="birth"] .timeline-marker{border:2px solid color-mix(in oklab,var(--accent-soft) 75%,transparent)}
+.bio-section-timeline .timeline-item[data-type="marriage"] .timeline-marker{border:2px solid color-mix(in oklab,var(--modal-primary) 70%,transparent)}
+.bio-section-timeline .timeline-item[data-type="death"] .timeline-marker{border:2px solid color-mix(in oklab,#b3261e 70%,transparent)}
+.bio-section-timeline .timeline-item[data-type="job"] .timeline-marker{border:2px solid color-mix(in oklab,#0b7285 70%,transparent)}
+.bio-section-timeline .timeline-item[data-type="move"] .timeline-marker{border:2px solid color-mix(in oklab,#5f3dc4 70%,transparent)}
+.bio-section-timeline .timeline-item[data-type="hajj"] .timeline-marker{border:2px solid color-mix(in oklab,#047857 70%,transparent)}
+.bio-section-timeline .timeline-item[data-type="child"] .timeline-marker{border:2px solid color-mix(in oklab,#dc2626 70%,transparent)}
 
-/* === كبسولة نوع الحدث + التاريخ + المكان === */
-.event-type-pill{
-  display:inline-flex;align-items:center;gap:.25rem;
-  padding:.15rem .6rem;border-radius:999px;
-  background:color-mix(in oklab,var(--panel-bg)96%,#fff);
-  border:1px solid color-mix(in oklab,var(--surface-border)80%,transparent);
-  color:var(--text-main);box-shadow:0 .06rem .2rem rgba(0,0,0,.04)
-}
-.event-type-icon{font-size:.9rem;opacity:.9}
-.event-type-select{
-  border:0;background:transparent;font-size:.8rem;
-  padding:0;cursor:pointer;color:var(--text-main);outline:none!important
-}
-.event-date-input{
-  font-size:.8rem;padding:.32rem .65rem;border-radius:.6rem;
-  border:1px solid var(--surface-border);background:var(--panel-bg);
-  color:var(--text-main);outline:none!important;
-  box-shadow:0 .06rem .18rem rgba(0,0,0,.03);
-  transition:border-color .16s,box-shadow .16s,background-color .16s,transform .12s
-}
-.event-date-input:hover{
-  border-color:color-mix(in oklab,var(--modal-primary)40%,var(--surface-border));
-  background:color-mix(in oklab,var(--panel-bg)94%,#fff);
-  transform:translateY(-1px);
-  box-shadow:0 .12rem .32rem rgba(0,0,0,.06)
-}
-.event-date-input:focus-visible{
-  border-color:var(--modal-primary);
-  box-shadow:0 0 0 .09rem color-mix(in oklab,var(--modal-primary)40%,transparent);
-  background:var(--card-bg)
-}
-.event-place-input{
-  width:100%;padding:.35rem .7rem;border-radius:.6rem;
-  border:1px solid var(--surface-border);background:var(--panel-bg);
-  font-size:.92rem;color:var(--text-main);outline:none!important;
-  transition:border-color .16s,box-shadow .16s,background-color .16s
-}
-.event-place-input::placeholder{color:var(--text-muted)}
-.event-place-input:focus-visible{
-  border-color:var(--modal-primary);
-  box-shadow:0 0 0 .09rem color-mix(in oklab,var(--modal-primary)40%,transparent);
-  background:var(--card-bg)
-}
-.event-description-input{min-height:3.5rem}
+.bio-section-timeline .timeline-item[data-type="death"] .timeline-title{color:color-mix(in oklab,#b3261e 80%,var(--title-color))}
+.bio-section-timeline .timeline-item[data-type="birth"] .timeline-title{color:color-mix(in oklab,var(--accent-soft) 80%,var(--title-color))}
 
-/* صف الحقول الإضافية: الوسوم + المصدر + درجة اليقين */
-.event-extra-row{
+.bio-section-timeline .timeline-title-block{display:flex;flex-direction:column;gap:.15rem}
+
+/* أسطر مساعدة في المعاينة */
+.bio-section-timeline .event-preview-eventdate{
+  margin-top:.15rem;
+  font-size:.8rem;
+  color:var(--text-muted)
+}
+.bio-section-timeline .timeline-age,
+.bio-section-timeline .event-preview-age{
+  margin-top:.05rem;
+  font-size:.78rem;
+  color:var(--text-muted);
+  font-style:italic
+}
+
+.bio-section-timeline .event-extra-row{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:.45rem}
+.bio-section-timeline .event-extra-row .event-meta-field{flex:1 1 0;min-width:14rem}
+
+/* فواصل السنوات + وسائط الخط الزمني */
+.bio-section-timeline .timeline-year-separator{
+  font-weight:700;
+  margin:.4rem 0 .2rem;
+  color:var(--title-color)
+}
+.bio-section-timeline .timeline-media{
+  margin-top:.2rem;
   display:flex;
   flex-wrap:wrap;
-  gap:.6rem;
-  margin-top:.45rem;
+  gap:.3rem
 }
 
-/* نفس توزيع الحقول الأخرى (type/date/place): كل حقل يتمدّد بشكل متساوٍ */
-.event-extra-row .event-meta-field{
-  flex:1 1 0;
-  min-width:14rem;
+/* وسوم داخل عرض الخط الزمني (الحاوية فقط) */
+.bio-section-timeline .timeline-tags-line{
+  margin-top:.2rem;
+  display:flex;
+  flex-wrap:wrap;
+  gap:.25rem;
+  font-size:.75rem
 }
 
-/* مدخل الوسوم + المصدر + قائمة اليقين بنفس ستايل حقول المكان */
-.event-tags-input,
-.event-source-input,
-.event-certainty-select{
+/* مصدر + درجة يقين (الحاوية فقط) */
+.bio-section-timeline .timeline-meta-extra{
+  margin-top:.15rem;
+  display:flex;
+  flex-wrap:wrap;
+  gap:.3rem;
+  font-size:.75rem;
+  color:var(--text-muted)
+}
+
+.bio-section-timeline .event-tags-input,
+.bio-section-timeline .event-source-input,
+.bio-section-timeline .event-certainty-select{
   width:100%;
   padding:.35rem .7rem;
   border-radius:.6rem;
@@ -279,29 +194,23 @@
   outline:none!important;
   transition:border-color .16s,box-shadow .16s,background-color .16s;
 }
-
-.event-tags-input::placeholder,
-.event-source-input::placeholder{
-  color:var(--text-muted);
-}
-
-.event-tags-input:hover,
-.event-source-input:hover,
-.event-certainty-select:hover{
+.bio-section-timeline .event-tags-input::placeholder,
+.bio-section-timeline .event-source-input::placeholder{color:var(--text-muted)}
+.bio-section-timeline .event-tags-input:hover,
+.bio-section-timeline .event-source-input:hover,
+.bio-section-timeline .event-certainty-select:hover{
   border-color:color-mix(in oklab,var(--modal-primary)40%,var(--surface-border));
   background:color-mix(in oklab,var(--panel-bg)94%,#fff);
 }
-
-.event-tags-input:focus-visible,
-.event-source-input:focus-visible,
-.event-certainty-select:focus-visible{
+.bio-section-timeline .event-tags-input:focus-visible,
+.bio-section-timeline .event-source-input:focus-visible,
+.bio-section-timeline .event-certainty-select:focus-visible{
   border-color:var(--modal-primary);
   box-shadow:0 0 0 .09rem color-mix(in oklab,var(--modal-primary)40%,transparent);
   background:var(--card-bg);
 }
 
-/* جعل قائمة اليقين بارتفاع مريح مثل الحقول النصية */
-.event-certainty-select{
+.bio-section-timeline .event-certainty-select{
   -webkit-appearance:none;
   -moz-appearance:none;
   appearance:none;
@@ -309,268 +218,66 @@
   background-image:
     linear-gradient(45deg,transparent 50%,var(--text-muted) 50%),
     linear-gradient(135deg,var(--text-muted) 50%,transparent 50%);
-  background-position:
-    calc(100% - .9rem) 50%,
-    calc(100% - .6rem) 50%;
+  background-position:calc(100% - .9rem) 50%,calc(100% - .6rem) 50%;
   background-size:.4rem .4rem,.4rem .4rem;
   background-repeat:no-repeat;
 }
 
+/* تنبيه قفل (داخل بطاقة الحدث) */
+.bio-section-timeline .event-lock-note{
+  flex:1 1 auto;display:flex;align-items:center;gap:.45rem;
+  padding:.26rem .6rem;border-radius:.75rem;
+background:color-mix(in oklab,var(--modal-primary) 10%,var(--panel-bg));
+border-color:color-mix(in oklab,var(--modal-primary) 35%,var(--surface-border));
 
-/* === الخط الزمني العمودي === */
-.events-timeline{margin-top:.6rem;position:relative}
-.timeline-list{list-style:none;margin:0;padding:0}
-.timeline-vertical{
-  border-inline-start:2px solid color-mix(in oklab,var(--accent-soft)70%,#000);
-  padding-inline-start:1.5rem
-}
-.timeline-item{position:relative;padding:.5rem 0 .6rem; cursor: pointer; margin: .80rem 0}
-.timeline-marker{
-  position:absolute;inset-inline-start:-1.1rem;top:.7rem;
-  width:1.3rem;height:1.3rem;border-radius:999px;
-  display:flex;align-items:center;justify-content:center;
-  font-size:.8rem;background:var(--card-bg);
-  box-shadow:0 .15rem .4rem rgba(0,0,0,.12)
+  color:color-mix(in oklab,var(--text-muted)88%,var(--text-main));
+  font-size:.78rem;line-height:1.55;box-shadow:0 .06rem .2rem rgba(0,0,0,.04)
 }
 
-/* تمييز خفيف حسب نوع الحدث */
-.timeline-item[data-type="birth"] .timeline-marker{
-  border:2px solid color-mix(in oklab,var(--accent-soft) 75%,transparent);
-}
-
-.timeline-item[data-type="marriage"] .timeline-marker{
-  border:2px solid color-mix(in oklab,var(--modal-primary) 70%,transparent);
-}
-
-.timeline-item[data-type="death"] .timeline-marker{
-  border:2px solid color-mix(in oklab,#b3261e 70%,transparent);
-}
-
-.timeline-item[data-type="job"] .timeline-marker{
-  border:2px solid color-mix(in oklab,#0b7285 70%,transparent);
-}
-
-.timeline-item[data-type="move"] .timeline-marker{
-  border:2px solid color-mix(in oklab,#5f3dc4 70%,transparent);
-}
-
-.timeline-item[data-type="hajj"] .timeline-marker{
-  border:2px solid color-mix(in oklab,#047857 70%,transparent);
-}
-
-.timeline-item[data-type="child"] .timeline-marker{
-  border:2px solid color-mix(in oklab,#dc2626 70%,transparent);
-}
-
-/* تلوين خفيف لعنوان الحدث أيضًا */
-.timeline-item[data-type="death"] .timeline-title{
-  color:color-mix(in oklab,#b3261e 80%,var(--title-color));
-}
-.timeline-item[data-type="birth"] .timeline-title{
-  color:color-mix(in oklab,var(--accent-soft) 80%,var(--title-color));
-}
-
-
-/* فاصل السنوات في الخط الزمني */
-.timeline-year-separator{
-  font-weight:700;
-  margin:.4rem 0 .2rem;
-  color:var(--title-color);
-}
-
-/* تمييز الأحداث المميزة (pinned) داخل الخط الزمني */
-.timeline-item.is-pinned .timeline-marker{
-  border:2px solid color-mix(in oklab,var(--arrow-color) 80%,#fff);
-}
-
-.timeline-item.is-pinned .timeline-content{
-  background:color-mix(in oklab,var(--panel-bg)96%,#fff);
-  border-radius:.9rem;
-  padding:.4rem .6rem;
-}
-
-.timeline-content{font-size:.85rem;color:var(--text-main)}
-.timeline-date{font-weight:600;margin-bottom:.1rem;color:var(--title-color)}
-.timeline-title-row{
-  display:flex;align-items:center;gap:.25rem;margin-bottom:.15rem
-}
-.timeline-title-icon{font-size:.9rem}
-.timeline-title{font-weight:500}
-.timeline-place{font-size:.8rem;opacity:.85;color:var(--text-muted)}
-.timeline-description{margin:.15rem 0 0;font-size:.84rem}
-.timeline-media{
-  margin-top:.2rem;display:flex;flex-wrap:wrap;gap:.3rem
-}
-.timeline-media-link{
-  font-size:.75rem;padding:.15rem .5rem;border-radius:999px;
-  border:1px dashed color-mix(in oklab,var(--accent-soft)80%,transparent);
-  text-decoration:none;color:var(--arrow-color);
-  background:color-mix(in oklab,var(--card-bg)96%,#fff)
-}
-
-/* === ثَمبنايل صور الأحداث === */
-.timeline-image-thumb{
-  position:relative;display:inline-flex;align-items:center;justify-content:center;
-  width:8.8rem;height:7rem;border-radius:.75rem;overflow:hidden;
-  border:1px solid color-mix(in oklab,var(--surface-border)80%,transparent);
-  background:color-mix(in oklab,var(--panel-bg)96%,#fff);
-  cursor:grab;box-shadow:0 .06rem .18rem rgba(0,0,0,.08);
-  transition:transform .14s ease-out,box-shadow .14s ease-out,
-    border-color .14s ease-out,background-color .14s ease-out
-}
-
-/* تصغير الثمبنيل داخل الخط الزمني فقط */
-.events-timeline .timeline-image-thumb{
-  width:8.8rem;
-  height:7rem;
-  border-radius:.55rem;
-  cursor:pointer;
-}
-
-.timeline-image-thumb img{
-  max-width:100%;max-height:100%;object-fit:cover;pointer-events:none
-}
-.timeline-image-thumb-remove,
-.timeline-image-thumb-view{
-  position:absolute;inset-inline-end:.18rem;border:none;border-radius:.5rem;
-  padding:.05rem .3rem;font-size:.7rem;cursor:pointer
-}
-.timeline-image-thumb-remove{
-  top:.18rem;background:rgba(0,0,0,.7);color:#fff
-}
-
-.event-extra-meta{
-  display:flex;
-  flex-wrap:wrap;
-  gap:.35rem;
-  margin:.25rem 0 0;
-  font-size:.78rem;
-  color:var(--text-muted);
-}
-
-.timeline-badge--tag{
-  display:inline-flex;
-  align-items:center;
-  padding:.08rem .5rem;
+.event-jump-section-btn{
+  border:0;
+  background:color-mix(in oklab,var(--panel-bg) 95%,#fff);
   border-radius:999px;
-  border:1px solid color-mix(in oklab,var(--surface-border) 70%,transparent);
-  background:color-mix(in oklab,var(--panel-bg) 96%,#fff);
-  font-size:.75rem;
-}
-
-.timeline-certainty-chip,
-.timeline-source-chip{
+  padding:.18rem .65rem;
+  font-size:.74rem;
+  cursor:pointer;
+  color:var(--arrow-color);
   display:inline-flex;
   align-items:center;
-  padding:.08rem .45rem;
-  border-radius:.5rem;
-  font-size:.75rem;
-  background:color-mix(in oklab,var(--panel-bg) 96%,#fff);
-  border:1px dashed color-mix(in oklab,var(--surface-border) 70%,transparent);
-}
-
-.timeline-tags-line{
-  margin-top:.2rem;
-  display:flex;
-  flex-wrap:wrap;
   gap:.25rem;
-  font-size:.75rem;
+  transition:background-color .16s ease,box-shadow .16s ease,transform .12s ease;
+}
+.event-jump-section-btn:hover,
+event-jump-section-btn:focus-visible{
+  background:color-mix(in oklab,var(--accent-soft) 20%,#fff);
+  transform:translateY(-1px);
+  box-shadow:0 .08rem .24rem rgba(0,0,0,.1);
+  outline:none;
 }
 
-.timeline-meta-extra{
-  margin-top:.15rem;
-  display:flex;
-  flex-wrap:wrap;
-  gap:.3rem;
-  font-size:.75rem;
-  color:var(--text-muted);
+.bio-section-timeline .event-lock-note i{
+  flex:0 0 auto;width:1.55rem;height:1.55rem;border-radius:999px;
+  display:inline-flex;align-items:center;justify-content:center;
+  font-size:.85rem;color:color-mix(in oklab,var(--arrow-color)90%,#000);
+  background:color-mix(in oklab,var(--arrow-color)14%,transparent);
+  border:1px solid color-mix(in oklab,var(--arrow-color)35%,transparent)
 }
+.bio-section-timeline .event-lock-note span{flex:1 1 auto;min-width:0}
+.bio-section-timeline .event-footer:has(.event-lock-note){align-items:center;flex-wrap:wrap}
+@media(max-width:29.9rem){
+  .bio-section-timeline .event-lock-note{flex:0 0 100%;justify-content:flex-start}
+} 
 
-
-/* === الاستجابة (Responsive) === */
-/* 1) ≤23.9rem */
+.event-meta-row--linked-sources{margin-top: 2rem}
+/* الاستجابة */
 @media(max-width:23.9rem){
-  .bio-section-timeline{padding:.75rem .75rem 1rem;border-radius:.9rem}
-  .bio-section-timeline h3{font-size:.95rem}
-  .bio-section-timeline .timeline-header{flex-direction:column;align-items:stretch;gap:.5rem}
-  .timeline-tools{width:100%;flex-direction:column;align-items:stretch;gap:.4rem}
-  .timeline-tools-left,.timeline-tools-right{width:100%;justify-content:space-between}
-  .timeline-type-filter,.timeline-sort{flex:1 1 auto}
-  .timeline-view-toggle,.timeline-add-btn{width:100%;justify-content:center;text-align:center}
-  .event-date-input{width:100%}
-  .timeline-vertical{padding-inline-start:1.1rem}
-  .timeline-marker{inset-inline-start:-.9rem}
-  .event-extra-row{flex-direction:column;gap:.4rem;}
-  .event-extra-row .event-meta-field{min-width:100%;}
+  .bio-section-timeline .event-extra-row{flex-direction:column;gap:.4rem}
+  .bio-section-timeline .event-extra-row .event-meta-field{min-width:100%}
+  .bio-section-timeline .timeline-vertical{padding-inline-start:1.1rem}
+  .bio-section-timeline .timeline-marker{inset-inline-start:-.9rem}
 }
-
-/* 2) 24–29.9rem */
 @media(min-width:24rem) and (max-width:29.9rem){
-  .bio-section-timeline{padding:.9rem .9rem 1.2rem}
-  .bio-section-timeline .timeline-header{flex-direction:column;align-items:stretch}
-  .timeline-tools{width:100%;flex-direction:column;align-items:stretch;gap:.45rem}
-  .timeline-tools-left,.timeline-tools-right{width:100%;justify-content:space-between}
-  .timeline-type-filter,.timeline-sort{flex:1 1 auto}
-  .timeline-view-toggle{flex:1 1 auto}
-  .timeline-add-btn, .timeline-search-wrap{flex:0 0 auto;width:100%}
-  .event-head{gap:.45rem}
-  .timeline-vertical{padding-inline-start:1.25rem}
-  .timeline-marker{inset-inline-start:-1rem}
-  .event-extra-row{flex-direction:column;gap:.45rem;}
-  .event-extra-row .event-meta-field{min-width:100%;}
-}
-
-/* 3) 30–39.9rem */
-@media(min-width:30rem) and (max-width:39.9rem){
-  .bio-section-timeline{padding:1rem 1.1rem 1.4rem}
-  .bio-section-timeline .timeline-header{flex-direction:row;align-items:center}
-  .timeline-tools{width:100%;flex-direction:column;align-items:stretch;gap:.5rem}
-  .timeline-tools-left,.timeline-tools-right{width:100%}
-  .timeline-tools-right{justify-content:flex-start}
-  .timeline-view-toggle,.timeline-add-btn{flex:0 0 auto}
-  .event-card{padding:.8rem .9rem .7rem}
-  .event-body{gap:.4rem}
-}
-
-/* 4) 40–47.9rem */
-@media(min-width:40rem) and (max-width:47.9rem){
-  .bio-section-timeline{padding:1.1rem 1.3rem 1.5rem}
-  .bio-section-timeline .timeline-header{align-items:center}
-  .timeline-tools{flex-direction:row;align-items:center;flex-wrap:wrap;gap:.5rem}
-  .timeline-tools-left{flex:1 1 100%;justify-content:flex-start;gap:.5rem}
-  .timeline-tools-right{flex:0 0 auto}
-  .event-card{margin-bottom:.75rem}
-  .timeline-vertical{padding-inline-start:1.7rem}
-  .timeline-marker{inset-inline-start:-1.2rem}
-}
-
-/* 5) 48–63.9rem */
-@media(min-width:48rem) and (max-width:63.9rem){
-  .bio-section-timeline{padding:1.1rem 1.4rem 1.6rem}
-  .bio-section-timeline .timeline-header{align-items:center}
-  .timeline-tools{flex-direction:row;align-items:center;gap:.6rem}
-  .timeline-tools-left{flex:1 1 auto}
-  .timeline-tools-right{flex:0 0 auto}
-  .events-list .event-card{margin-bottom:.8rem}
-  .event-card{padding:.85rem 1rem .8rem}
-  .event-head{gap:.7rem}
-  .timeline-vertical{padding-inline-start:1.9rem}
-  .timeline-marker{inset-inline-start:-1.3rem}
-}
-
-/* 6) ≥64rem */
-@media(min-width:64rem){
-  .bio-section-timeline{padding:1.2rem 1.6rem 1.7rem;border-radius:1.1rem}
-  .bio-section-timeline .timeline-header{align-items:center}
-  .timeline-tools{flex-direction:row;align-items:center;gap:.8rem}
-  .timeline-tools-left{flex:1 1 auto}
-  .timeline-tools-right{flex:0 0 auto}
-  .timeline-view-btn{font-size:.82rem;padding:.3rem .85rem}
-  .timeline-add-btn{font-size:.84rem;padding:.35rem 1rem}
-  .events-list .event-card{margin-bottom:.9rem}
-  .event-card{padding:.95rem 1.1rem .9rem}
-  .event-body{gap:.45rem}
-  .timeline-vertical{padding-inline-start:2rem}
-  .timeline-marker{inset-inline-start:-1.4rem;width:1.4rem;height:1.4rem;font-size:.85rem}
-  .timeline-content{font-size:.87rem}
+  .bio-section-timeline .event-extra-row{flex-direction:column;gap:.45rem}
+  .bio-section-timeline .event-extra-row .event-meta-field{min-width:100%}
+  .bio-section-timeline .timeline-view-toggle{width: 100%}
 }

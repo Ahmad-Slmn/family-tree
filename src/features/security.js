@@ -11,14 +11,17 @@ const PIN_KEYS = {
   salt: 'pin_salt',
   hash: 'pin_hash',
   hint: 'pin_hint',
-  idleMin: 'pin_idle_minutes',
+  idleSec: 'pin_idle_seconds',
   lockOnVis: 'pin_lock_on_visibility',
   sessionUntil: 'pin_session_until',
   sessionMin: 'pin_session_minutes',
   tries: 'pin_tries',
   lockUntil: 'pin_lock_until',
   lastActivity: 'pin_last_activity',
-  lastTryAt: 'pin_last_try_at'
+  lastTryAt: 'pin_last_try_at',
+  forceLocked: 'pin_force_locked',
+  lockReason: 'pin_lock_reason'
+
 };
 
 /* =========================
@@ -39,8 +42,14 @@ function lsSet(k, v) {
 }
 
 function lsDel(k) {
-  if (PinStore.PERSISTED_KEYS?.has?.(k)) { PinStore.del(k); return; }
+  // 1) احذف من الـ IDB إذا كان persisted
+  const p = (PinStore.PERSISTED_KEYS?.has?.(k))  ? PinStore.del(k)
+    : Promise.resolve();
+
+  // 2) احذف أيضًا من localStorage دائمًا (تنظيف بقايا/Legacy)
   try { localStorage.removeItem(k); } catch {}
+
+  return Promise.resolve(p);
 }
 
 /* =========================
@@ -57,6 +66,27 @@ function hasPinConfigured() {
 function canUsePinFeatures() {
   return isEnabled() && hasPinConfigured(); // Enabled + Configured
 }
+
+/* =========================
+   مسح كامل لكل بيانات الخصوصية (PIN)
+========================= */
+async function clearAllPrivacyPinData() {
+  // امسح كل المفاتيح المعروفة ضمن PIN_KEYS
+  const keys = Object.values(PIN_KEYS);
+
+  // نفّذ الحذف (lsDel قد تكون async عبر PinStore)
+  await Promise.all(keys.map(k => Promise.resolve(lsDel(k))));
+
+  // ضمان إضافي: إن وُجدت مفاتيح persisted غير مذكورة هنا (احتياط)
+  try {
+    if (PinStore?.PERSISTED_KEYS?.forEach) {
+      const extras = [];
+      PinStore.PERSISTED_KEYS.forEach((k) => { extras.push(k); });
+      await Promise.all(extras.map(k => Promise.resolve(lsDel(k))));
+    }
+  } catch {}
+}
+
 
 /* =========================
    مودال إدارة القفل (تفعيل/تعطيل/تغيير)
@@ -352,15 +382,19 @@ function injectPrivacySection(bus) {
 
   
     // مدد الخمول
-  const IDLE_OPTIONS = [
-    { value: 15,  label: '15 ثانية' },
-    { value: 30,  label: '30 ثانية' },
-    { value: 60,  label: '1 دقيقة' },
-    { value: 120, label: '2 دقائق' },
-    { value: 180, label: '3 دقائق' },
-    { value: 300, label: '5 دقائق' },
-    { value: 600, label: '10 دقائق' }
-  ];
+const IDLE_OPTIONS = [
+  { value: 60,  label: '1 دقيقة' },   // ⭐ الافتراضي
+  { value: 120, label: '2 دقائق' },
+  { value: 180, label: '3 دقائق' },
+
+  { value: 30,  label: '30 ثانية' },
+  { value: 15,  label: '15 ثانية' },
+
+  { value: 300, label: '5 دقائق' },
+  { value: 600, label: '10 دقائق' },
+
+  { value: 0,   label: 'مطلقًا (بدون قفل تلقائي)' }
+];
 
   function fillIdleSelect() {
     if (!idle) return;
@@ -373,12 +407,15 @@ function injectPrivacySection(bus) {
     });
   }
 
-  function fmtIdleLabel(seconds) {
-    seconds = Number(seconds) || 60;
-    if (seconds < 60) return `${seconds} ثانية`;
-    const m = Math.round(seconds / 60);
-    return `${m} دقيقة`;
-  }
+function fmtIdleLabel(seconds) {
+  const n = Number(seconds);
+  if (!Number.isFinite(n)) return '1 دقيقة';
+  if (n <= 0) return 'مطلقًا (بدون قفل تلقائي)';
+  if (n < 60) return `${n} ثانية`;
+  const m = Math.round(n / 60);
+  return `${m} دقيقة`;
+}
+
   
     // مدد الجلسة المفتوحة
   const SESSION_OPTIONS = [
@@ -466,16 +503,18 @@ function injectPrivacySection(bus) {
     fillIdleSelect();
 
     // الافتراضي التلقائي: 60 ثانية (1 دقيقة)
-    const saved = parseInt(lsGet(PIN_KEYS.idleMin, '60'), 10) || 60;
-    const allowed = new Set(IDLE_OPTIONS.map(x => x.value));
-    const safe = allowed.has(saved) ? saved : 60;
+const raw = lsGet(PIN_KEYS.idleSec, '60');
+const saved = parseInt(raw, 10);
+const allowed = new Set(IDLE_OPTIONS.map(x => x.value));
+const safe = allowed.has(saved) ? saved : 60;
 
-    idle.value = String(safe);
+idle.value = String(safe);
 
     // إن لم توجد قيمة محفوظة سابقاً، احفظ الافتراضي
-    if (lsGet(PIN_KEYS.idleMin, null) == null) {
-      lsSet(PIN_KEYS.idleMin, String(60));
-    }
+if (isEnabled() && lsGet(PIN_KEYS.idleSec, null) == null) {
+  lsSet(PIN_KEYS.idleSec, String(60));
+}
+
   }
 
   if (vis) {
@@ -492,9 +531,10 @@ function injectPrivacySection(bus) {
     sessionSel.value = String(safe);
 
     // إن لم توجد قيمة محفوظة سابقاً، احفظ الافتراضي
-    if (lsGet(PIN_KEYS.sessionMin, null) == null) {
-      lsSet(PIN_KEYS.sessionMin, String(15));
-    }
+if (isEnabled() && lsGet(PIN_KEYS.sessionMin, null) == null) {
+  lsSet(PIN_KEYS.sessionMin, String(15));
+}
+
   }
 
   /* ===== أحداث الواجهة ===== */
@@ -508,12 +548,18 @@ function injectPrivacySection(bus) {
     bus.emit('pin:lockNow');
   });
 
-  idle?.addEventListener('change', () => {
-    if (idle.disabled) return;
-    const v = parseInt(idle.value, 10) || 60;
-    lsSet(PIN_KEYS.idleMin, String(v));
-    showSuccess(`تم ضبط مدة الخمول إلى ${highlight(fmtIdleLabel(v))}.`);
-  });
+idle?.addEventListener('change', () => {
+  if (idle.disabled) return;
+
+  const raw = idle.value;
+  const v = parseInt(raw, 10);
+
+  const allowed = new Set(IDLE_OPTIONS.map(x => x.value));
+  const safe = (Number.isFinite(v) && allowed.has(v)) ? v : 60;
+
+  lsSet(PIN_KEYS.idleSec, String(safe));
+  showSuccess(`تم ضبط مدة الخمول إلى ${highlight(fmtIdleLabel(safe))}.`);
+});
 
   vis?.addEventListener('change', () => {
     if (vis.disabled) return;
@@ -563,7 +609,7 @@ function injectPrivacySection(bus) {
     window.addEventListener('FT_RESET_PRIVACY_PREFS', () => {
       // الافتراضيات:
       // idle = 60 ثانية، lockOnVis = 0، sessionMin = 15، وإلغاء أي جلسة مفتوحة
-      lsSet(PIN_KEYS.idleMin, '60');
+      lsSet(PIN_KEYS.idleSec, '60');
       lsSet(PIN_KEYS.lockOnVis, '0');
       lsSet(PIN_KEYS.sessionMin, '15');
       lsDel(PIN_KEYS.sessionUntil);
@@ -592,7 +638,7 @@ function injectPrivacySection(bus) {
         msg.key === PIN_KEYS.salt ||
         msg.key === PIN_KEYS.hash ||
         msg.key === PIN_KEYS.sessionUntil ||
-        msg.key === PIN_KEYS.idleMin ||
+        msg.key === PIN_KEYS.idleSec ||
         msg.key === PIN_KEYS.lockOnVis ||
         msg.key === PIN_KEYS.sessionMin
       ) {
@@ -616,8 +662,8 @@ function injectPrivacySection(bus) {
       buildManageModal({
         title: 'حماية الخصوصية',
         fields: [
-          { id: 'pin1', label: 'كلمة مرور جديدة', type: 'password', maxlength: 12, placeholder: 'كلمة المرور' },
-          { id: 'pin2', label: 'تأكيد كلمة المرور', type: 'password', maxlength: 12, placeholder: 'أعد الإدخال' },
+          { id: 'pin1', label: 'كلمة المرور الجديدة', type: 'password', maxlength: 12, placeholder: 'كلمة المرور الجديدة' },
+          { id: 'pin2', label: 'تأكيد كلمة المرور', type: 'password', maxlength: 12, placeholder: 'تأكيد كلمة المرور' },
           { id: 'hint', label: 'تلميح (اختياري)', type: 'text', maxlength: 40, placeholder: 'تلميح قصير' }
         ],
        onSubmit: async (vals, ui) => {
@@ -635,7 +681,7 @@ try {
   await setNewPin(p1, vals.hint || '');
 
   await lsSet(PIN_KEYS.enabled, '1');
-  if (!lsGet(PIN_KEYS.idleMin, null)) await lsSet(PIN_KEYS.idleMin, '60'); // default 1 minute
+  if (!lsGet(PIN_KEYS.idleSec, null)) await lsSet(PIN_KEYS.idleSec, '60'); // default 1 minute
   if (!lsGet(PIN_KEYS.lockOnVis, null)) await lsSet(PIN_KEYS.lockOnVis, '0'); // default OFF
 
   showSuccess('تم تفعيل القفل بنجاح.');
@@ -659,12 +705,13 @@ try {
       });
     } else {
       if (!canUsePinFeatures()) {
-        lsSet(PIN_KEYS.enabled, '0');
+        await clearAllPrivacyPinData();
         bus.emit('pin:disabled');
         syncOpenSessionUI();
         syncPinUIAvailability();
         return;
       }
+
 
       buildManageModal({
         title: 'تعطيل القفل',
@@ -680,15 +727,8 @@ try {
   const ok = await verifyPin(cur);
   if (!ok) { ui.invalid('curPin', 'كلمة المرور غير صحيحة.'); return; }
 
-  await lsSet(PIN_KEYS.enabled, '0');
-  lsDel(PIN_KEYS.salt);
-  lsDel(PIN_KEYS.hash);
-  lsDel(PIN_KEYS.hint);
-  lsDel(PIN_KEYS.tries);
-  lsDel(PIN_KEYS.lockUntil);
-  lsDel(PIN_KEYS.sessionUntil);
-  lsDel(PIN_KEYS.sessionMin);
-  lsDel(PIN_KEYS.lastTryAt);
+  // مسح شامل لكل بيانات الخصوصية
+  await clearAllPrivacyPinData();
 
   bus.emit('pin:disabled');
   showSuccess('تم تعطيل قفل كلمة المرور ومسح بياناته من الجهاز.');
@@ -720,9 +760,9 @@ try {
     buildManageModal({
       title: 'تغيير كلمة المرور',
  fields: [
-  { id: 'oldPin',  label: 'كلمة المرور الحالية',        type: 'password', maxlength: 12, placeholder: 'أدخل كلمة المرور الحالية' },
-  { id: 'newPin1', label: 'كلمة المرور الجديدة',        type: 'password', maxlength: 12, placeholder: 'أدخل كلمة مرور جديدة' },
-  { id: 'newPin2', label: 'تأكيد كلمة المرور الجديدة',  type: 'password', maxlength: 12, placeholder: 'أعد إدخال كلمة المرور الجديدة' },
+  { id: 'oldPin',  label: 'كلمة المرور الحالية',        type: 'password', maxlength: 12, placeholder: 'كلمة المرور الحالية' },
+  { id: 'newPin1', label: 'كلمة المرور الجديدة',        type: 'password', maxlength: 12, placeholder: 'كلمة المرور الجديدة' },
+  { id: 'newPin2', label: 'تأكيد كلمة المرور',  type: 'password', maxlength: 12, placeholder: 'تأكيد كلمة المرور' },
   { id: 'hint',    label: 'تلميح (اختياري)',             type: 'text',     maxlength: 40, placeholder: 'تلميح قصير' }
 ],
 
@@ -773,9 +813,7 @@ export function init(ctx) {
   const bus = ctx && ctx.bus;
   if (!bus) return;
 
-  PinStore.init().then(() => {
-    injectPrivacySection(bus);
-  }).catch(() => {
-    injectPrivacySection(bus);
-  });
+  PinStore.init()
+    .then(() => injectPrivacySection(bus))
+    .catch(() => injectPrivacySection(bus));
 }

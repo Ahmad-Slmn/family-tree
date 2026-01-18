@@ -1,326 +1,156 @@
 /* ================== base.css — الأساسيات العامة ================== */
-/* ===================== Cairo Font (محلي) ===================== */
-@font-face {
-  font-family: 'Cairo';
-  src: url('../assets/fonts/Cairo-Regular.ttf') format('truetype');
-  font-weight: 400;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Cairo';
-  src: url('../assets/fonts/Cairo-Bold.ttf') format('truetype');
-  font-weight: 700;
-  font-display: swap;
-}
 
-/* الخط الافتراضي العام */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  font-family: 'Cairo', system-ui, -apple-system, sans-serif;
-}
+/* ===== خط Cairo (محلي) ===== */
+@font-face{font-family:'Cairo';src:url('../assets/fonts/Cairo-Regular.ttf') format('truetype');font-weight:400;font-display:swap}
+@font-face{font-family:'Cairo';src:url('../assets/fonts/Cairo-Bold.ttf') format('truetype');font-weight:700;font-display:swap}
 
-body {
-  background: var(--bg-gradient);
-  min-height: 100vh;
-  color: var(--text-main);
-  overflow-x: hidden;
-}
+/* ===== إعدادات عامة ===== */
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Cairo',system-ui,-apple-system,sans-serif}
+body{background:var(--bg-gradient);min-height:100vh;color:var(--text-main);overflow-x:hidden}
 
+/* ===== متغيرات: ترتيب الطبقات (z-index) ===== */
 :root{
-  /* ===== z-index scale (من الأقل للأعلى) ===== */
-  --z-base: 1;
-
-  /* عناصر فوق المحتوى */
-  --z-content: 10;
-
-  /* قوائم/اقتراحات */
-  --z-dropdown: 30;
-
-  /* أزرار عائمة */
-  --z-fab: 200;
-
-  /* Scroll buttons */
-  --z-scroll: 300;
-
-  /* Overlay للشريط الجانبي */
-  --z-side-overlay: 1098;
-  --z-side-panel: 1099;
-  --z-side-toggle: 1100;
-
-  /* مودالات عامة/نماذج */
-  --z-modal: 1100;
-  --z-modal-inner: 1120;
-
-  /* Splash loading */
-  --z-splash: 1300;
-
-  /* Toast أعلى شيء */
-  --z-toast: 2001;
-
-  /* Confirm modal لازم يكون فوق المودالات */
-  --z-confirm: 2000;
-
-  /* PIN lock أعلى شيء */
-  --z-pin-lock: 3000;
-  --z-pin-manage: 2990;
+  --z-base:1;--z-content:10;--z-dropdown:30;--z-fab:200;--z-scroll:300;
+  --z-side-overlay:1098;--z-side-panel:1099;--z-side-toggle:1100;
+  --z-modal:1100;--z-modal-inner:1120;--z-splash:1300;
+  --z-confirm:2000;--z-toast:2001;--z-pin-lock:3000;--z-pin-manage:2990
 }
 
+/* ===== حاوية عامة ===== */
+.container{max-width:87.5rem;margin:0 auto}
 
-.container {
-  max-width: 87.5rem;
-  margin: 0 auto;
-}
-
-/* ===== غطاء التحميل (Splash) + البطاقة الداخلية ===== */
-
-#app-splash[hidden] { display:none; }
-
+/* ================== غطاء التحميل (Splash) ================== */
+#app-splash[hidden]{display:none}
 #app-splash{
-  position:fixed;
-  inset:0;
- z-index:var(--z-splash);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  padding:1.5rem;
-
+  position:fixed;inset:0;z-index:var(--z-splash);
+  display:flex;align-items:center;justify-content:center;padding:1.5rem;
   background:
-    linear-gradient(
-      to bottom,
+    linear-gradient(to bottom,
       color-mix(in oklab,var(--modal-overlay,rgba(0,0,0,.8)) 65%,transparent),
       color-mix(in oklab,var(--modal-overlay,rgba(0,0,0,.8)) 80%,transparent)
     ),
-    radial-gradient(
-      circle at center,
+    radial-gradient(circle at center,
       color-mix(in oklab,var(--modal-overlay,rgba(0,0,0,.8)) 0%,transparent) 0%,
       color-mix(in oklab,var(--modal-overlay,rgba(0,0,0,.8)) 70%,transparent) 100%
     ),
     image-set(
       url("../assets/images/background-family-tree-mobile-1x.webp") 1x,
       url("../assets/images/background-family-tree-mobile-2x.webp") 2x
-    )
-    center / cover no-repeat;
-
-  backdrop-filter:blur(7px);
-  -webkit-backdrop-filter:blur(7px);
-  animation:splashFadeIn .35s ease-out;
+    ) center/cover no-repeat;
+  backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);
+  animation:splashFadeIn .35s ease-out
 }
-
-/* ديسكتوب: صورة أكبر */
-@media (min-width: 48rem){
+@media (min-width:48rem){
   #app-splash{
     background:
-      linear-gradient(
-        to bottom,
+      linear-gradient(to bottom,
         color-mix(in oklab,var(--modal-overlay,rgba(0,0,0,.8)) 65%,transparent),
         color-mix(in oklab,var(--modal-overlay,rgba(0,0,0,.8)) 80%,transparent)
       ),
-      radial-gradient(
-        circle at center,
+      radial-gradient(circle at center,
         color-mix(in oklab,var(--modal-overlay,rgba(0,0,0,.8)) 0%,transparent) 0%,
         color-mix(in oklab,var(--modal-overlay,rgba(0,0,0,.8)) 70%,transparent) 100%
       ),
       image-set(
         url("../assets/images/background-family-tree-desktop-1x.webp") 1x,
         url("../assets/images/background-family-tree-desktop-2x.webp") 2x
-      )
-      center / cover no-repeat;
+      ) center/cover no-repeat
   }
 }
-
-
-/* خروج تدريجي للغطاء */
-#app-splash.is-hiding{
-  animation:splashFadeOut .4s ease-in forwards;
-}
+#app-splash.is-hiding{animation:splashFadeOut .4s ease-in forwards}
 
 /* بطاقة التحميل */
 .app-splash-card{
-  position:relative;
-  inline-size:clamp(17rem,70vw,26rem);
-  padding:1.6rem 1.9rem 1.5rem;
-  border-radius:1.35rem;
-  background:linear-gradient(
-    135deg,
+  position:relative;inline-size:clamp(17rem,70vw,26rem);
+  padding:1.6rem 1.9rem 1.5rem;border-radius:1.35rem;
+  background:linear-gradient(135deg,
     color-mix(in oklab,var(--card-bg,#fff) 94%,#fff),
     color-mix(in oklab,var(--panel-bg,var(--card-bg,#fff)) 92%,#fff)
   );
   box-shadow:
     0 .9rem 2.2rem color-mix(in oklab,#000 26%,transparent),
     0 0 0 .06rem color-mix(in oklab,var(--modal-fg,#111) 10%,transparent);
-  text-align:center;
-  overflow:hidden;
+  text-align:center;overflow:hidden
 }
-
-/* أحجام البطاقة حسب العرض */
 @media (max-width:30rem){
-  .app-splash-card{
-    inline-size:100%;
-    padding:1.3rem 1.4rem 1.2rem;
-    border-radius:1.15rem;
-  }
-  .app-splash-title{font-size:.98rem;}
-  .app-splash-subtitle{font-size:.78rem;}
+  .app-splash-card{inline-size:100%;padding:1.3rem 1.4rem 1.2rem;border-radius:1.15rem}
+  .app-splash-title{font-size:.98rem}
+  .app-splash-subtitle{font-size:.78rem}
 }
-
 @media (min-width:64rem){
-  .app-splash-card{
-    inline-size:28rem;
-    padding:1.9rem 2.2rem 1.8rem;
-  }
-  .app-splash-title{font-size:1.15rem;}
+  .app-splash-card{inline-size:28rem;padding:1.9rem 2.2rem 1.8rem}
+  .app-splash-title{font-size:1.15rem}
 }
 
-/* لمسة ضوء متناسقة مع لون النجاح في الثيم */
+/* لمسة إضاءة للبطاقة */
 .app-splash-card::before{
-  content:"";
-  position:absolute;
-  inset:-35% -20% auto auto;
-  background:radial-gradient(
-    circle at top right,
+  content:"";position:absolute;inset:-35% -20% auto auto;opacity:.9;pointer-events:none;
+  background:radial-gradient(circle at top right,
     color-mix(in oklab,var(--accent-success,#16a34a) 32%,transparent) 0,
     transparent 58%
-  );
-  opacity:.9;
-  pointer-events:none;
+  )
 }
 
-/* شعار العائلة */
+/* شعار + نص */
 .app-splash-logo{
-  inline-size:3.5rem;
-  block-size:3.5rem;
-  margin:0 auto .9rem;
-  border-radius:1.25rem;
-  display:flex;
-  align-items:center;
-  justify-content:center;
+  inline-size:3.5rem;block-size:3.5rem;margin:0 auto .9rem;border-radius:1.25rem;
+  display:flex;align-items:center;justify-content:center;padding:.25rem;
   background:color-mix(in oklab,var(--card-bg,#fff) 96%,#000 4%);
-  box-shadow:0 .4rem 1rem color-mix(in oklab,#000 22%,transparent);
-  padding:.25rem;
+  box-shadow:0 .4rem 1rem color-mix(in oklab,#000 22%,transparent)
 }
-.app-splash-logo img{
-  inline-size:100%;
-  block-size:100%;
-  border-radius:1rem;
-  object-fit:contain;
-  display:block;
-}
+.app-splash-logo img{inline-size:100%;block-size:100%;border-radius:1rem;object-fit:contain;display:block}
+.app-splash-title{font-size:1.05rem;font-weight:700;color:var(--title-color,var(--text-main,#111));margin-bottom:.2rem}
+.app-splash-subtitle{font-size:.82rem;color:color-mix(in oklab,var(--text-main,#111) 68%,transparent);opacity:.95;line-height:1.6}
 
-/* العنوان والنص */
-.app-splash-title{
-  font-size:1.05rem;
-  font-weight:700;
-  color:var(--title-color,var(--text-main,#111));
-  margin-bottom:.2rem;
-}
-.app-splash-subtitle{
-  font-size:.82rem;
-  color:color-mix(in oklab,var(--text-main,#111) 68%,transparent);
-  opacity:.95;
-  line-height:1.6;
-}
-
-/* السبنر */
+/* مؤشر التحميل */
 .app-splash-spinner{
-  inline-size:2.7rem;
-  block-size:2.7rem;
-  margin:.95rem auto .6rem;
-  border-radius:999px;
+  inline-size:2.7rem;block-size:2.7rem;margin:.95rem auto .6rem;border-radius:999px;
   border:.22rem solid color-mix(in oklab,var(--modal-fg,#111) 16%,transparent);
   border-top-color:var(--title-color,var(--text-main,#111));
-  animation:spin 1s linear infinite;
+  animation:spin 1s linear infinite
 }
 
-/* شريط التقدّم */
+/* شريط التقدم */
 .app-splash-progress{
-  position:relative;
-  inline-size:100%;
-  max-inline-size:18rem;
-  margin:.25rem auto 0;
-  block-size:.32rem;
-  border-radius:999px;
-  background:color-mix(in oklab,var(--modal-fg,#111) 7%,transparent);
+  position:relative;inline-size:100%;max-inline-size:18rem;margin:.25rem auto 0;
+  block-size:.32rem;border-radius:999px;background:color-mix(in oklab,var(--modal-fg,#111) 7%,transparent)
 }
 .app-splash-progress-bar{
-  display:block;
-  inline-size:0%;
-  block-size:100%;
-  border-radius:inherit;
-  background:var(--title-color,var(--text-main,#111));
-  transition:inline-size .35s ease-out;
+  display:block;inline-size:0%;block-size:100%;border-radius:inherit;
+  background:var(--title-color,var(--text-main,#111));transition:inline-size .35s ease-out
 }
 .app-splash-progress-text{
-  position:absolute;
-  inset-block-start:-1.4rem;
-  inset-inline-end:0;
-  font-size:.78rem;
-  color:color-mix(in oklab,var(--text-main,#111) 70%,transparent);
+  position:absolute;inset-block-start:-1.4rem;inset-inline-end:0;
+  font-size:.78rem;color:color-mix(in oklab,var(--text-main,#111) 70%,transparent)
 }
 
-/* أزرار الـ Splash (Retry) */
-.app-splash-actions{
-  margin-top: .9rem;
-  display:flex;
-  justify-content:center;
-  gap:.6rem;
-}
+/* أزرار الغطاء */
+.app-splash-actions{margin-top:.9rem;display:flex;justify-content:center;gap:.6rem}
+#app-splash.has-error .app-splash-spinner{opacity:.35}
+#app-splash.has-error .app-splash-progress-bar{background:color-mix(in oklab,#ef4444 70%,var(--title-color,var(--text-main,#111)))}
+#app-splash.has-error .app-splash-title{color:color-mix(in oklab,#ef4444 60%,var(--title-color,var(--text-main,#111)))}
 
-#app-splash.has-error .app-splash-spinner{
-  opacity:.35;
-}
-
-/* اختياري: لون الشريط/العنوان عند الخطأ */
-#app-splash.has-error .app-splash-progress-bar{
-  background: color-mix(in oklab, #ef4444 70%, var(--title-color,var(--text-main,#111)));
-}
-#app-splash.has-error .app-splash-title{
-  color: color-mix(in oklab, #ef4444 60%, var(--title-color,var(--text-main,#111)));
-}
-
-/* دوران المؤشر */
-@keyframes spin{
-  to{transform:rotate(360deg);}
-}
-
-/* دخول الشجرة بعد الغطاء */
-.family-tree-enter{
-  opacity:0;
-  transform:translateY(10px) scale(.97);
-  animation:familyTreeIn .45s ease-out forwards;
-}
-@keyframes familyTreeIn{
-  from{opacity:0;transform:translateY(10px) scale(.97);}
-  to{opacity:1;transform:translateY(0) scale(1);}
-}
-
-/* دخول وخروج الغطاء */
-@keyframes splashFadeIn{
-  from{opacity:0;transform:translateY(6px);}
-  to{opacity:1;transform:translateY(0);}
-}
-@keyframes splashFadeOut{
-  from{opacity:1;transform:translateY(0);}
-  to{opacity:0;transform:translateY(10px);}
-}
+/* حركات */
+@keyframes spin{to{transform:rotate(360deg)}}
+.family-tree-enter{opacity:0;transform:translateY(10px) scale(.97);animation:familyTreeIn .45s ease-out forwards}
+@keyframes familyTreeIn{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes splashFadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes splashFadeOut{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(10px)}}
 
 /* ================== شريط التمرير ================== */
 ::-webkit-scrollbar{width:.75rem;height:.75rem}
 ::-webkit-scrollbar-track{background:var(--scroll-track);border-radius:.625rem}
 ::-webkit-scrollbar-thumb{
-  background:var(--scroll-thumb);
-  border-radius:.625rem;border:.125rem solid var(--scroll-track);
+  background:var(--scroll-thumb);border-radius:.625rem;border:.125rem solid var(--scroll-track);
   opacity:.8;transition:background-color .3s,opacity .3s
 }
 ::-webkit-scrollbar-thumb:hover{background:var(--scroll-thumb-hover);opacity:.6}
 
 /* ================== التوست ================== */
-/* الأساس */
 #toastContainer{
   position:fixed;top:.75rem;left:50%;transform:translateX(-50%);
   z-index:var(--z-toast);display:flex;flex-direction:column;gap:.625rem;
-  pointer-events:none;
+  pointer-events:none
 }
 .toast{
   display:flex;align-items:center;justify-content:center;gap:.75rem;
@@ -328,7 +158,7 @@ body {
   border-radius:.625rem;font-weight:500;font-size:.875rem;
   box-shadow:0 .25rem 1rem rgba(0,0,0,.2);
   opacity:0;transform:translateY(-2rem);pointer-events:all;
-  animation:slideIn .4s forwards,slideOut .4s 2.6s forwards;
+  animation:slideIn .4s forwards,slideOut .4s 2.6s forwards
 }
 .toast .icon{font-size:1.125rem}
 .toast.success{background:var(--toast-success-bg);color:var(--toast-success-fg)}
@@ -349,7 +179,10 @@ body {
 .btn:focus-visible{outline:3px solid var(--ctl-ring);outline-offset:2px}
 .btn:disabled,.btn[disabled]{opacity:.55;filter:grayscale(.15);cursor:not-allowed;transform:none}
 .btn.small{padding:.4rem .7rem;font-size:.85rem}
-.btn.tiny{padding:.35rem .5rem;border-radius:.5rem;background:var(--card-bg);color:var(--text-main);border:1px solid var(--surface-border)}
+.btn.tiny{
+  padding:.35rem .5rem;border-radius:.5rem;background:var(--card-bg);
+  color:var(--text-main);border:1px solid var(--surface-border)
+}
 .btn.tiny:hover{background:color-mix(in srgb,var(--title-color) 12%,var(--card-bg))}
 .btn.primary{background:var(--modal-primary);color:var(--modal-primary-fg);border-color:var(--modal-primary)}
 .btn.primary:hover{background:var(--modal-primary-hover)}
@@ -360,135 +193,215 @@ body {
 .danger-btn i{margin-inline-start:.25rem}
 @media (prefers-reduced-motion:reduce){.btn{transition:none;transform:none!important}}
 
-/* زر إغلاق عام (سيُعاد تعريفه داخل bio.css للمودال الخاص بالسيرة) */
+/* زر إغلاق عام */
 .close-button{
   display:inline-flex;align-items:center;justify-content:center;width:2.25rem;height:2.25rem;
-  border:.0625rem solid color-mix(in oklab,var(--modal-fg) 20%,transparent);border-radius:999px;background:transparent;cursor:pointer;
-  transition:transform .12s,background-color .12s,border-color .12s;color:var(--modal-fg)
+  border:.0625rem solid color-mix(in oklab,var(--modal-fg) 20%,transparent);
+  border-radius:999px;background:transparent;cursor:pointer;color:var(--modal-fg);
+  transition:transform .12s,background-color .12s,border-color .12s
 }
 .close-button:hover{background:color-mix(in oklab,var(--modal-fg) 10%,transparent);transform:scale(1.04)}
 .close-button:focus{outline:2px solid var(--title-color);outline-offset:2px}
 
-
-/* ========== تركيز الوصول العام للأزرار ========== */
-:where(button,[role="button"],.family-button,.theme-button):focus{outline:none !important}
+/* ===== تركيز الوصول العام ===== */
+:where(button,[role="button"],.family-button,.theme-button):focus{outline:none!important}
 :where(button,[role="button"],.family-button,.theme-button):focus-visible{
-  outline:3px solid var(--focus-ring);outline-offset:2px !important;border-radius:.5rem !important
+  outline:3px solid var(--focus-ring);outline-offset:2px!important;border-radius:.5rem!important
 }
 
-/* Utilities عامة */
+/* ===== أدوات مساعدة ===== */
 [hidden]{display:none!important}
-
-/* إخفاء وصفي لملصق select */
 .visually-hidden{
-  position:absolute!important;
-  clip:rect(1px,1px,1px,1px);
-  padding:0;border:0;height:1px;width:1px;overflow:hidden;
+  position:absolute!important;clip:rect(1px,1px,1px,1px);
+  padding:0;border:0;height:1px;width:1px;overflow:hidden
 }
+input[type="search"]::-webkit-search-cancel-button{-webkit-appearance:none}
 
-/* إخفاء زر المسح الأصلي للمتصفحات WebKit */
-input[type="search"]::-webkit-search-cancel-button{ -webkit-appearance:none; }
-
-/* الحاوية العامة لحقل + زر المسح */
-.input-wrap{
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-/* أضف مساحة للزر داخل الحقل */
-.input-wrap input{
-  padding-inline-end: 2rem;
-}
-
-
-
-/* زر المسح العام */
+/* ===== حقل البحث + زر المسح ===== */
+.input-wrap{position:relative;display:flex;align-items:center}
+.input-wrap input{padding-inline-end:2rem}
 .clear-btn{
-  position: absolute;
-  inset-inline-end: .5rem;
-  inline-size: 1.75rem;
-  block-size: 1.75rem;
-  display: grid;
-  place-items: center;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  color: var(--ink, #333);
-  opacity: .55;
-  transition: opacity .15s ease;
+  position:absolute;inset-inline-end:.5rem;inline-size:1.75rem;block-size:1.75rem;
+  display:grid;place-items:center;background:transparent;border:0;cursor:pointer;
+  color:var(--ink,#333);opacity:.55;transition:opacity .15s ease
 }
-
-.clear-btn:hover{ opacity: .95; }
+.clear-btn:hover{opacity:.95}
 .clear-btn:focus{
-  outline: 2px solid color-mix(in oklab, var(--ink, #333) 40%, transparent);
-  outline-offset: 2px;
+  outline:2px solid color-mix(in oklab,var(--ink,#333) 40%,transparent);
+  outline-offset:2px
 }
-.clear-btn[hidden]{ display: none !important; }
+.clear-btn[hidden]{display:none!important}
 
-/* 1) ≤ 23.9rem */
+/* ================== عارض الصور (Overlay) ================== */
+.image-viewer-overlay{
+  position:fixed;inset:0;z-index:9999;
+  opacity:0;pointer-events:none;transition:opacity .25s ease-out;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--modal-overlay,rgba(0,0,0,.75))
+}
+.image-viewer-overlay.is-open{opacity:1;pointer-events:auto}
+
+/* نافذة العرض */
+.image-viewer-dialog{
+  position:relative;margin:0;display:flex;align-items:center;justify-content:center;
+  width:min(39.25rem,88vw);height:min(39.25rem,82vh);
+  background:transparent;border-radius:1.2rem;overflow:hidden;
+  box-shadow:0 .6rem 2rem rgba(0,0,0,.45);
+  opacity:0;transform:scale(.96);
+  transition:opacity .25s ease-out,transform .25s ease-out;outline:none
+}
+.image-viewer-overlay.is-open .image-viewer-dialog{opacity:1;transform:scale(1)}
+
+/* إطار ثابت لاحتواء الصورة والسبنر */
+.image-viewer-stage{
+  position:relative;width:100%;height:100%;
+  display:grid;place-items:center;overflow:hidden
+}
+
+/* زر الإغلاق */
+.image-viewer-close{
+  position:absolute;top:1rem;inset-inline-start:1rem;
+  width:2.4rem;height:2.4rem;font-size:1.25rem;border:none;border-radius:999px;
+  background:rgba(0,0,0,.65);color:#fff;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 .18rem .6rem rgba(0,0,0,.55);z-index:3
+}
+.image-viewer-close:hover{background:rgba(0,0,0,.85)}
+
+/* عرض الصورة بدون تكبير مبالغ */
+.image-viewer-img{
+  width:auto;height:auto;max-width:100%;max-height:100%;
+  object-fit:contain;display:block;
+  transition:opacity .2s ease-out;will-change:transform
+}
+
+/* حالة التحميل */
+.image-viewer-overlay.is-loading .image-viewer-img{opacity:.35}
+.image-viewer-overlay.is-loading .image-viewer-dialog::after{
+  content:"";position:absolute;inset:0;
+  background:radial-gradient(circle,rgba(255,255,255,.14),transparent 60%);
+  pointer-events:none;z-index:1
+}
+
+/* السبنر */
+.image-viewer-spinner{
+  position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+  z-index:2;pointer-events:none
+}
+.image-viewer-overlay.is-loading .image-viewer-spinner{display:flex}
+.image-viewer-spinner::before{
+  content:"";width:34px;height:34px;border-radius:999px;
+  border:3px solid rgba(255,255,255,.28);border-top-color:rgba(255,255,255,.9);
+  animation:imageViewerSpin .8s linear infinite
+}
+@keyframes imageViewerSpin{to{transform:rotate(360deg)}}
+
+/* شريط التنقل */
+.image-viewer-nav{
+  position:absolute;bottom:7%;width:100%;padding:0 .5rem;
+  display:flex;align-items:center;justify-content:space-between;
+  pointer-events:none;z-index:3
+}
+.image-viewer-arrow{
+  pointer-events:auto;width:2.4rem;height:2.4rem;border:none;border-radius:999px;
+  background:rgba(0,0,0,.65);color:#fff;font-size:1.2rem;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 .18rem .6rem rgba(0,0,0,.55);cursor:pointer
+}
+.image-viewer-arrow:disabled{opacity:.35;cursor:default}
+.image-viewer-counter{
+  pointer-events:none;padding:.2rem .7rem;border-radius:999px;
+  background:rgba(0,0,0,.55);color:#fff;font-size:.8rem
+}
+.image-viewer-center{pointer-events:auto;display:flex;align-items:center;gap:.5rem}
+
+/* زر الحفظ */
+.image-viewer-save{
+  pointer-events:auto;border:none;border-radius:999px;
+  padding:.35rem .85rem;background:rgba(0,0,0,.65);color:#fff;font-size:.85rem;
+  display:inline-flex;align-items:center;gap:.4rem;cursor:pointer;
+  box-shadow:0 .18rem .6rem rgba(0,0,0,.55)
+}
+.image-viewer-save:hover{background:rgba(0,0,0,.85)}
+
+/* وضع بسيط: زر حفظ فقط */
+.image-viewer-overlay.is-minimal .image-viewer-nav{
+  bottom:1.2rem;left:0;right:0;width:100%;padding:0 1rem;
+  justify-content:center;pointer-events:none
+}
+.image-viewer-overlay.is-minimal .image-viewer-save{pointer-events:auto;padding:.55rem .95rem}
+
+/* مؤشر السحب عند التكبير */
+.image-viewer-overlay.is-panning .image-viewer-img{cursor:grabbing}
+.image-viewer-overlay.is-full .image-viewer-img{cursor:grab}
+
+.image-viewer-overlay:not(.is-open){ pointer-events:none !important; }
+
+/* ================== استجابات عارض الصور ================== */
+@media (max-width:23.9rem){
+  .image-viewer-dialog{width:94vw;height:78vh;border-radius:.9rem}
+  .image-viewer-close{top:.6rem;inset-inline-start:.6rem;width:2rem;height:2rem;font-size:1.05rem}
+  .image-viewer-nav{bottom:4%;padding:0 .4rem}
+  .image-viewer-arrow{width:2rem;height:2rem;font-size:1.05rem}
+  .image-viewer-counter{font-size:.75rem;padding:.18rem .55rem}
+  .image-viewer-save{font-size:.78rem;padding:.32rem .7rem;gap:.35rem}
+  .image-viewer-overlay.is-minimal .image-viewer-nav{bottom:.85rem;padding:0 .75rem}
+  .image-viewer-overlay.is-minimal .image-viewer-save{padding:.5rem .85rem;font-size:.8rem}
+  .image-viewer-spinner::before{width:28px;height:28px;border-width:3px}
+}
+@media (min-width:24rem) and (max-width:29.9rem){
+  .image-viewer-dialog{width:92vw;height:80vh;border-radius:1rem}
+  .image-viewer-close{top:.7rem;inset-inline-start:.7rem;width:2.15rem;height:2.15rem;font-size:1.12rem}
+  .image-viewer-nav{bottom:5%;padding:0 .45rem}
+  .image-viewer-arrow{width:2.15rem;height:2.15rem;font-size:1.1rem}
+  .image-viewer-counter{font-size:.78rem}
+  .image-viewer-save{font-size:.82rem;padding:.34rem .78rem}
+  .image-viewer-overlay.is-minimal .image-viewer-nav{bottom:1rem;padding:0 .9rem}
+}
+@media (min-width:30rem) and (max-width:39.9rem){
+  .image-viewer-dialog{width:90vw;height:82vh;border-radius:1.05rem}
+  .image-viewer-close{top:.85rem;inset-inline-start:.85rem}
+  .image-viewer-nav{bottom:6%;padding:0 .55rem}
+  .image-viewer-save{font-size:.84rem}
+  .image-viewer-overlay.is-minimal .image-viewer-nav{bottom:1.1rem;padding:0 1rem}
+}
+@media (min-width:40rem) and (max-width:47.9rem){
+  .image-viewer-dialog{width:min(34rem,90vw);height:min(34rem,82vh)}
+  .image-viewer-nav{bottom:6.5%}
+}
+@media (min-width:48rem) and (max-width:63.9rem){
+  .image-viewer-dialog{width:min(36.5rem,88vw);height:min(36.5rem,82vh)}
+  .image-viewer-nav{bottom:7%}
+}
+@media (min-width:64rem){
+  .image-viewer-dialog{width:min(41rem,86vw);height:min(41rem,84vh);border-radius:1.25rem}
+  .image-viewer-close{top:1rem;inset-inline-start:1rem}
+  .image-viewer-nav{bottom:7%}
+}
+
+/* ================== استجابات التوست/العناصر العامة ================== */
 @media (max-width:23.9rem){
   .btn,input,select{font-size:.8rem;padding:.4rem .6rem}
-  #toastContainer{
-    top:.5rem;left:0;right:0;transform:none;
-    padding-inline:.5rem;align-items:stretch;
-  }
-  .toast{
-    min-width:100%;max-width:100%;
-    padding:.6rem .75rem;font-size:.8rem;border-radius:.5rem;
-  }
+  #toastContainer{top:.5rem;left:0;right:0;transform:none;padding-inline:.5rem;align-items:stretch}
+  .toast{min-width:100%;max-width:100%;padding:.6rem .75rem;font-size:.8rem;border-radius:.5rem}
 }
-
-/* 2) 24–29.9rem */
 @media (min-width:24rem) and (max-width:29.9rem){
-  #toastContainer{
-    top:.6rem;left:50%;transform:translateX(-50%);
-    padding-inline:.75rem;
-  }
-  .toast{
-    min-width:16rem;max-width:20rem;
-    padding:.65rem 1rem;font-size:.825rem;
-  }
+  #toastContainer{top:.6rem;left:50%;transform:translateX(-50%);padding-inline:.75rem}
+  .toast{min-width:16rem;max-width:20rem;padding:.65rem 1rem;font-size:.825rem}
 }
-
-/* 3) 30–39.9rem */
 @media (min-width:30rem) and (max-width:39.9rem){
-  #toastContainer{
-    top:.75rem;left:50%;transform:translateX(-50%);
-    padding-inline:1rem;
-  }
-  .toast{
-    min-width:17rem;max-width:22rem;font-size:.85rem;
-  }
+  #toastContainer{top:.75rem;left:50%;transform:translateX(-50%);padding-inline:1rem}
+  .toast{min-width:17rem;max-width:22rem;font-size:.85rem}
 }
-
-/* 4) 40–47.9rem */
 @media (min-width:40rem) and (max-width:47.9rem){
-  #toastContainer{
-    top:.9rem;left:50%;transform:translateX(-50%);
-  }
-  .toast{
-    min-width:18rem;max-width:24rem;
-  }
+  #toastContainer{top:.9rem;left:50%;transform:translateX(-50%)}
+  .toast{min-width:18rem;max-width:24rem}
 }
-
-/* 5) 48–63.9rem */
 @media (min-width:48rem) and (max-width:63.9rem){
-  #toastContainer{
-    top:1rem;left:50%;transform:translateX(-50%);
-  }
-  .toast{
-    min-width:18rem;max-width:25rem;
-  }
+  #toastContainer{top:1rem;left:50%;transform:translateX(-50%)}
+  .toast{min-width:18rem;max-width:25rem}
 }
-
-/* 6) ≥ 64rem */
 @media (min-width:64rem){
-  #toastContainer{
-    top:1rem;right:1.25rem;left:auto;
-    transform:none;align-items:flex-end;
-  }
-  .toast{
-    min-width:18rem;max-width:26rem;
-  }
+  #toastContainer{top:1rem;right:1.25rem;left:auto;transform:none;align-items:flex-end}
+  .toast{min-width:18rem;max-width:26rem}
 }

@@ -4,30 +4,35 @@
    1) ثوابت / حارس بيئة
 ========================= */
 const DB_NAME = 'familyTreeDB';
-const DB_VERSION = 7;
+const DB_VERSION = 11;
 
 // Stores
 const STORE = 'families';
 const PHOTO_STORE = 'photos';
-const STORY_PHOTO_STORE = 'storyPhotos';
+const STORY_FILE_STORE = 'storyFiles';
 const EVENT_PHOTO_STORE = 'eventPhotos';
-const SOURCE_PHOTO_STORE = 'sourcePhotos';
+const SOURCE_STORE = 'sourceFiles';
+const EDUCATION_STORE = 'educationFiles';
 const PIN_STORE = 'pin';
 
 // قيود أحجام (كما كانت ضمنيًا موزعة)
 const MAX_PERSON_PHOTO_BYTES = 8 * 1024 * 1024;   // صور الأشخاص
 const MAX_STORY_EVENT_BYTES  = 8 * 1024 * 1024;   // بعد ضغط صور القصص/الأحداث
 const MAX_SOURCE_FILE_BYTES  = 20 * 1024 * 1024;  // مرفقات المصادر
+const MAX_EDUCATION_FILE_BYTES = 20 * 1024 * 1024; // مرفقات التعليم
 
 // قائمة موحّدة للتعامل مع التفريغ/المعاملات
 const ALL_STORES = [
   STORE,
   PHOTO_STORE,
-  STORY_PHOTO_STORE,
+  STORY_FILE_STORE,
   EVENT_PHOTO_STORE,
-  SOURCE_PHOTO_STORE,
+  SOURCE_STORE,
+  EDUCATION_STORE,
   PIN_STORE
 ];
+
+
 
 if (!('indexedDB' in window)) {
   console.warn('IndexedDB not supported');
@@ -393,25 +398,83 @@ async function delPhotosBulk(ids = []) {
 }
 
 /* =========================
-   7) صور القصص (storyPhotos)
+   7) مرفقات القصص (storyFiles)
+   - مثل المصادر/التعليم: ضغط الصور فقط + حد 20MB
 ========================= */
 
-/** حفظ صورة قصة مضغوطة وإرجاع ref idb:story_... */
-async function putStoryImage({ file, personId = null, storyId = null }) {
-  return _putCompressedMedia(
-    STORY_PHOTO_STORE,
-    'story_',
-    { file, personId, entityId: storyId, entityField: 'storyId' }
-  );
+const MAX_STORY_FILE_BYTES = 20 * 1024 * 1024;
+
+async function putStoryFile({ file, personId = null, storyId = null, meta = {} }) {
+  if (!(file instanceof Blob)) throw new TypeError('putStoryFile: expected File/Blob');
+
+  const name = (meta?.name || file?.name || '');
+  const ext  = (meta?.ext || (name.includes('.') ? name.split('.').pop().toLowerCase() : ''));
+  const mt   = (file.type || meta?.mime || meta?.mimeType || '').toLowerCase();
+
+  const kind =
+    meta?.kind ||
+    (mt.startsWith('image/') ? 'image' :
+      mt === 'application/pdf' ? 'pdf' :
+        (mt.includes('word') || ['doc', 'docx', 'rtf', 'odt'].includes(ext)) ? 'word' :
+          (mt.includes('excel') || ['xls', 'xlsx', 'csv'].includes(ext)) ? 'excel' :
+            'other');
+
+  let blobToStore = file;
+
+  // اضغط فقط الصور
+  if (/^image\//i.test(mt)) {
+    blobToStore = await _compressImageFileToBlob(file, {
+      maxWidth: 1600,
+      maxHeight: 1600,
+      quality: 0.8,
+      mimeType: 'image/jpeg'
+    });
+  }
+
+  if (blobToStore.size > MAX_STORY_FILE_BYTES) {
+    throw new Error('putStoryFile: blob too large');
+  }
+
+  const key = _genId('stf_');
+  const value = {
+    blob: blobToStore,
+    meta: {
+      mime: (meta?.mime || mt || blobToStore.type || ''),
+      name,
+      ext,
+      kind,
+      personId: personId || null,
+      storyId: storyId || null,
+      createdAt: new Date().toISOString(),
+      ...meta
+    }
+  };
+
+  await txWrite(STORY_FILE_STORE, (st) => st.put(value, key));
+  return `idb:${key}`;
 }
 
-/** تحويل مرجع idb: إلى blob:URL للعرض */
-async function getStoryImageURL(ref) {
-  return _getBlobUrlFromStore(STORY_PHOTO_STORE, ref);
+async function getStoryFileURL(ref) {
+  return _getBlobUrlFromStore(STORY_FILE_STORE, ref);
 }
 
-async function deleteStoryImage(ref) {
-  return _deleteByRef(STORY_PHOTO_STORE, ref);
+async function getStoryFileMeta(ref) {
+  if (!ref) return null;
+  const key = _idbKey(ref);
+  const record = await txRead(STORY_FILE_STORE, (st) => st.get(key)).catch(() => null);
+  const meta = record?.meta || null;
+  if (!meta) return null;
+
+  return {
+    mime: meta.mime || meta.mimeType || '',
+    name: meta.name || '',
+    ext: meta.ext || '',
+    kind: meta.kind || ''
+  };
+}
+
+async function deleteStoryFile(ref) {
+  return _deleteByRef(STORY_FILE_STORE, ref);
 }
 
 /* =========================
@@ -505,19 +568,19 @@ async function putSourceFile({ file, personId = null, sourceId = null, meta = {}
     }
   };
 
-  await txWrite(SOURCE_PHOTO_STORE, (st) => st.put(value, key));
+  await txWrite(SOURCE_STORE, (st) => st.put(value, key));
   return `idb:${key}`;
 }
 
 async function getSourceFileURL(ref) {
-  return _getBlobUrlFromStore(SOURCE_PHOTO_STORE, ref);
+  return _getBlobUrlFromStore(SOURCE_STORE, ref);
 }
 
 async function getSourceFileMeta(ref) {
   if (!ref) return null;
   const key = _idbKey(ref);
 
-  const record = await txRead(SOURCE_PHOTO_STORE, (st) => st.get(key)).catch(() => null);
+  const record = await txRead(SOURCE_STORE, (st) => st.get(key)).catch(() => null);
   const meta = record?.meta || null;
   if (!meta) return null;
 
@@ -536,7 +599,88 @@ async function getSourceImageURL(ref) {
 }
 
 async function deleteSourceFile(ref) {
-  return _deleteByRef(SOURCE_PHOTO_STORE, ref);
+  return _deleteByRef(SOURCE_STORE, ref);
+}
+
+/* =========================
+   9.5) مرفقات التعليم (educationFiles)
+   Store واحد لكل شيء: صور + PDF/Word/Excel...
+   - ضغط الصور فقط
+   - حد الحجم 20MB
+========================= */
+
+async function putEducationFile({ file, personId = null, eduId = null, meta = {} }) {
+  if (!(file instanceof Blob)) throw new TypeError('putEducationFile: expected File/Blob');
+
+  const name = (meta?.name || file?.name || '');
+  const ext  = (meta?.ext || (name.includes('.') ? name.split('.').pop().toLowerCase() : ''));
+  const mt   = (file.type || meta?.mime || meta?.mimeType || '').toLowerCase();
+
+  const kind =
+    meta?.kind ||
+    (mt.startsWith('image/') ? 'image' :
+      mt === 'application/pdf' ? 'pdf' :
+        (mt.includes('word') || ['doc', 'docx', 'rtf', 'odt'].includes(ext)) ? 'word' :
+          (mt.includes('excel') || ['xls', 'xlsx', 'csv'].includes(ext)) ? 'excel' :
+            'other');
+
+  let blobToStore = file;
+
+  // اضغط فقط الصور (مثل المصادر)
+  if (/^image\//i.test(mt)) {
+    blobToStore = await _compressImageFileToBlob(file, {
+      maxWidth: 1600,
+      maxHeight: 1600,
+      quality: 0.8,
+      mimeType: 'image/jpeg'
+    });
+  }
+
+  if (blobToStore.size > MAX_EDUCATION_FILE_BYTES) {
+    throw new Error('putEducationFile: blob too large');
+  }
+
+  const key = _genId('eduf_');
+  const value = {
+    blob: blobToStore,
+    meta: {
+      mime: (meta?.mime || mt || blobToStore.type || ''),
+      name,
+      ext,
+      kind,
+      personId: personId || null,
+      eduId: eduId || null,
+      createdAt: new Date().toISOString(),
+      ...meta
+    }
+  };
+
+  await txWrite(EDUCATION_STORE, (st) => st.put(value, key));
+  return `idb:${key}`;
+}
+
+async function getEducationFileURL(ref) {
+  return _getBlobUrlFromStore(EDUCATION_STORE, ref);
+}
+
+async function getEducationFileMeta(ref) {
+  if (!ref) return null;
+  const key = _idbKey(ref);
+
+  const record = await txRead(EDUCATION_STORE, (st) => st.get(key)).catch(() => null);
+  const meta = record?.meta || null;
+  if (!meta) return null;
+
+  return {
+    mime: meta.mime || meta.mimeType || '',
+    name: meta.name || '',
+    ext:  meta.ext || '',
+    kind: meta.kind || ''
+  };
+}
+
+async function deleteEducationFile(ref) {
+  return _deleteByRef(EDUCATION_STORE, ref);
 }
 
 /* =========================
@@ -680,8 +824,8 @@ export const DB = {
   // Photos الأشخاص
   putPhoto, getPhoto, clearPhoto, listPhotoIds, delPhotosBulk,
 
-  // Photos القصص
-  putStoryImage, getStoryImageURL, deleteStoryImage,
+// مرفقات القصص
+putStoryFile, getStoryFileURL, getStoryFileMeta, deleteStoryFile,
 
   // Photos الأحداث
   putEventImage, getEventImageURL, deleteEventImage,
@@ -689,8 +833,8 @@ export const DB = {
   // Photos المصادر/الوثائق
   putSourceFile, getSourceFileURL, getSourceFileMeta, deleteSourceFile,
 
-  // (توافق قديم)
-  putSourceImage, getSourceImageURL,
+    // مرفقات التعليم
+  putEducationFile, getEducationFileURL, getEducationFileMeta, deleteEducationFile,
 
   // إدارة
   nuke,
@@ -701,9 +845,11 @@ export const DB = {
   _keysFamilies:      () => keys(STORE),
   _keysPhotos:        () => keys(PHOTO_STORE),
 
-  _countSourceFiles:  () => count(SOURCE_PHOTO_STORE),
-  _keysSourceFiles:   () => keys(SOURCE_PHOTO_STORE),
+  _countSourceFiles:  () => count(SOURCE_STORE),
+  _countEducationFiles: () => count(EDUCATION_STORE),
 
-  _countStoryPhotos:  () => count(STORY_PHOTO_STORE),
+  _keysSourceFiles:   () => keys(SOURCE_STORE),
+
+_countStoryFiles:  () => count(STORY_FILE_STORE),
   _countEventPhotos:  () => count(EVENT_PHOTO_STORE)
 };

@@ -5,11 +5,13 @@ import { LABELS } from '../model/families.js';
 import { resolveAncestorsForPerson } from '../model/families.core.js';
 import * as Lineage from '../features/lineage.js';
 import { inferGender } from '../model/roles.js';
+import { isPersonRendered } from './tree.cards.js';
 import { createStoriesSection } from '../features/person.stories.js';
 import { createEventsSection } from '../features/person.events.js';
 import { createSourcesSection } from '../features/person.sources.js';
-// NEW: للتحقق من أن الشخص له بطاقة مرسومة في الشجرة
-import { isPersonRendered } from './tree.cards.js';
+import { createEducationSection } from '../features/person.education.js';
+import { createCareerSection } from '../features/person.career.js';
+
 /* =========================
    توابع العمر والتواريخ
    ========================= */
@@ -192,6 +194,8 @@ const BIO_SECTION_KEYS = [
   'timeline',   // الخط الزمني للأحداث
   'stories',    // القصص والمذكّرات
   'sources',    // المصادر والوثائق (NEW)
+  'education',
+  'career',
   'achievements',
   'hobbies'
 ];
@@ -206,7 +210,10 @@ const BIO_SECTION_GROUPS = {
   wives:    ['wives'],
   stories:  ['stories'],
   sources:  ['sources'],
-  timeline: ['timeline'] 
+  timeline: ['timeline'],
+  education: ['education'],
+  career: ['career'],
+
 };
 
 
@@ -391,6 +398,8 @@ function detectSectionPresence(bio, person, family){
     hasStories:  false,
     hasTimeline: false,
     hasSources:  false,
+    hasEducation: false,
+    hasCareer: false,
 
     siblingsCount:     0,
     unclesAuntsCount:  0,
@@ -400,7 +409,10 @@ function detectSectionPresence(bio, person, family){
     wivesCount:        0,
     storiesCount:      0,
     timelineCount:     0,
-    sourcesCount:      0
+    sourcesCount:      0,
+    educationCount: 0,
+    careerCount: 0,
+
   };
 
   bio = bio || {};
@@ -511,6 +523,16 @@ function detectSectionPresence(bio, person, family){
   const sources = Array.isArray(person.sources) ? person.sources : [];
   out.hasSources   = sources.length > 0;
   out.sourcesCount = sources.length;
+
+    // التعليم
+  const education = Array.isArray(person.education) ? person.education : [];
+  out.hasEducation = education.length > 0;
+  out.educationCount = education.length;
+
+  // الوظيفة
+  const career = Array.isArray(person.career) ? person.career : [];
+  out.hasCareer = career.length > 0;
+  out.careerCount = career.length;
 
   return out;
 }
@@ -1270,6 +1292,30 @@ function buildSourcesSection(person, handlers){
   return root;
 }
 
+/* ===== 6c) التعليم ===== */
+function buildEducationSection(person, handlers){
+  if (!person) return null;
+
+  const root = createEducationSection(person, handlers);
+  if (!root) return null;
+
+  root.classList.add('bio-section', 'bio-section-education');
+  root.dataset.sectionId = 'education';
+  return root;
+}
+
+/* ===== 6d) المسار الوظيفي ===== */
+function buildCareerSection(person, handlers){
+  if (!person) return null;
+
+  const root = createCareerSection(person, handlers);
+  if (!root) return null;
+
+  root.classList.add('bio-section', 'bio-section-career');
+  root.dataset.sectionId = 'career';
+  return root;
+}
+
 
 /* ===== X) الخط الزمني للأحداث ===== */
 function buildTimelineSection(person, handlers){
@@ -1340,6 +1386,8 @@ export function renderBioSections(container, bio, person = null, family = null, 
     timeline:     () => buildTimelineSection(person, handlers),
     stories:      () => buildStoriesSection(person, handlers),
     sources:      () => buildSourcesSection(person, handlers),
+    education:    () => buildEducationSection(person, handlers),
+    career:       () => buildCareerSection(person, handlers),
     achievements: () => buildAchievementsSection(bio),
     hobbies:      () => buildHobbiesSection(bio)
   };
@@ -1351,20 +1399,27 @@ export function renderBioSections(container, bio, person = null, family = null, 
   let activeSectionId = 'basic';
 
   if (currentMode && currentMode !== 'summary'){
-    const known = ['family','grands','children','wives','stories','sources','timeline'];
+const known = ['family','grands','children','wives','stories','sources','education','career','timeline'];
     if (known.includes(currentMode)) activeSectionId = currentMode;
   }
 
-  const shortcutItems = [
-    { id:'basic',    label:'الأساسي',       count:null,                         hideIf:false },
-    { id:'family',   label:'العائلة',       count:presence.familyCount,         hideIf:!presence.hasFamily },
-    { id:'grands',   label:'الأسلاف',       count:presence.grandsCount,         hideIf:!presence.hasGrands },
-    { id:'children', label:'أبناء – بنات',  count:presence.childrenCount,       hideIf:!presence.hasChildren },
-    { id:'wives',    label:'زوجات',         count:presence.wivesCount,          hideIf:!presence.hasWives },
-    { id:'stories',  label:'القصص',         count:presence.storiesCount,        hideIf:false },
-    { id:'timeline', label:'الأحداث',       count:presence.timelineCount,       hideIf:false },
-    { id:'sources',  label:'الوثائق',       count:presence.sourcesCount,        hideIf:false }
-  ];
+const shortcutItems = [
+  // ثابتة
+  { id:'basic',    label:'الأساسي',       count:null,                  hideIf:false },
+
+  // اختيارية (Presence-based)
+  { id:'family',   label:'العائلة',       count:presence.familyCount,  hideIf:!presence.hasFamily },
+  { id:'grands',   label:'الأسلاف',       count:presence.grandsCount,  hideIf:!presence.hasGrands },
+  { id:'children', label:'أبناء – بنات',  count:presence.childrenCount,hideIf:!presence.hasChildren },
+  { id:'wives',    label:'زوجات',         count:presence.wivesCount,   hideIf:!presence.hasWives },
+
+  // ثابتة
+  { id:'education', label:'التعليم',      count:presence.educationCount, hideIf:false },
+  { id:'career',    label:'الوظيفة',      count:presence.careerCount,    hideIf:false },
+  { id:'stories',   label:'القصص',        count:presence.storiesCount,   hideIf:false },
+  { id:'sources',   label:'الوثائق',      count:presence.sourcesCount,   hideIf:false },
+  { id:'timeline',  label:'الأحداث',      count:presence.timelineCount,  hideIf:false },
+];
 
 
   const scrollToSection = (id) => {
@@ -1462,15 +1517,23 @@ export function getAvailableBioModes(bio, person, family){
   }
 
   const storiesLabel = p.storiesCount ? `القصص والمذكّرات (${p.storiesCount})`
+  
     : 'القصص والمذكّرات';
   const sourcesLabel = p.sourcesCount ? `المصادر والوثائق (${p.sourcesCount})`
+  
     : 'المصادر والوثائق';
   const timelineLabel = p.timelineCount  ? `الخطّ الزمني للأحداث (${p.timelineCount})`
+  
     : 'الخطّ الزمني للأحداث';
-
-  modes.push({ value:'stories',  label: storiesLabel });
-  modes.push({ value:'sources',  label: sourcesLabel });
-  modes.push({ value:'timeline', label: timelineLabel });
+  const educationLabel = p.educationCount ? `التعليم (${p.educationCount})` : 'التعليم';
+  
+  const careerLabel = p.careerCount ? `المسار الوظيفي (${p.careerCount})` : 'المسار الوظيفي';
+  
+modes.push({ value:'education', label: educationLabel });
+modes.push({ value:'career',    label: careerLabel });
+modes.push({ value:'stories',  label: storiesLabel });
+modes.push({ value:'sources',  label: sourcesLabel });
+modes.push({ value:'timeline', label: timelineLabel });
 
   return modes;
 }

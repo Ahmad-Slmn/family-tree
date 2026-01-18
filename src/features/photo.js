@@ -2416,13 +2416,6 @@ if (!photoBox.__viewerBound){
 
 // Viewer API singleton (يتشارك overlay نفسه)
 const viewer = createImageViewerOverlay({
-  overlayClass: 'bio-image-viewer-overlay',
-  backdropClass: 'bio-image-viewer-backdrop',
-  dialogClass: 'bio-image-viewer-dialog',
-  imgClass: 'bio-image-viewer-img',
-  closeBtnClass: 'bio-image-viewer-close',
-  navClass: 'bio-image-viewer-nav',
-  saveBtnClass: 'bio-image-viewer-save image-viewer-save',
   minimalNav: true
 });
 

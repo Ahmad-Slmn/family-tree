@@ -1,0 +1,252 @@
+/* ==========================================================================
+   bio-career.css — تنسيق خاص لقسم "المسار الوظيفي"
+   ========================================================================== */
+
+/* عنوان القسم + أيقونة الحقيبة */
+.bio-section-career .career-section-title{
+  display:flex;
+  align-items:center;
+  gap:.45rem;
+  line-height:1.2;
+}
+.bio-section-career .career-section-title i{
+  font-size:1rem;
+  opacity:.9;
+}
+
+/* شارة "حاليًا" (موجودة كـ biosec-pinned-badge لكن نميزها) */
+.bio-section-career .career-current-badge{
+  background:color-mix(in oklab,var(--accent-success) 14%,transparent);
+  border-color:color-mix(in oklab,var(--accent-success) 45%,transparent);
+  color:color-mix(in oklab,var(--accent-success) 55%,var(--text-main));
+}
+.bio-section-career .career-current-badge::before{
+  content:"●";
+  font-size:.75rem;
+}
+
+/* شارة "منتهية" */
+.bio-section-career .career-ended-badge{
+  background:color-mix(in oklab,var(--accent-danger) 12%,transparent);
+  border-color:color-mix(in oklab,var(--accent-danger) 40%,transparent);
+  color:color-mix(in oklab,var(--accent-danger) 60%,var(--text-main));
+}
+.bio-section-career .career-ended-badge::before{
+  content:"■";
+  font-size:.75rem;
+}
+
+/* شارة "على الخط الزمني" */
+.bio-section-career .career-timeline-badge{
+  background:color-mix(in oklab,var(--modal-primary) 12%,transparent);
+  border-color:color-mix(in oklab,var(--modal-primary) 42%,transparent);
+  color:color-mix(in oklab,var(--modal-primary) 55%,var(--text-main));
+}
+.bio-section-career .career-timeline-badge::before{
+  content:"⏱";
+  font-size:.8rem;
+}
+
+
+/* سطر الفترة + المدة داخل preview-meta */
+.bio-section-career .career-preview-period{
+  font-weight:600;
+  color:color-mix(in oklab,var(--text-muted) 70%,var(--text-main));
+}
+.bio-section-career .career-preview-duration{
+  font-weight:700;
+  color:color-mix(in oklab,var(--modal-primary) 55%,var(--text-main));
+}
+
+/* بادجات org/place (على biosec-badge) */
+.bio-section-career .career-badge--org{
+  border-color:color-mix(in oklab,var(--modal-primary) 30%,var(--surface-border));
+}
+.bio-section-career .career-badge--place{
+  border-color:color-mix(in oklab,var(--arrow-color) 30%,var(--surface-border));
+}
+
+/* input المصادر في وضع التحرير
+   لأنه ليس داخل .biosec-meta-row فممكن يطلع بدون ستايل متناسق */
+.bio-section-career .career-sources-input{
+  width:100%;
+  padding:.32rem .65rem;
+  border-radius:.6rem;
+  border:1px solid var(--surface-border);
+  background:var(--panel-bg);
+  font-size:.84rem;
+  color:var(--text-main);
+  outline:none!important;
+  box-shadow:0 .06rem .18rem rgba(0,0,0,.03);
+  transition:border-color .16s,box-shadow .16s,background-color .16s,transform .12s;
+}
+.bio-section-career .career-sources-input:hover{
+  border-color:color-mix(in oklab,var(--modal-primary) 40%,var(--surface-border));
+  background:color-mix(in oklab,var(--panel-bg) 94%,#fff);
+  transform:translateY(-1px);
+  box-shadow:0 .12rem .32rem rgba(0,0,0,.06);
+}
+.bio-section-career .career-sources-input:focus-visible{
+  border-color:var(--modal-primary);
+  box-shadow:0 0 0 .09rem color-mix(in oklab,var(--modal-primary) 40%,transparent);
+  background:var(--card-bg);
+}
+
+/* Toggle إضافة للخط الزمني — تخصيص خفيف */
+.bio-section-career .career-timeline-toggle{
+  margin-top:.45rem; /* فوق الموجود في .biosec-pin-toggle */
+}
+
+.bio-section-career .career-meta-row{
+  grid-template-columns: minmax(0,1fr) minmax(0,1fr);
+  gap: .5rem;
+}
+
+/* شريط الملخص أعلى القسم */
+.bio-section-career .career-summary{
+  margin:.55rem 0 .35rem;
+  padding:.45rem .7rem;
+  border-radius:.75rem;
+  border:1px solid var(--surface-border);
+  background:color-mix(in oklab,var(--panel-bg) 92%,#fff);
+  color:color-mix(in oklab,var(--text-muted) 75%,var(--text-main));
+  font-size:.9rem;
+  line-height:1.35;
+  box-shadow:0 .08rem .24rem rgba(0,0,0,.04);
+}
+
+/* تحذيرات جودة البيانات (بادجات داخل سطر منفصل) */
+.bio-section-career .career-warnings{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.35rem;
+  margin:0;
+  padding-top:.35rem;
+  border-top:1px dashed color-mix(in oklab,var(--surface-border) 85%,transparent);
+}
+.bio-section-career .career-badge--warn{
+  border-color:color-mix(in oklab,var(--accent-danger) 40%,var(--surface-border));
+  background:color-mix(in oklab,var(--accent-danger) 10%,transparent);
+  color:color-mix(in oklab,var(--accent-danger) 60%,var(--text-main));
+}
+
+/* قائمة الإنجازات (highlights) */
+.bio-section-career .career-highlights{
+  margin:0;
+  padding:.2rem 0 0 1.1rem;
+}
+
+.bio-section-career .career-highlights li{
+  margin:.18rem 0;
+  color:color-mix(in oklab,var(--text-muted) 75%,var(--text-main));
+  font-size:.92rem;
+  line-height:1.35;
+}
+
+/* صف اختيار المصادر: input + زر */
+.bio-section-career .career-sources-row{
+  display:flex;
+  gap:.45rem;
+  align-items:stretch;
+}
+.bio-section-career .career-sources-row .career-sources-input{
+  flex:1;
+}
+.bio-section-career .career-pick-sources-btn{
+  white-space:nowrap;
+  padding:.32rem .65rem;
+  border-radius:.6rem;
+  border:1px solid var(--surface-border);
+  background:color-mix(in oklab,var(--panel-bg) 92%,#fff);
+  color:var(--text-main);
+  box-shadow:0 .06rem .18rem rgba(0,0,0,.03);
+  transition:transform .12s,border-color .16s,box-shadow .16s,background-color .16s;
+}
+.bio-section-career .career-pick-sources-btn:hover{
+  border-color:color-mix(in oklab,var(--modal-primary) 40%,var(--surface-border));
+  background:color-mix(in oklab,var(--panel-bg) 88%,#fff);
+  transform:translateY(-1px);
+  box-shadow:0 .12rem .32rem rgba(0,0,0,.06);
+}
+.bio-section-career .career-pick-sources-btn:active{
+  transform:translateY(0);
+}
+
+/* بادجات إضافية (اختياري: تمييز لطيف بدون تضارب) */
+.bio-section-career .career-badge--sector{
+  border-color:color-mix(in oklab,var(--modal-primary) 26%,var(--surface-border));
+}
+.bio-section-career .career-badge--emptype{
+  border-color:color-mix(in oklab,var(--arrow-color) 26%,var(--surface-border));
+}
+.bio-section-career .career-badge--rank{
+  border-color:color-mix(in oklab,var(--accent-success) 26%,var(--surface-border));
+}
+
+.bio-section-career .career-preview{
+  display:flex;
+  flex-direction:column;
+  gap:.55rem; /* المسافة بين كل عنصر داخل المعاينة */
+}
+
+/* البلوك نفسه */
+.bio-section-career .biosec-preview-block{
+  padding:.5rem .65rem;
+  border-radius:.75rem;
+  border:1px solid color-mix(in oklab,var(--surface-border) 92%,transparent);
+  background:color-mix(in oklab,var(--panel-bg) 94%,#fff);
+  box-shadow:0 .06rem .18rem rgba(0,0,0,.03);
+}
+
+/* الهيدر (الأيقونة + العنوان) */
+.bio-section-career .biosec-preview-block-header{
+  display:flex;
+  align-items:center;
+  gap:.45rem;
+
+  margin:0 0 .35rem;
+  padding:0 0 .35rem;
+
+  border-bottom:1px dashed color-mix(in oklab,var(--surface-border) 75%,transparent);
+}
+
+/* الأيقونة */
+.bio-section-career .biosec-preview-block-icon{
+  font-size:.95rem;
+  opacity:.9;
+  color:color-mix(in oklab,var(--modal-primary) 60%,var(--text-main));
+}
+
+/* العنوان */
+.bio-section-career .biosec-preview-block-title{
+  font-size:.88rem;
+  font-weight:800;
+  letter-spacing:.1px;
+  color:color-mix(in oklab,var(--text-muted) 55%,var(--text-main));
+}
+
+/* محتوى البلوك (أي شيء داخل البلوك) */
+.bio-section-career .biosec-preview-block > :last-child{
+  margin:0; /* مهم لأن previewText هو <p> وله margin افتراضي */
+}
+
+/* تحسينات خاصة لبعض محتويات البلوك */
+.bio-section-career .biosec-preview-block .biosec-preview-meta{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.35rem .55rem;
+}
+
+.bio-section-career .biosec-preview-block .biosec-preview-badges{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.35rem;
+}
+
+/* الوسوم داخل بلوك الوسوم */
+.bio-section-career .biosec-preview-block .biosec-tags-list{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.35rem;
+}
+

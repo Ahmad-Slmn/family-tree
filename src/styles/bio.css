@@ -106,7 +106,7 @@
 .bio-mode-select-wrap select{
   width:100%;appearance:none;-webkit-appearance:none;-moz-appearance:none;
   border-radius:.6rem;border:.0625rem solid var(--surface-border);background:var(--card-bg);
-  padding:.35rem .7rem;padding-inline-end:.50rem;
+  padding:.35rem .7rem;padding-inline-end:2rem;
   font-size:.9rem;color:var(--text-main);
   outline:none;box-shadow:0 .1rem .25rem rgba(0,0,0,.03);cursor:pointer;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
@@ -344,7 +344,7 @@
 .photo-modal-body{max-width:80vw;max-height:75vh;overflow:hidden}
 .photo-modal-img{max-width:100%;display:block}
 
-.photo-tools{display:flex;gap:.4rem;margin-top:.5rem;flex-wrap:wrap;align-items:center}
+.photo-tools{display:flex;gap:.4rem;margin-top:.5rem;flex-wrap:wrap;align-items:center;justify-content: center}
 .free-rotate-wrap{display:inline-flex;gap:.35rem;align-items:center}
 .free-rotate-label{font-size:.78rem}
 .free-rotate-range{width:120px}

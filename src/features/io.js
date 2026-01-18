@@ -241,19 +241,19 @@ function addRowIf(ol, shouldShow, label, valueText) {
  * الهدف: عرض ملخص صادق للمستخدم قبل التفريغ.
  */
 async function buildWipeSummary(ctx) {
-  const out = {
-    families: 0,
-    photos: 0,
-    storyPhotos: 0,
-    eventPhotos: 0,
-    sourcePhotos: 0,
+const out = {
+  families: 0,
+  photos: 0,
+  storyFiles: 0,
+  eventPhotos: 0,
+  sourceFiles: 0,
+  educationFiles: 0,
+  hasPin: false,
 
-    hasPin: false,
-
-    uiThemeReset: false,
-    uiFontReset: false,
-    uiPrivacyPrefsReset: false
-  };
+  uiThemeReset: false,
+  uiFontReset: false,
+  uiPrivacyPrefsReset: false
+};
 
   // 1) عدد العائلات المضافة (المخصصة فقط)
   try {
@@ -313,9 +313,11 @@ async function buildWipeSummary(ctx) {
   } catch {}
 
   // 3) صور/ملفات القصص/الأحداث/المصادر (إذا كانت counters موجودة)
-  try { out.storyPhotos  = (await ctx.DB?._countStoryPhotos?.())  | 0; } catch {}
+try { out.storyFiles   = (await ctx.DB?._countStoryFiles?.())   | 0; } catch {}
   try { out.eventPhotos  = (await ctx.DB?._countEventPhotos?.())  | 0; } catch {}
-  try { out.sourcePhotos = (await ctx.DB?._countSourceFiles?.())  | 0; } catch {}
+  try { out.sourceFiles = (await ctx.DB?._countSourceFiles?.())  | 0; } catch {}
+  try { out.educationFiles = (await ctx.DB?._countEducationFiles?.()) | 0; } catch {}
+
 
   // 4) PIN: فحص سريع
   try {
@@ -344,30 +346,44 @@ async function buildWipeSummary(ctx) {
 
   } catch {}
 
-  // 6) تفضيلات الخصوصية (من PinStore) بدقة
-  try {
-    await PinStore.init?.();
+// 6) تفضيلات الخصوصية (من PinStore) بدقة
+try {
+  await PinStore.init?.();
 
-    const PIN_DEFAULTS = { idle: 60, vis: '0', sessionMin: 15 };
-    const MISSING = '__MISSING__';
+  const PIN_DEFAULTS = { idleSec: 60, vis: '0', sessionMin: 15 };
+  const MISSING = '__MISSING__';
 
-    const idleRaw  = PinStore.getSync?.('pin_idle_minutes', MISSING);
-    const visRaw   = PinStore.getSync?.('pin_lock_on_visibility', MISSING);
-    const sessRaw  = PinStore.getSync?.('pin_session_minutes', MISSING);
-    const untilRaw = PinStore.getSync?.('pin_session_until', MISSING);
+  const idleRaw  = PinStore.getSync?.('pin_idle_seconds', MISSING);
+  const visRaw   = PinStore.getSync?.('pin_lock_on_visibility', MISSING);
+  const sessRaw  = PinStore.getSync?.('pin_session_minutes', MISSING);
+  const untilRaw = PinStore.getSync?.('pin_session_until', MISSING);
 
-    const idle = (idleRaw === MISSING) ? PIN_DEFAULTS.idle : (parseInt(idleRaw, 10) || PIN_DEFAULTS.idle);
-    const vis  = (visRaw  === MISSING) ? PIN_DEFAULTS.vis  : String(visRaw ?? PIN_DEFAULTS.vis);
-    const sess = (sessRaw === MISSING) ? PIN_DEFAULTS.sessionMin : (parseInt(sessRaw, 10) || PIN_DEFAULTS.sessionMin);
+  // idleSec: يسمح بـ 0 (مطلقًا)
+  let idleSec = PIN_DEFAULTS.idleSec;
+  if (idleRaw !== MISSING) {
+    const n = parseInt(String(idleRaw), 10);
+    idleSec = Number.isFinite(n) ? n : PIN_DEFAULTS.idleSec;
+  }
 
-    const isDefault =
-      (idle === PIN_DEFAULTS.idle) &&
-      (vis  === PIN_DEFAULTS.vis) &&
-      (sess === PIN_DEFAULTS.sessionMin) &&
-      (untilRaw === MISSING);
+  const vis = (visRaw === MISSING) ? PIN_DEFAULTS.vis : String(visRaw ?? PIN_DEFAULTS.vis);
 
-    out.uiPrivacyPrefsReset = !isDefault;
-  } catch {}
+  let sess = PIN_DEFAULTS.sessionMin;
+  if (sessRaw !== MISSING) {
+    const n = parseInt(String(sessRaw), 10);
+    sess = Number.isFinite(n) ? n : PIN_DEFAULTS.sessionMin;
+  }
+
+  // وجود session_until يعني تفضيل غير افتراضي حتى لو قيمته 0 (اختياري لكن أدق)
+  const hasUntil = (untilRaw !== MISSING);
+
+  const isDefault =
+    (idleSec === PIN_DEFAULTS.idleSec) &&
+    (vis === PIN_DEFAULTS.vis) &&
+    (sess === PIN_DEFAULTS.sessionMin) &&
+    (!hasUntil);
+
+  out.uiPrivacyPrefsReset = !isDefault;
+} catch {}
 
   return out;
 }
@@ -386,10 +402,11 @@ async function hasAnyPersistedData(ctx) {
   // 1) IndexedDB: صور/ملفات أو families_custom/meta فيها شيء فعلي
   try {
     const np   = (await ctx.DB?._countPhotos?.()) | 0;
-    const ns   = (await ctx.DB?._countStoryPhotos?.()) | 0;
+const ns   = (await ctx.DB?._countStoryFiles?.()) | 0;
     const ne   = (await ctx.DB?._countEventPhotos?.()) | 0;
     const nsrc = (await ctx.DB?._countSourceFiles?.()) | 0;
-    if (np > 0 || ns > 0 || ne > 0 || nsrc > 0) return true;
+    const nedu = (await ctx.DB?._countEducationFiles?.()) | 0;
+if (np > 0 || ns > 0 || ne > 0 || nsrc > 0 || nedu > 0) return true;
 
     const custom = await ctx.DB?.get?.('families_custom');
     if (custom && typeof custom === 'object' && Object.keys(custom).length > 0) return true;
@@ -781,84 +798,85 @@ function isDragAndDropUseful() {
   return true;
 }
 
-function bindDragDropImport(ctx) {
-  const importDropZone = document.getElementById('importDropZone');
-  if (!importDropZone) return;
+function bindDragDropImport(ctx){
+  var importDropZone=document.getElementById('importDropZone');
+  if(!importDropZone) return;
 
-  const mq = window.matchMedia ? window.matchMedia('(hover: none) and (pointer: coarse)')
-    : null;
+  var mq=window.matchMedia?window.matchMedia('(hover: none) and (pointer: coarse)'):null;
 
-  const updateVisibility = () => {
-    if (!mq) return;
-    importDropZone.style.display = mq.matches ? 'none' : '';
-  };
-
-  if (mq) {
-    updateVisibility();
-    if (mq.addEventListener) mq.addEventListener('change', updateVisibility);
-    else if (mq.addListener) mq.addListener(updateVisibility);
+  function updateVisibility(){
+    if(!mq) return;
+    importDropZone.style.display=mq.matches?'none':'';
   }
 
-  if (!isDragAndDropUseful()) return;
+  if(mq){
+    updateVisibility();
+    if(mq.addEventListener) mq.addEventListener('change', updateVisibility);
+    else if(mq.addListener) mq.addListener(updateVisibility);
+  }
 
-  // منع فتح الملف مباشرة
-  window.addEventListener('dragover', e => {
-    e.preventDefault();
-    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+  if(!isDragAndDropUseful()) return;
+
+  // منع فتح الملف عند الإفلات خارج منطقة الاستيراد (بدون رسائل)
+  document.addEventListener('dragover', function(e){
+    var dt=e.dataTransfer;
+    var hasFiles=!!(dt&&dt.types&&Array.prototype.indexOf.call(dt.types,'Files')>-1);
+    if(!hasFiles) return;
+
+    if(e.target&&e.target.closest&&e.target.closest('#importDropZone')){
+      e.preventDefault();
+      dt.dropEffect='copy';
+    }
   });
 
-  window.addEventListener('dragleave', () => {
-    importDropZone.classList.remove('is-drag-over');
+  document.addEventListener('drop', function(e){
+    var dt=e.dataTransfer;
+    var hasFiles=!!(dt&&dt.files&&dt.files.length);
+    if(!hasFiles) return;
+
+    if(!(e.target&&e.target.closest&&e.target.closest('#importDropZone'))){
+      e.preventDefault();
+    }
   });
 
-  ['dragenter', 'dragover'].forEach(evName => {
-    importDropZone.addEventListener(evName, e => {
+  // تمييز منطقة الاستيراد فقط
+  ['dragenter','dragover'].forEach(function(evName){
+    importDropZone.addEventListener(evName,function(e){
       e.preventDefault();
       e.stopPropagation();
       importDropZone.classList.add('is-drag-over');
-      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      if(e.dataTransfer) e.dataTransfer.dropEffect='copy';
     });
   });
 
-  ['dragleave', 'dragend', 'drop'].forEach(evName => {
-    importDropZone.addEventListener(evName, e => {
+  ['dragleave','dragend','drop'].forEach(function(evName){
+    importDropZone.addEventListener(evName,function(e){
       e.preventDefault();
       e.stopPropagation();
       importDropZone.classList.remove('is-drag-over');
     });
   });
 
-  importDropZone.addEventListener('drop', async e => {
+  importDropZone.addEventListener('drop', function(e){
     e.preventDefault();
     e.stopPropagation();
 
-    const files = Array.from(e.dataTransfer?.files || [])
-      .filter(f => !f.type || f.type === 'application/json');
+    var dt=e.dataTransfer;
+    var files=Array.prototype.slice.call((dt&&dt.files)?dt.files:[]);
+    files=files.filter(function(f){ return !f.type||f.type==='application/json'; });
 
-    if (!files.length) {
-      showInfo('أفلت ملف JSON فقط داخل هذه المنطقة.');
-      return;
-    }
+    if(!files.length){ showInfo('أفلت ملف JSON فقط داخل هذه المنطقة.'); return; }
+    if(files.length>1) showInfo('تم اكتشاف أكثر من ملف. سيتم استخدام أول ملف فقط.');
 
-    const file = files[0];
-    if (files.length > 1) showInfo('تم اكتشاف أكثر من ملف. سيتم استخدام أول ملف فقط.');
-
-    try {
-      await importJsonFileObject(ctx, file);
-      ctx?.redrawUI?.();
-      showSuccess('تم الاستيراد من الملف المسحوب.');
-    } catch (err) {
-      handleImportError(err);
-    }
-  });
-
-  // منع إسقاط الملفات خارج منطقة الاستيراد من فتحها في المتصفح
-  window.addEventListener('drop', e => {
-    e.preventDefault();
-    const hasFiles = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length;
-    if (hasFiles && !e.target.closest?.('#importDropZone')) {
-      showInfo('لاستيراد العائلات، اسحب ملف JSON وأسقطه داخل مربع الاستيراد في لوحة الإعدادات.');
-    }
+    Promise.resolve()
+      .then(function(){ return importJsonFileObject(ctx, files[0]); })
+      .then(function(){
+        if(ctx&&ctx.redrawUI) ctx.redrawUI();
+        showSuccess('تم الاستيراد من الملف المسحوب.');
+      })
+      .catch(function(err){
+        handleImportError(err);
+      });
   });
 }
 
@@ -882,9 +900,10 @@ function bindHardReset(ctx) {
     const hasAnythingReal =
       (sum.families > 0) ||
       (sum.photos > 0) ||
-      (sum.storyPhotos > 0) ||
+      (sum.storyFiles > 0) ||
       (sum.eventPhotos > 0) ||
-      (sum.sourcePhotos > 0) ||
+      (sum.sourceFiles > 0) ||
+      (sum.educationFiles > 0) ||
       !!sum.hasPin ||
        !!sum.uiThemeReset ||
       !!sum.uiFontReset ||
@@ -908,15 +927,16 @@ function bindHardReset(ctx) {
     // العدادات (لا تعرض إن كانت 0)
     addRowIf(ol, sum.families > 0,     'العائلات المضافة',   String(sum.families));
     addRowIf(ol, sum.photos > 0,       'صور الأشخاص',        String(sum.photos));
-    addRowIf(ol, sum.storyPhotos > 0,  'صور القصص',          String(sum.storyPhotos));
+    addRowIf(ol, sum.storyFiles > 0,  'مرفقات القصص',  String(sum.storyFiles));
     addRowIf(ol, sum.eventPhotos > 0,  'صور الأحداث',        String(sum.eventPhotos));
-    addRowIf(ol, sum.sourcePhotos > 0, 'ملفات/صور المصادر',  String(sum.sourcePhotos));
+    addRowIf(ol, sum.sourceFiles > 0, 'مرفقات المصادر', String(sum.sourceFiles));
+    addRowIf(ol, sum.educationFiles > 0, 'مرفقات التعليم',  String(sum.educationFiles));
 
     // حالات/تفضيلات (لا تعرض إن كانت false)
     addRowIf(ol, !!sum.hasPin,              'بيانات كلمة المرور محفوظة', 'نعم');
+    addRowIf(ol, !!sum.uiPrivacyPrefsReset, 'إعادة تفضيلات الخصوصية', 'نعم');
     addRowIf(ol, !!sum.uiThemeReset,        'إعادة النمط للوضع الافتراضي', 'نعم');
     addRowIf(ol, !!sum.uiFontReset,         'إعادة حجم الخط (16px)', 'نعم');
-    addRowIf(ol, !!sum.uiPrivacyPrefsReset, 'إعادة تفضيلات الخصوصية', 'نعم');
 
     if (!ol.children.length) {
       ol.appendChild(liRow('لا توجد عناصر مهمة للعرض', '—'));
@@ -1041,11 +1061,11 @@ closeOnEsc: true,
           // تحقق سريع بعد التفريغ (كما كان)
           try {
             const nf = (await ctx.DB?._countFamilies?.()) | 0;
-            const np =
-              ((await ctx.DB?._countPhotos?.()) | 0) +
-              ((await ctx.DB?._countStoryPhotos?.()) | 0) +
-              ((await ctx.DB?._countEventPhotos?.()) | 0) +
-              ((await ctx.DB?._countSourceFiles?.()) | 0);
+const nMedia =
+  ((await ctx.DB?._countPhotos?.()) | 0) +
+  ((await ctx.DB?._countStoryFiles?.()) | 0) +
+  ((await ctx.DB?._countEventPhotos?.()) | 0) +
+  ((await ctx.DB?._countSourceFiles?.()) | 0);
 
             let pinLeft = false;
             try {
@@ -1055,10 +1075,10 @@ closeOnEsc: true,
               pinLeft = (enabled === '1' || !!hash);
             } catch {}
 
-            if (nf || np || pinLeft) {
+if (nf || nMedia || pinLeft) {
               showWarning(
                 `تم التفريغ، لكن ما زالت بعض البيانات موجودة ` +
-                `(عائلات:${nf} صور/ملفات:${np} PIN:${pinLeft ? 'نعم' : 'لا'}). ` +
+`(عائلات:${nf} صور/ملفات:${nMedia} PIN:${pinLeft ? 'نعم' : 'لا'}). ` +
                 `قد يكون السبب تبويب آخر مفتوح.`
               );
             }

@@ -83,20 +83,24 @@ function pinGet(k, def = null) {
   return lsGet(k, def);
 }
 
-const PIN_DEFAULTS = { idle: 60, vis: '0', sessionMin: 15 };
+const PIN_DEFAULTS = { idleSec: 60, vis: '0', sessionMin: 15 };
 
 function readPinState() {
-  const pinIdleRaw  = pinGet('pin_idle_minutes', String(PIN_DEFAULTS.idle));
+  const pinIdleRaw  = pinGet('pin_idle_seconds', String(PIN_DEFAULTS.idleSec));
   const pinVisRaw   = pinGet('pin_lock_on_visibility', PIN_DEFAULTS.vis);
   const pinSessRaw  = pinGet('pin_session_minutes', String(PIN_DEFAULTS.sessionMin));
   const pinUntilRaw = pinGet('pin_session_until', null);
 
-  const pinIdle = parseInt(pinIdleRaw, 10) || PIN_DEFAULTS.idle;
+  // idle: يسمح بـ 0 (مطلقًا)
+  let pinIdle = parseInt(pinIdleRaw, 10);
+  if (!Number.isFinite(pinIdle) || pinIdle < 0) pinIdle = PIN_DEFAULTS.idleSec;
+
   const pinVis  = String(pinVisRaw ?? PIN_DEFAULTS.vis);
-  const pinSess = parseInt(pinSessRaw, 10) || PIN_DEFAULTS.sessionMin;
+  let pinSess = parseInt(pinSessRaw, 10);
+  if (!Number.isFinite(pinSess) || pinSess <= 0) pinSess = PIN_DEFAULTS.sessionMin;
 
   const isDefault =
-    (pinIdle === PIN_DEFAULTS.idle) &&
+    (pinIdle === PIN_DEFAULTS.idleSec) &&
     (pinVis === PIN_DEFAULTS.vis) &&
     (pinSess === PIN_DEFAULTS.sessionMin) &&
     (pinUntilRaw == null);
@@ -949,6 +953,7 @@ export function formatFullDateTime(iso) {
 /* =========================================================
    15) Sortable أفقي (مع حفظ instance)
 ========================================================= */
+// utils.js
 export function attachHorizontalSortable({
   container,
   itemSelector,
@@ -959,20 +964,58 @@ export function attachHorizontalSortable({
   if (!window.Sortable || !container) return;
   if (container._sortableInstance) return;
 
+  // حوّل (string أو array) إلى مصفوفة كلاسات مفصولة بدون فراغات
+  const toClassList = (v) => {
+    if (!v) return [];
+    if (Array.isArray(v)) {
+      return v.flatMap(x => String(x || '').trim().split(/\s+/)).filter(Boolean);
+    }
+    return String(v).trim().split(/\s+/).filter(Boolean);
+  };
+
+  const ghostExtra = toClassList(ghostClass);
+  const dragExtra  = toClassList(dragClass);
+
+  // لازم نمرّر لSortable token واحد فقط لتجنب InvalidCharacterError
+  const GHOST_TOKEN = 'biosec-sortable-ghost';
+  const DRAG_TOKEN  = 'biosec-sortable-drag';
+
   container._sortableInstance = new window.Sortable(container, {
     animation: 150,
     direction: 'horizontal',
-    ghostClass,
-    dragClass,
+    ghostClass: GHOST_TOKEN,
+    dragClass: DRAG_TOKEN,
     fallbackOnBody: true,
     swapThreshold: 0.5,
-    onEnd() {
+
+    onStart(evt) {
+      const el = evt?.item;
+      if (el && dragExtra.length) el.classList.add(...dragExtra);
+    },
+
+    onEnd(evt) {
+      const el = evt?.item;
+      if (el && dragExtra.length) el.classList.remove(...dragExtra);
+
       const orderedRefs = Array.from(container.querySelectorAll(itemSelector))
         .map((node) => node.dataset.ref)
         .filter(Boolean);
 
       if (!orderedRefs.length) return;
       if (typeof onSorted === 'function') onSorted(orderedRefs);
+    },
+
+    onMove(evt) {
+      const ghost = evt?.related;
+      if (ghost && ghost.classList && ghost.classList.contains(GHOST_TOKEN)) {
+        if (ghostExtra.length) ghost.classList.add(...ghostExtra);
+      }
+      return true;
+    },
+
+    onChange() {
+      const ghostEl = container.querySelector(`.${GHOST_TOKEN}`);
+      if (ghostEl && ghostExtra.length) ghostEl.classList.add(...ghostExtra);
     }
   });
 }
@@ -1012,6 +1055,7 @@ export async function hashPin(pin, saltBase64) {
 /* =========================================================
    17) عارض صور منبثق (Overlay)
 ========================================================= */
+
 export function createImageViewerOverlay({
   overlayClass = 'image-viewer-overlay',
   backdropClass = 'image-viewer-backdrop',
@@ -1025,169 +1069,146 @@ export function createImageViewerOverlay({
   saveBtnClass = 'image-viewer-save',
   minimalNav = false
 } = {}) {
-  let overlay = document.querySelector(`.${overlayClass}`);
-  if (overlay && overlay._sliderApi) return overlay._sliderApi;
+  const modeKey = minimalNav ? '1' : '0';
 
-  overlay = document.createElement('div');
-  overlay.className = overlayClass;
+  // كاش حسب الوضع
+  const cached = document.querySelector(`.${overlayClass}[data-minimal="${modeKey}"]`);
+  if (cached && cached._sliderApi) return cached._sliderApi;
 
-  const backdrop = document.createElement('div');
-  backdrop.className = backdropClass;
-
-  const dialog = document.createElement('div');
-  dialog.className = dialogClass;
-
-  const closeBtn = document.createElement('button');
-  closeBtn.type = 'button';
-  closeBtn.className = closeBtnClass;
-  closeBtn.textContent = '×';
-
-  const img = document.createElement('img');
-  img.className = imgClass;
-  img.alt = 'معاينة الصورة';
-
-  // NAV (مشروط)
-  const nav = document.createElement('div');
-  nav.className = navClass;
-
-  const saveBtn = document.createElement('button');
-  saveBtn.type = 'button';
-  saveBtn.className = saveBtnClass;
-  saveBtn.innerHTML = '<i class="fa-solid fa-download"></i><span>حفظ الصورة</span>';
-
-  // وضع بسيط: حفظ فقط
+  // عناصر الـ DOM (Lazy)
+  let overlay = null, backdrop = null, dialog = null, closeBtn = null, img = null, nav = null, saveBtn = null;
   let prevBtn = null, nextBtn = null, counter = null;
+  let mounted = false;
 
-  if (minimalNav) {
-    nav.append(saveBtn);
-  } else {
-    prevBtn = document.createElement('button');
-    prevBtn.type = 'button';
-    prevBtn.className = arrowPrevClass;
-    prevBtn.textContent = '›';
+  // الحالة
+  let urls = [], index = 0, lastActiveEl = null, lastIndex = -1;
 
-    counter = document.createElement('div');
-    counter.className = counterClass;
+  // خيارات التشغيل
+  let options = { revokeOnClose: false, onClose: null, enableZoom: true };
 
-    nextBtn = document.createElement('button');
-    nextBtn.type = 'button';
-    nextBtn.className = arrowNextClass;
-    nextBtn.textContent = '‹';
+  const prevTokens = arrowPrevClass.split(/\s+/).filter(c => /prev$/i.test(c));
+  const nextTokens = arrowNextClass.split(/\s+/).filter(c => /next$/i.test(c));
 
-    const centerWrap = document.createElement('div');
-    centerWrap.className = 'image-viewer-center';
-    centerWrap.append(counter, saveBtn);
+  const isOpen = () => !!overlay && overlay.classList.contains('is-open');
 
-    nav.append(nextBtn, centerWrap, prevBtn);
+  // تكبير/سحب
+  let scale = 1, tx = 0, ty = 0, isPanning = false, panStartX = 0, panStartY = 0, panBaseTx = 0, panBaseTy = 0;
+  const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
+
+  function setLoading(v) { if (overlay) overlay.classList.toggle('is-loading', !!v); }
+
+  function applyTransform(skip = false) {
+    if (!img) return;
+    img.style.transition = skip ? 'none' : 'transform .15s ease';
+    img.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+  }
+  function resetTransform() { scale = 1; tx = 0; ty = 0; applyTransform(true); }
+
+  function setScale(nextScale, ax = null, ay = null) {
+    if (!img) return;
+    const prev = scale;
+    nextScale = clamp(nextScale, 1, 4);
+    if (nextScale === prev) return;
+
+    if (ax != null && ay != null) {
+      const r = img.getBoundingClientRect();
+      const dx = ax - (r.left + r.width / 2);
+      const dy = ay - (r.top + r.height / 2);
+      const ratio = nextScale / prev;
+      tx = tx - dx * (ratio - 1);
+      ty = ty - dy * (ratio - 1);
+    }
+
+    scale = nextScale;
+    if (scale === 1) { tx = 0; ty = 0; }
+    applyTransform();
   }
 
-  dialog.append(closeBtn, img, nav);
-  overlay.append(backdrop, dialog);
-  document.body.appendChild(overlay);
-
-  let urls = [];
-  let index = 0;
-
-  const prevTokens = arrowPrevClass.split(/\s+/).filter((c) => /prev$/i.test(c));
-  const nextTokens = arrowNextClass.split(/\s+/).filter((c) => /next$/i.test(c));
-  const dialogEl = dialog;
+  function preload(i) {
+    const u = urls[i];
+    if (!u) return;
+    const pre = new Image();
+    pre.decoding = 'async';
+    pre.loading = 'eager';
+    pre.src = u;
+  }
 
   function runOpenAnimation() {
-    dialogEl.style.transition = 'none';
-    dialogEl.style.opacity = '0';
-    dialogEl.style.transform = 'scale(.92) translateY(8px)';
+    if (!dialog) return;
+    dialog.style.transition = 'none';
+    dialog.style.opacity = '0';
+    dialog.style.transform = 'scale(.92) translateY(8px)';
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      dialogEl.style.transition = 'opacity .32s ease, transform .32s ease';
-      dialogEl.style.opacity = '1';
-      dialogEl.style.transform = 'scale(1) translateY(0)';
+      dialog.style.transition = 'opacity .32s ease, transform .32s ease';
+      dialog.style.opacity = '1';
+      dialog.style.transform = 'scale(1) translateY(0)';
     }));
   }
 
-  // updateUI (مشروط)
-  let updateUI = function () {
-    if (!urls.length) return;
-
-    img.src = urls[index];
-    if (minimalNav) return; // لا أسهم ولا عداد
-
-    counter.textContent = `${index + 1} / ${urls.length}`;
-
-    const single = urls.length <= 1;
-    const atFirst = index <= 0;
-    const atLast = index >= urls.length - 1;
-
-    prevBtn.disabled = single || atFirst;
-    nextBtn.disabled = single || atLast;
-
-    prevBtn.style.visibility = prevBtn.disabled ? 'hidden' : 'visible';
-    nextBtn.style.visibility = nextBtn.disabled ? 'hidden' : 'visible';
-  };
-
-  // تأثير انتقال الصور + حركة الاتجاه
-  let lastIndex = -1;
-  function animateImageChange(_newIndex, direction) {
+  function animateImageChange(direction) {
+    if (!img) return;
     img.style.transition = 'none';
     img.style.opacity = 0;
-    img.style.transform = `translateX(${direction * 40}px) scale(.97)`;
+    if (scale <= 1) img.style.transform = `translateX(${direction * 40}px) scale(.97)`;
     requestAnimationFrame(() => requestAnimationFrame(() => {
       img.style.transition = 'opacity .32s ease, transform .32s ease';
       img.style.opacity = 1;
-      img.style.transform = 'translateX(0) scale(1)';
+      if (scale <= 1) img.style.transform = 'translateX(0) scale(1)';
+      else applyTransform(true);
     }));
   }
 
-  const _updateUI_original = updateUI;
-  updateUI = function () {
-    const old = lastIndex;
-    _updateUI_original();
-    if (!minimalNav && old !== -1 && old !== index) {
-      const dir = index > old ? -1 : 1;
-      animateImageChange(index, dir);
-    }
-    lastIndex = index;
-  };
+  function updateUI() {
+    if (!overlay || !img || !urls.length) return;
+
+    setLoading(true);
+    img.src = urls[index];
+
+    if (!minimalNav) { preload(index + 1); preload(index - 1); }
+    if (minimalNav) return;
+
+    if (counter) counter.textContent = `${index + 1} / ${urls.length}`;
+
+    const single = urls.length <= 1, atFirst = index <= 0, atLast = index >= urls.length - 1;
+    if (prevBtn) { prevBtn.disabled = single || atFirst; prevBtn.style.visibility = prevBtn.disabled ? 'hidden' : 'visible'; }
+    if (nextBtn) { nextBtn.disabled = single || atLast; nextBtn.style.visibility = nextBtn.disabled ? 'hidden' : 'visible'; }
+  }
 
   function bounceEffect(direction) {
+    if (!img) return;
+    if (options.enableZoom && scale > 1) return;
     img.style.transition = 'transform .25s ease';
     img.style.transform = `translateX(${direction * 22}px)`;
-    setTimeout(() => { img.style.transform = 'translateX(0)'; }, 150);
+    setTimeout(() => { if (img) img.style.transform = 'translateX(0)'; }, 150);
   }
 
-  function goPrev_original() { index--; updateUI(); }
-  function goNext_original() { index++; updateUI(); }
-
-  let goPrev = function () {
+  function goPrev() {
     if (index <= 0) { bounceEffect(1); return; }
-    goPrev_original();
-  };
-  let goNext = function () {
-    if (index >= urls.length - 1) { bounceEffect(-1); return; }
-    goNext_original();
-  };
-
-  function open(list, startIndex = 0) {
-    urls = Array.isArray(list) ? list.filter(Boolean) : [];
-    if (!urls.length) return;
-
-    index = Math.min(Math.max(startIndex, 0), urls.length - 1);
+    const old = index;
+    index--;
+    resetTransform();
     updateUI();
-
-    overlay.classList.add('is-open');
-    runOpenAnimation();
+    if (!minimalNav && old !== -1) animateImageChange(1);
+    lastIndex = index;
   }
 
-  function closeViewer() {
-    dialogEl.style.transition = 'opacity .28s ease, transform .28s ease';
-    dialogEl.style.opacity = '0';
-    dialogEl.style.transform = 'scale(.92) translateY(8px)';
-    setTimeout(() => { overlay.classList.remove('is-open'); }, 180);
+  function goNext() {
+    if (index >= urls.length - 1) { bounceEffect(-1); return; }
+    const old = index;
+    index++;
+    resetTransform();
+    updateUI();
+    if (!minimalNav && old !== -1) animateImageChange(-1);
+    lastIndex = index;
   }
 
+  // =========================
+  // Listeners (مراجع ثابتة)
+  // =========================
   function downloadCurrentImage() {
     if (!urls.length) return;
     const url = urls[index];
     if (!url) return;
-
     const a = document.createElement('a');
     a.href = url;
     a.download = `image-${index + 1}`;
@@ -1196,61 +1217,107 @@ export function createImageViewerOverlay({
     a.remove();
   }
 
-  // أحداث التنقل (تعطيلها في minimalNav)
-  if (!minimalNav) {
-    nav.addEventListener('click', (e) => {
-      const btn = e.target.closest('button');
-      if (!btn || btn.disabled) return;
+  function onSaveClick(e) { e.stopPropagation(); downloadCurrentImage(); }
+  function onOverlayClick(e) { if (overlay && e.target === overlay) close(); }
 
-      const isPrev =
-        prevTokens.some((cls) => btn.classList.contains(cls)) ||
-        btn.classList.contains('image-viewer-arrow-prev') ||
-        btn.classList.contains('story-image-viewer-arrow-prev') ||
-        btn.classList.contains('timeline-image-viewer-arrow-prev') ||
-        btn.classList.contains('bio-image-viewer-arrow-prev') ||
-        btn.classList.contains('sources-image-viewer-arrow-prev');
-
-      const isNext =
-        nextTokens.some((cls) => btn.classList.contains(cls)) ||
-        btn.classList.contains('image-viewer-arrow-next') ||
-        btn.classList.contains('story-image-viewer-arrow-next') ||
-        btn.classList.contains('timeline-image-viewer-arrow-next') ||
-        btn.classList.contains('bio-image-viewer-arrow-next') ||
-        btn.classList.contains('sources-image-viewer-arrow-next');
-
-      if (isPrev) goPrev();
-      else if (isNext) goNext();
-    });
+  function getFocusableElements() {
+    if (!dialog) return [];
+    return Array.from(dialog.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])'))
+      .filter(el => !el.hasAttribute('disabled') && el.tabIndex !== -1);
   }
 
-  saveBtn.addEventListener('click', (e) => { e.stopPropagation(); downloadCurrentImage(); });
+  function trapFocus(e) {
+    if (!isOpen() || e.key !== 'Tab') return;
+    const f = getFocusableElements();
+    if (!f.length) return;
+    const first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
 
-  backdrop.addEventListener('click', closeViewer);
-  closeBtn.addEventListener('click', closeViewer);
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeViewer(); });
+  function onKeyDown(e) {
+    if (!isOpen()) return;
+    if (e.key === 'Escape') { e.preventDefault(); close(); return; }
+    if (!minimalNav && e.key === 'ArrowLeft') { e.preventDefault(); prevBtn?.click(); }
+    else if (!minimalNav && e.key === 'ArrowRight') { e.preventDefault(); nextBtn?.click(); }
+  }
 
-  // كيبورد (تعطيل الأسهم في minimalNav)
-  document.addEventListener('keydown', (e) => {
-    if (!overlay.classList.contains('is-open')) return;
+  function onNavClick(e) {
+    const btn = e.target.closest('button');
+    if (!btn || btn.disabled) return;
 
-    if (e.key === 'Escape') closeViewer();
-    else if (!minimalNav && e.key === 'ArrowLeft') { e.preventDefault(); prevBtn.click(); }
-    else if (!minimalNav && e.key === 'ArrowRight') { e.preventDefault(); nextBtn.click(); }
-  });
+    const isPrev =
+      prevTokens.some(cls => btn.classList.contains(cls)) ||
+      btn.classList.contains('image-viewer-arrow-prev') ||
+      btn.classList.contains('story-image-viewer-arrow-prev') ||
+      btn.classList.contains('timeline-image-viewer-arrow-prev') ||
+      btn.classList.contains('bio-image-viewer-arrow-prev') ||
+      btn.classList.contains('sources-image-viewer-arrow-prev');
 
-  // السحب (تعطيله في minimalNav)
-  let dragX = 0, dragging = false;
+    const isNext =
+      nextTokens.some(cls => btn.classList.contains(cls)) ||
+      btn.classList.contains('image-viewer-arrow-next') ||
+      btn.classList.contains('story-image-viewer-arrow-next') ||
+      btn.classList.contains('timeline-image-viewer-arrow-next') ||
+      btn.classList.contains('bio-image-viewer-arrow-next') ||
+      btn.classList.contains('sources-image-viewer-arrow-next');
 
-  function onTouchStart(e) {
-    if (!overlay.classList.contains('is-open')) return;
-    const t = e.touches[0];
-    dragging = true;
-    dragX = t.clientX;
+    if (isPrev) goPrev();
+    else if (isNext) goNext();
+  }
+
+  function onDblClick(e) {
+    if (!options.enableZoom) return;
+    e.preventDefault();
+    if (scale > 1) resetTransform();
+    else setScale(2, e.clientX, e.clientY);
+  }
+
+  function onWheel(e) {
+    if (!options.enableZoom || !isOpen()) return;
+    e.preventDefault();
+    const delta = Math.sign(e.deltaY), step = 0.2;
+    setScale(scale + (delta > 0 ? -step : step), e.clientX, e.clientY);
+  }
+
+  function onMouseDown(e) {
+    if (!options.enableZoom || scale <= 1 || !overlay || !img) return;
+    e.preventDefault();
+    isPanning = true;
+    panStartX = e.clientX; panStartY = e.clientY;
+    panBaseTx = tx; panBaseTy = ty;
+    overlay.classList.add('is-panning');
     img.style.transition = 'none';
   }
 
+  function onMouseMove(e) {
+    if (!isPanning) return;
+    tx = panBaseTx + (e.clientX - panStartX);
+    ty = panBaseTy + (e.clientY - panStartY);
+    applyTransform(true);
+  }
+
+  function onMouseUp() {
+    if (!isPanning || !overlay) return;
+    isPanning = false;
+    overlay.classList.remove('is-panning');
+    applyTransform();
+  }
+
+  // سحب للتنقل (الوضع الكامل فقط)
+  let dragX = 0, dragging = false;
+
+  function onTouchStart(e) {
+    if (!isOpen()) return;
+    if (options.enableZoom && scale > 1) return;
+    const t = e.touches[0];
+    dragging = true;
+    dragX = t.clientX;
+    if (img) img.style.transition = 'none';
+  }
+
   function onTouchMove(e) {
-    if (!dragging) return;
+    if (!dragging || !img) return;
     const t = e.touches[0];
     const dx = t.clientX - dragX;
     img.style.transform = `translateX(${dx}px) scale(.97)`;
@@ -1258,7 +1325,7 @@ export function createImageViewerOverlay({
   }
 
   function onTouchEnd() {
-    if (!dragging) return;
+    if (!dragging || !img) return;
     dragging = false;
 
     const dx = parseFloat(img.style.transform.replace(/[^\-0-9.]/g, '')) || 0;
@@ -1269,17 +1336,226 @@ export function createImageViewerOverlay({
     else if (dx > 60) goPrev();
   }
 
-  if (!minimalNav) {
-    img.addEventListener('touchstart', onTouchStart, { passive: false });
-    img.addEventListener('touchmove', onTouchMove, { passive: false });
-    img.addEventListener('touchend', onTouchEnd);
+  // مراجع ثابتة لليسنرز (عشان removeEventListener يشتغل)
+  const onImgLoad = () => setLoading(false);
+  const onImgError = () => setLoading(false);
 
-    dialog.addEventListener('touchstart', onTouchStart, { passive: false });
-    dialog.addEventListener('touchmove', onTouchMove, { passive: false });
-    dialog.addEventListener('touchend', onTouchEnd);
+  // =========================
+  // Lazy mount / unmount
+  // =========================
+  function mount() {
+    if (mounted && overlay && document.body.contains(overlay)) return;
+
+    overlay = document.createElement('div');
+    overlay.className = overlayClass;
+    overlay.dataset.minimal = modeKey;
+    overlay.classList.add(minimalNav ? 'is-minimal' : 'is-full');
+
+    // اربط الـ api على الـ overlay فور إنشائه (بدون إعادة إسناد mount)
+    overlay._sliderApi = api;
+
+    backdrop = document.createElement('div');
+    backdrop.className = backdropClass;
+
+    dialog = document.createElement('div');
+    dialog.className = dialogClass;
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+
+    closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = closeBtnClass;
+    closeBtn.textContent = '×';
+    closeBtn.setAttribute('aria-label', 'إغلاق المعاينة');
+
+    img = document.createElement('img');
+    img.className = imgClass;
+    img.alt = 'معاينة الصورة';
+    img.decoding = 'async';
+    img.loading = 'eager';
+
+    const spinner = document.createElement('div');
+    spinner.className = 'image-viewer-spinner';
+    spinner.setAttribute('aria-hidden', 'true');
+
+    const stage = document.createElement('div');
+    stage.className = 'image-viewer-stage';
+    stage.append(img, spinner);
+
+    nav = document.createElement('div');
+    nav.className = navClass;
+    nav.classList.add(minimalNav ? 'is-minimal' : 'is-full');
+
+    saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = saveBtnClass;
+    saveBtn.innerHTML = '<i class="fa-solid fa-download"></i><span>حفظ الصورة</span>';
+    saveBtn.setAttribute('aria-label', 'حفظ الصورة');
+
+    prevBtn = nextBtn = counter = null;
+
+    if (minimalNav) {
+      nav.append(saveBtn);
+    } else {
+      prevBtn = document.createElement('button');
+      prevBtn.type = 'button';
+      prevBtn.className = arrowPrevClass;
+      prevBtn.textContent = '›';
+      prevBtn.setAttribute('aria-label', 'الصورة السابقة');
+
+      counter = document.createElement('div');
+      counter.className = counterClass;
+
+      nextBtn = document.createElement('button');
+      nextBtn.type = 'button';
+      nextBtn.className = arrowNextClass;
+      nextBtn.textContent = '‹';
+      nextBtn.setAttribute('aria-label', 'الصورة التالية');
+
+      const centerWrap = document.createElement('div');
+      centerWrap.className = 'image-viewer-center';
+      centerWrap.append(counter, saveBtn);
+
+      nav.append(nextBtn, centerWrap, prevBtn);
+    }
+
+    dialog.append(closeBtn, stage, nav);
+    overlay.append(backdrop, dialog);
+    document.body.appendChild(overlay);
+
+    // إطفاء التحميل عند نجاح/فشل تحميل الصورة
+    img.addEventListener('load', onImgLoad);
+    img.addEventListener('error', onImgError);
+
+    // ربط الأحداث
+    if (!minimalNav) nav.addEventListener('click', onNavClick);
+    saveBtn.addEventListener('click', onSaveClick);
+
+    backdrop.addEventListener('click', close);
+    closeBtn.addEventListener('click', close);
+    overlay.addEventListener('click', onOverlayClick);
+
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keydown', trapFocus);
+
+    img.addEventListener('dblclick', onDblClick);
+    overlay.addEventListener('wheel', onWheel, { passive: false });
+
+    img.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+
+    if (!minimalNav) {
+      img.addEventListener('touchstart', onTouchStart, { passive: false });
+      img.addEventListener('touchmove', onTouchMove, { passive: false });
+      img.addEventListener('touchend', onTouchEnd);
+
+      dialog.addEventListener('touchstart', onTouchStart, { passive: false });
+      dialog.addEventListener('touchmove', onTouchMove, { passive: false });
+      dialog.addEventListener('touchend', onTouchEnd);
+    }
+
+    mounted = true;
   }
 
-  const api = { open };
-  overlay._sliderApi = api;
+  function unmount() {
+    if (!overlay) return;
+
+    try {
+      if (!minimalNav) nav?.removeEventListener('click', onNavClick);
+      saveBtn?.removeEventListener('click', onSaveClick);
+
+      backdrop?.removeEventListener('click', close);
+      closeBtn?.removeEventListener('click', close);
+      overlay?.removeEventListener('click', onOverlayClick);
+
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('keydown', trapFocus);
+
+      img?.removeEventListener('dblclick', onDblClick);
+      overlay?.removeEventListener('wheel', onWheel);
+
+      img?.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+
+      img?.removeEventListener('load', onImgLoad);
+      img?.removeEventListener('error', onImgError);
+
+      if (!minimalNav) {
+        img?.removeEventListener('touchstart', onTouchStart);
+        img?.removeEventListener('touchmove', onTouchMove);
+        img?.removeEventListener('touchend', onTouchEnd);
+
+        dialog?.removeEventListener('touchstart', onTouchStart);
+        dialog?.removeEventListener('touchmove', onTouchMove);
+        dialog?.removeEventListener('touchend', onTouchEnd);
+      }
+    } catch {}
+
+    try { overlay.remove(); } catch {}
+
+    overlay = backdrop = dialog = closeBtn = img = nav = saveBtn = null;
+    prevBtn = nextBtn = counter = null;
+    mounted = false;
+  }
+
+  // =========================
+  // API
+  // =========================
+  function setMode(nextMinimal) {
+    const nextKey = nextMinimal ? '1' : '0';
+    if (overlay && overlay.dataset.minimal === nextKey) return;
+    return false;
+  }
+
+  function setList(list, startIndex = 0, opts = {}) {
+    urls = Array.isArray(list) ? list.filter(Boolean) : [];
+    if (!urls.length) return;
+    options = { ...options, ...opts };
+    index = Math.min(Math.max(startIndex, 0), urls.length - 1);
+    lastIndex = -1;
+    resetTransform();
+    updateUI();
+  }
+
+  function open(list, startIndex = 0, opts = {}) {
+    lastActiveEl = document.activeElement;
+    mount(); // يبني الـ overlay عند الطلب
+    setList(list, startIndex, opts);
+
+    overlay.classList.add('is-open');
+    runOpenAnimation();
+    setTimeout(() => { (closeBtn || dialog)?.focus?.(); }, 0);
+  }
+
+  function close() {
+    if (!overlay || !isOpen()) return;
+
+    dialog.style.transition = 'opacity .28s ease, transform .28s ease';
+    dialog.style.opacity = '0';
+    dialog.style.transform = 'scale(.92) translateY(8px)';
+
+    setTimeout(() => {
+      overlay.classList.remove('is-open');
+      setLoading(false);
+      resetTransform();
+
+      try { options.onClose?.({ urls: [...urls], index }); } catch {}
+      if (options.revokeOnClose) {
+        urls.forEach(u => { try { if (typeof u === 'string' && u.startsWith('blob:')) URL.revokeObjectURL(u); } catch {} });
+      }
+
+      try { lastActiveEl?.focus?.(); } catch {}
+      lastActiveEl = null;
+
+      // إزالة الـ overlay بالكامل
+      unmount();
+    }, 180);
+  }
+
+  function destroy() { unmount(); }
+
+  const api = { open, close, setList, setMode, destroy, isOpen };
   return api;
 }

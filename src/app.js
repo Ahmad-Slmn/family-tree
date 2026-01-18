@@ -29,6 +29,8 @@ import * as FeatureIO from './features/io.js';
 import * as FeaturePrint from './features/print.js';
 import * as FeatureEngage from './features/engage.js';
 import * as FeatureSecurity from './features/security.js';
+import { makeBioSectionHost } from './features/bio-sections.host.js';
+import { createBioModalController } from './features/bio-modal.controller.js';
 
 window.__PinStore = PinStore;
 window.__familiesLoaded = false;
@@ -407,7 +409,7 @@ const PIN_KEYS = {
   salt: 'pin_salt',
   hash: 'pin_hash',
   hint: 'pin_hint',
-  idleMin: 'pin_idle_minutes',
+  idleSec: 'pin_idle_seconds',
   tries: 'pin_tries',
   lockUntil: 'pin_lock_until',
   lastActivity: 'pin_last_activity',
@@ -442,8 +444,9 @@ function _lsSet(k, v) {
 }
 
 function _lsDel(k) {
-  if (PinStore.PERSISTED_KEYS?.has?.(k)) { PinStore.del?.(k); return; }
-  try { localStorage.removeItem(k); } catch { }
+  if (PinStore.PERSISTED_KEYS?.has?.(k)) return PinStore.del(k);
+  try { localStorage.removeItem(k); } catch {}
+  return Promise.resolve();
 }
 
 function _hasPinConfigured() {
@@ -468,11 +471,16 @@ function _lockReasonMessage() {
 
 
 function _idleSeconds() {
-  const v = parseInt(_lsGet(PIN_KEYS.idleMin, '60'), 10);
-  if (isNaN(v) || v <= 0) return 60;
-  const allowed = new Set([15, 30, 60, 120, 180, 300, 600]);
+  const v = parseInt(_lsGet(PIN_KEYS.idleSec, '60'), 10);
+
+  if (Number.isFinite(v) && v === 0) return 0;
+
+  if (!Number.isFinite(v) || v <= 0) return 60;
+
+  const allowed = new Set([0, 15, 30, 60, 120, 180, 300, 600]); // NEW include 0
   return allowed.has(v) ? v : 60;
 }
+
 function _lockOnVisibility() { return _lsGet(PIN_KEYS.lockOnVis, '0') === '1'; }
 
 function hardHideSplashForLock() {
@@ -595,7 +603,7 @@ function lockUI(reason = '', opts = {}) {
   _pin.el.hidden = false;
   hardHideSplashForLock();
   disarmSplashTimeout();
-
+_syncTopBarSessionCountdown();
   if (_pin.input) {
     _pin.input.value = '';
     setTimeout(() => _pin.input.focus(), 0);
@@ -638,6 +646,7 @@ function unlockUI() {
   _ssSet(PIN_SESSION_KEYS.locked, '0');
 
   _pin.el.hidden = true;
+
   hardShowSplashAfterUnlock();
   if (!window.__bootDone && !splashHasError) armSplashTimeout();
 
@@ -650,6 +659,8 @@ function unlockUI() {
     main.removeAttribute('aria-hidden');
     main.style.visibility = '';
   }
+
+  _syncTopBarSessionCountdown(); 
 
   try { _pin.prevFocus?.focus?.(); } catch { }
   _pin.prevFocus = null;
@@ -892,10 +903,15 @@ function _shouldAutoLockByIdle() {
   if (!_isPinEnabled()) return false;
   if (_isSessionOpen()) return false;
 
+  const idleSec = _idleSeconds();
+
+  if (idleSec === 0) return false;
+
   const last = parseInt(_lsGet(PIN_KEYS.lastActivity, '0'), 10) || 0;
-  const idleMs = _idleSeconds() * 1000;
+  const idleMs = idleSec * 1000;
   return (_now() - last) >= idleMs;
 }
+
 
 function _markActivity() {
   if (!_isPinEnabled()) return;
@@ -1045,10 +1061,15 @@ lockUI(msg);
 
   if (_isSessionOpen()) { unlockUI(); return; }
 
-  const last = parseInt(_lsGet(PIN_KEYS.lastActivity, '0'), 10) || 0;
-  const idleMs = _idleSeconds() * 1000;
+const idleSec = _idleSeconds();
 
-  if (last && (_now() - last) < idleMs) { unlockUI(); return; }
+// NEW: never idle-lock => لا تقفل بسبب الخمول عند الإقلاع
+if (idleSec === 0) { unlockUI(); return; }
+
+const last = parseInt(_lsGet(PIN_KEYS.lastActivity, '0'), 10) || 0;
+const idleMs = idleSec * 1000;
+
+if (last && (_now() - last) < idleMs) { unlockUI(); return; }
 
 const msg = _lockReasonMessage() || '🔒 الواجهة مقفلة. أدخل كلمة المرور.';
 lockUI(msg);
@@ -1150,19 +1171,24 @@ function initScrollButtons() {
 }
 
 /* =========================
-   8) Handlers مشتركة للـ UI
+   8) Handlers مشتركة للـ UI (Factory + Host)
 ========================= */
+const bioHost = makeBioSectionHost({ Model, findPersonByIdInFamily });
+
 const handlers = {
+  // UI
   showSuccess,
   showInfo,
   showWarning,
   showError,
   highlight,
+
+  // state getters
   getSearch: () => (getState().search || ''),
   getFilters: () => (getState().filters || {}),
-  onUpdateStories,
-  onUpdateSources,
-  onEventsChange: onUpdateEvents
+
+  // Host bridge (Stories/Sources/Education/Events)
+  ...bioHost
 };
 
 /* =========================
@@ -1518,85 +1544,6 @@ function onModalSave(key, familyObj) {
   FeatureDuplicates.warnDuplicatesIfAny(key);
 }
 
-/* =========================
-   13) تحديث بيانات الشخص (Stories / Sources / Events) — نفس السلوك
-========================= */
-function onUpdateStories(personId, stories) {
-  const famKey = Model.getSelectedKey();
-  const fam = Model.getFamilies()[famKey];
-  if (!fam || !personId) return;
-
-  const person = findPersonByIdInFamily(fam, personId);
-  if (!person) return;
-
-  if (!Array.isArray(stories)) stories = [];
-
-  person.stories = stories.map(s => {
-    const now = new Date().toISOString();
-    const createdAt = s.createdAt || now;
-    const updatedAt = s.updatedAt || createdAt;
-
-    return {
-      id: s.id || (crypto?.randomUUID?.() || ('s_' + Math.random().toString(36).slice(2))),
-      title: String(s.title || '').trim(),
-      text: String(s.text || '').trim(),
-      images: Array.isArray(s.images) ? s.images.slice() : [],
-      type: (s.type || '').trim(),
-      eventDate: s.eventDate || null,
-      place: (s.place || '').trim(),
-      tags: Array.isArray(s.tags) ? s.tags.map(t => String(t).trim()).filter(Boolean) : [],
-      relatedPersonIds: Array.isArray(s.relatedPersonIds) ? s.relatedPersonIds.map(String) : [],
-      note: (s.note || '').trim(),
-      pinned: !!s.pinned,
-      createdAt,
-      updatedAt
-    };
-  });
-
-  Model.commitFamily(famKey);
-}
-
-function onUpdateSources(personId, sources) {
-  const famKey = Model.getSelectedKey();
-  const fam = Model.getFamilies()[famKey];
-  if (!fam || !personId) return;
-
-  const person = findPersonByIdInFamily(fam, personId);
-  if (!person) return;
-
-  if (!Array.isArray(sources)) sources = [];
-
-  person.sources = sources.map(src => {
-    const now = new Date().toISOString();
-    const createdAt = src.createdAt || now;
-    const updatedAt = src.updatedAt || createdAt;
-
-    return {
-      id: src.id || (crypto?.randomUUID?.() || ('src_' + Math.random().toString(36).slice(2))),
-      ...src,
-      createdAt,
-      updatedAt
-    };
-  });
-
-  Model.commitFamily(famKey);
-}
-
-function onUpdateEvents(personWithEvents) {
-  if (!personWithEvents || !personWithEvents._id) return;
-
-  const famKey = Model.getSelectedKey();
-  const fam = Model.getFamilies()[famKey];
-  if (!fam) return;
-
-  const person = findPersonByIdInFamily(fam, personWithEvents._id);
-  if (!person) return;
-
-  const events = Array.isArray(personWithEvents.events) ? personWithEvents.events : [];
-  person.events = events.map(ev => ({ ...ev }));
-
-  Model.commitFamily(famKey);
-}
 
 /* =========================
    14) Inline Rename — نفس السلوك
@@ -1665,7 +1612,7 @@ async function onInlineRename(personId, patch) {
 }
 
 /* =========================
-   15) عرض التفاصيل (Bio Modal) — نفس السلوك (لم أغيّر منطقك)
+   15) عرض التفاصيل (Bio Modal) 
 ========================= */
 async function onShowDetails(person, opts = {}) {
   if (!dom.bioModal || !dom.modalContent) {
@@ -1710,8 +1657,13 @@ async function onShowDetails(person, opts = {}) {
 
   dom.currentPerson = personObj;
 
-  const bio = Object.assign({}, personObj.bio || {});
-  bio.fullName = (bio.fullName || bio.fullname || personObj.name || '').toString();
+const getFreshBio = () => {
+  const b = Object.assign({}, personObj.bio || {});
+  b.fullName = (b.fullName || b.fullname || personObj.name || '').toString();
+  return b;
+};
+
+const bio = getFreshBio(); // للاستخدام الفوري (العنوان/المودز)
 
   dom.modalName.textContent =
     (personObj.name ? String(personObj.name).trim() : '') || (bio.fullName || '');
@@ -1729,7 +1681,7 @@ async function onShowDetails(person, opts = {}) {
   // قراءة الأوضاع المتاحة من TreeUI
   let modes = [];
   if (typeof TreeUI.getAvailableBioModes === 'function') {
-    try { modes = TreeUI.getAvailableBioModes(bio, personObj, fam) || []; } catch { modes = []; }
+    try { modes = TreeUI.getAvailableBioModes(getFreshBio(), personObj, fam) || []; } catch { modes = []; }
   }
 
   if (modeSelect) {
@@ -1751,103 +1703,27 @@ async function onShowDetails(person, opts = {}) {
   }
   if (modeSelect) modeSelect.value = mode;
 
-  const MODE_MAIN_SECTION = {
-    summary: 'basic',
-    family: 'family',
-    grands: 'grands',
-    children: 'children',
-    wives: 'wives',
-    stories: 'stories',
-    timeline: 'timeline',
-    sources: 'sources'
-  };
-  const SECTION_TO_MODE = {
-    basic: 'summary',
-    family: 'family',
-    grands: 'grands',
-    children: 'children',
-    wives: 'wives',
-    stories: 'stories',
-    timeline: 'timeline',
-    sources: 'sources'
-  };
+// Controller لمحرك المودال (registry + rerender + scroll + shortcut)
+dom.bioController = dom.bioController || createBioModalController({
+  dom,
+  byId,
+  TreeUI,
+  handlers,
+  onShowDetails,
+  onInlineRename,
+  onEditFamily,
+  onDeleteFamily,
+  onModalSave
+});
 
-  const scrollToCurrentSection = () => {
-    const sectionId = MODE_MAIN_SECTION[mode] || null;
-    if (!sectionId) return;
+const bioController = dom.bioController;
 
-    const container =
-      dom.bioSectionsContainer ||
-      document.getElementById('bioSectionsContainer') ||
-      dom.modalContent ||
-      document.getElementById('modalContent');
 
-    if (!container) return;
+bioController.setMode(mode);
+bioController.bindModeSelect(modeSelect, getFreshBio, personObj, fam);
 
-    const sec =
-      container.querySelector(`.bio-section[data-section-id="${sectionId}"]`) ||
-      container.querySelector(`.bio-section-${sectionId}`);
-
-    if (!sec) return;
-
-    sec.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
-  };
-
-  const rerenderBio = (options = {}) => {
-    const { skipScroll = false } = options;
-
-    const target = dom.bioSectionsContainer || byId('bioSectionsContainer') || dom.modalContent;
-    if (!target) return;
-
-    target.innerHTML = '';
-
-    TreeUI.renderBioSections(target, bio, personObj, fam, {
-      ...handlers,
-      onShowDetails,
-      onInlineRename,
-      onEditFamily,
-      onDeleteFamily,
-      onModalSave,
-      bioMode: mode,
-      onBioShortcutClick: (sectionId) => {
-        const targetMode = SECTION_TO_MODE[sectionId] || 'summary';
-        const needRerender = (mode !== targetMode);
-
-        if (needRerender) {
-          mode = targetMode;
-          if (modeSelect) modeSelect.value = targetMode;
-          rerenderBio({ skipScroll: true });
-        }
-
-        requestAnimationFrame(() => {
-          const container =
-            dom.bioSectionsContainer ||
-            document.getElementById('bioSectionsContainer') ||
-            dom.modalContent ||
-            document.getElementById('modalContent');
-
-          if (!container) return;
-
-          const sec =
-            container.querySelector(`.bio-section[data-section-id="${sectionId}"]`) ||
-            container.querySelector(`.bio-section-${sectionId}`);
-
-          if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
-        });
-      }
-    });
-
-    if (!skipScroll) requestAnimationFrame(scrollToCurrentSection);
-  };
-
-  if (modeSelect) {
-    modeSelect.onchange = () => {
-      mode = modeSelect.value || 'summary';
-      rerenderBio();
-    };
-  }
-
-  rerenderBio({ skipScroll: true });
+// نفس السلوك: أول رندر بدون سكرول
+bioController.rerenderBio(getFreshBio, personObj, fam, { skipScroll: true });
 
   if (personObj?._id) location.hash = `#person=${encodeURIComponent(personObj._id)}`;
 

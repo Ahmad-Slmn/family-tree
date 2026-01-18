@@ -4,7 +4,7 @@ import { DB } from './db.js';
 const PERSISTED_KEYS = new Set([
   // A) settings
   'pin_enabled',
-  'pin_idle_minutes',
+  'pin_idle_seconds',
   'pin_lock_on_visibility',
   'pin_session_minutes',
 

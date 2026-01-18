@@ -1,298 +1,65 @@
-/* ===== bio-stories.css — قسم القصص والمذكّرات ===== */
+/* ==========================================================================
+   bio-stories.css (Stories only)
+   كل ما هنا scoped على .bio-section-stories لمنع التضارب
+   ========================================================================== */
 
-/* رأس القسم + الميتا */
-.stories-header{margin-bottom:.35rem}
-.stories-meta{
-  margin:-.15rem 0 .65rem;
-  font-size:.8rem;
-  color:color-mix(in oklab,var(--text-muted)92%,var(--text-main));
-  opacity:.98
-}
-
-/* مبدّل وضع القصص */
-.stories-mode{
-  display:inline-flex;
-  align-items:center;
-  gap:.15rem;
-  padding:.12rem;
-  border-radius:999px;
-  background:color-mix(in oklab,var(--panel-bg)92%,#fff);
-  box-shadow:var(--shadow-soft)
-
-}
-.stories-mode-btn{
-  border:0;
-  background:transparent;
-  padding:.16rem .7rem;
-  border-radius:999px;
-  font-size:.8rem;
-  cursor:pointer;
-  color:color-mix(in oklab,var(--text-muted)90%,var(--text-main));
-  transition:background .14s,color .14s,transform .12s
-}
-.stories-mode-btn.is-active{
-  background:var(--modal-primary);
-  color:var(--modal-fg);
-  transform:translateY(-1px)
-}
-
-/* ===== بحث القصص ===== */
-.stories-search-wrap{
-  position:relative;
+/* 1) هوية القسم: خلفية لطيفة للعنوان + أيقونة */
+.bio-section-stories .stories-section-title{
   display:flex;
   align-items:center;
+  gap:.55rem;
 }
 
-.stories-search-input{
-  padding:.35rem .9rem;
-  border-radius:.7rem;
-  border:1px solid color-mix(in oklab,var(--surface-border)80%,transparent);
-  background:color-mix(in oklab,var(--panel-bg)96%,#fff);
-  font-size:.8rem;
-  color:var(--text-main);
-  width: 100%;
-  transition:border-color .16s, box-shadow .16s, background-color .16s;
-}
-
-.stories-search-input::placeholder{
-  color:color-mix(in oklab,var(--text-muted)90%,var(--text-main));
-}
-
-.stories-search-input:focus-visible{
-  outline:none;
-  border-color:var(--modal-primary);
-  box-shadow:0 0 0 .09rem color-mix(in oklab,var(--modal-primary)40%,transparent);
-  background:var(--card-bg);
+.bio-section-stories .stories-section-title i{
+  color: color-mix(in oklab, var(--modal-primary) 55%, var(--text-muted));
+  filter: drop-shadow(0 .1rem .2rem rgba(0,0,0,.08));
 }
 
 
-/* حالة عدم وجود قصص */
-.stories-empty{
-  padding:1rem 1.1rem;
-  border-radius:.8rem;
-  border:1px dashed color-mix(in oklab,var(--surface-border)80%,transparent);
-  background:color-mix(in oklab,var(--panel-bg)88%,#fff);
-  font-size:.9rem;
-  color:color-mix(in oklab,var(--text-muted)90%,var(--text-main));
-  text-align:center
+
+/* 3) تحسين قابلية القراءة لنص القصة */
+.bio-section-stories .story-preview-text{
+  line-height: 2.1;
+  font-size: .92rem;
 }
 
-/* وضع التعديل */
-.story-edit{
-  display:flex;
-  flex-direction:column;
-  gap:.5rem
-}
-.story-card--preview .story-edit{display:none}
-.story-card--edit .story-preview{display:none}
-
-/* بادجات النوع (أيقونات الأنواع فقط) */
-.story-badge--type[data-type="general"]::before{content:"📝"}
-.story-badge--type[data-type="childhood"]::before{content:"🧒"}
-.story-badge--type[data-type="study"]::before{content:"📚"}
-.story-badge--type[data-type="marriage"]::before{content:"💍"}
-.story-badge--type[data-type="work"]::before{content:"💼"}
-.story-badge--type[data-type="character"]::before{content:"⭐"}
-.story-badge--type[data-type="anecdote"]::before{content:"😄"}
-
-/* تمييز البطاقة عندما تكون القصة مميّزة */
-.story-card--pinned{
-  border:1px solid color-mix(in oklab,var(--modal-primary)60%,var(--surface-border));
-  box-shadow:0 .2rem .6rem rgba(0,0,0,.08);
+/* 4) شارات خاصة (المشاعر/الخصوصية/الخط الزمني) */
+.bio-section-stories .story-badge--mood{
+  background: color-mix(in oklab, var(--accent-success) 12%, var(--panel-bg));
+  border-color: color-mix(in oklab, var(--accent-success) 25%, var(--surface-border));
 }
 
-/* عدّاد عدد القصص بجوار عنوان القسم */
-.stories-count-badge{
-  display:inline-flex;
-  align-items:center;
-  padding:.05rem .45rem;
-  margin-inline-start:.35rem;
-  font-size:.78rem;
-  font-weight:500;
-  border-radius:999px;
-  background:color-mix(in oklab,var(--panel-bg)92%,#fff);
-  border:1px solid color-mix(in oklab,var(--surface-border)75%,transparent);
-  color:color-mix(in oklab,var(--text-muted)80%,var(--text-main));
-  box-shadow:0 .05rem .25rem rgba(0,0,0,.05);
+.bio-section-stories .story-badge--vis{
+  background: color-mix(in oklab, var(--modal-primary) 10%, var(--panel-bg));
+  border-color: color-mix(in oklab, var(--modal-primary) 22%, var(--surface-border));
+}
+
+.bio-section-stories .story-badge--timeline{
+  background: color-mix(in oklab, var(--arrow-color) 12%, var(--panel-bg));
+  border-color: color-mix(in oklab, var(--arrow-color) 25%, var(--surface-border));
+}
+
+/* 5) أدوات القصص في الأعلى: اجعلها شبكية لطيفة بدل زحمة */
+.bio-section-stories .stories-tools-left{
+  gap:.6rem;
 }
 
 
-/* شارة "بدون تاريخ محدّد" */
-.story-badge--undated{
-  padding:.06rem .5rem;
-  border-radius:999px;
-  font-size:.74rem;
-  border:1px solid color-mix(in oklab,var(--surface-border)80%,transparent);
-  background:color-mix(in oklab,var(--panel-bg)96%,#fff);
-  color:color-mix(in oklab,var(--text-muted)90%,var(--text-main));
-}
-/* الطول الفعلي سيتكيّف تلقائيًا عبر جافاسكربت (autoResizeStoryTextareas) */
-.story-textarea, .story-note-input{
-  min-height:7.2rem;
-  max-height:22rem;
-  line-height:1.7;
+.bio-section-stories .story-tool-head{
+  margin-bottom: .25rem;
+  opacity: .95;
 }
 
-.story-note-input{
-  min-height:5.4rem;
-  max-height:16rem;
-  resize:none;
+/* 6) منطقة الملفات: thumb أصغر شوي للقصص (اختياري) */
+.bio-section-stories .story-file-thumb{
+  width: 7.4rem;
+  height: 7.4rem;
 }
 
-
-/* حقل الوسوم في وضع التعديل */
-.story-body input[name^="story_tags_"]{
-  width:100%;
-  padding:.32rem .65rem;
-  border-radius:.6rem;
-  border:1px dashed color-mix(in oklab,var(--surface-border)80%,transparent);
-  background:color-mix(in oklab,var(--panel-bg)96%,#fff);
-  font-size:.84rem;
-  color:var(--text-main);
-  outline:none!important;
-  margin-top:.15rem;
-  box-shadow:var(--shadow-soft);
-
-  transition:border-color .16s,box-shadow .16s,background-color .16s,transform .12s
+.story-prompt-btn {
+  margin-inline-start: auto;
+  padding: 0.25rem 0.6rem;
 }
-.story-body input[name^="story_tags_"]::placeholder{
-  color:color-mix(in oklab,var(--text-muted)92%,var(--text-main))
-}
-.story-body input[name^="story_tags_"]:hover{
-  border-color:color-mix(in oklab,var(--modal-primary)40%,var(--surface-border));
-  background:color-mix(in oklab,var(--panel-bg)94%,#fff);
-  transform:translateY(-1px);
-  box-shadow:var(--shadow-soft-lg)
-
-}
-.story-body input[name^="story_tags_"]:focus-visible{
-  border-color:var(--modal-primary);
-  box-shadow:0 0 0 .09rem color-mix(in oklab,var(--modal-primary)40%,transparent);
-  background:var(--card-bg)
-}
-
-/* وسوم القصة (المخرجات) */
-.story-tags-list{
-  display:flex;
-  flex-wrap:wrap;
-  gap:.3rem;
-  margin-top:.25rem
-}
-.story-tag-chip{
-  padding:.06rem .5rem;
-  border-radius:999px;
-  font-size:.72rem;
-  cursor:pointer;
-  border:1px solid color-mix(in oklab,var(--surface-border)80%,transparent);
-  background:color-mix(in oklab,var(--panel-bg)96%,#fff);
-  color:color-mix(in oklab,var(--text-muted)88%,var(--text-main));
-  transition:background-color .14s,border-color .14s,color .14s,transform .1s
-}
-.story-tag-chip:hover{
-  background:color-mix(in oklab,var(--panel-bg)90%,#fff);
-  border-color:color-mix(in oklab,var(--modal-primary)40%,var(--surface-border));
-  transform:translateY(-1px)
-}
-.story-tag-chip.is-active{
-  background:color-mix(in oklab,var(--modal-primary)88%,#fff);
-  border-color:color-mix(in oklab,var(--modal-primary)65%,var(--surface-border));
-  color:var(--modal-primary-fg,var(--modal-fg))
-}
-
-/* صورة المعاينة داخل الثَمب */
-.story-image-thumb--preview{width:8.8rem;height:7rem;cursor: pointer}
-
-/* حقل العبرة / الخلاصة */
-.story-note-preview{
-  margin-top:.25rem;
-  font-size:.82rem;
-  line-height:1.6;
-  color:color-mix(in oklab,var(--text-muted)88%,var(--text-main))
-}
-.story-note-preview strong{font-weight:700}
-.story-note-input{
-  width:100%;
-  border-radius:.6rem;
-  border:1px solid var(--surface-border);
-  background:var(--panel-bg);
-  padding:.35rem .7rem;
-  font-size:.86rem;
-  color:var(--text-main);
-  outline:none!important;
-  resize:vertical;
-  min-height:3rem;
-  transition:border-color .16s,box-shadow .16s,background-color .16s
-}
-.story-note-input::placeholder{color:var(--text-muted)}
-.story-note-input:focus-visible{
-  border-color:var(--modal-primary);
-  box-shadow:0 0 0 .09rem color-mix(in oklab,var(--modal-primary)40%,transparent);
-  background:var(--card-bg)
-}
-
-/* ================== الاستجابة (Responsive) ================== */
-@media(max-width:23.9rem){
-  .bio-section-stories{margin-top:.6rem;padding:.7rem .7rem .9rem}
-  .stories-header{margin-bottom:.4rem}
-  .stories-tools{flex-direction:column;align-items:stretch;gap:.4rem}
-  .stories-tools-left,.stories-tools-right{width:100%;justify-content:space-between}
-  .stories-sort,.stories-type-filter{flex:1 1 auto}
-  .stories-add-btn{width:100%;justify-content:center}
-  .stories-meta{font-size:.78rem}
-  .story-card-top{align-items:flex-start}
-  .story-head{flex-direction:column;align-items:stretch;gap:.45rem}
-  .story-dates{text-align:start}
-  .story-meta-row{grid-template-columns:1fr}
-  .story-pin-toggle{width:100%}
-}
-@media(min-width:24rem) and (max-width:29.9rem){
-  .bio-section-stories{margin-top:.7rem;padding:.8rem .85rem 1rem}
-  .stories-header{margin-bottom:.45rem}
-  .stories-tools{flex-direction:column;align-items:stretch;gap:.45rem}
-  .stories-tools-left,.stories-tools-right{width:100%;justify-content:space-between}
-  .stories-sort,.stories-type-filter{flex:1 1 auto}
-  .stories-add-btn, .stories-search-wrap{width:100%}
-  .story-card{max-height:72vh}
-  .story-head{flex-direction:column;align-items:stretch}
-  .story-dates{text-align:start}
-  .story-meta-row{grid-template-columns:1fr}
-  .story-pin-toggle{width:100%}
-}
-@media(min-width:30rem) and (max-width:39.9rem){
-  .bio-section-stories{margin-top:.8rem;padding:.9rem 1rem 1.1rem}
-  .stories-tools{flex-direction:column;align-items:stretch;gap:.5rem}
-  .stories-tools-left,.stories-tools-right{width:100%}
-  .stories-tools-right{justify-content:flex-start}
-  .story-card{max-height:75vh}
-  .story-head{flex-direction:column;align-items:stretch}
-  .story-dates{text-align:start}
-  .story-meta-row{grid-template-columns:1fr}
-  .story-pin-toggle{width:100%}
-}
-@media(min-width:40rem) and (max-width:47.9rem){
-  .bio-section-stories{margin-top:.9rem;padding:1rem 1.1rem 1.2rem}
-  .stories-header{margin-bottom:.5rem}
-  .stories-tools{flex-direction:row;align-items:center;flex-wrap:wrap;gap:.5rem}
-  .stories-tools-left{flex:1 1 100%;justify-content:flex-start;gap:.5rem}
-  .stories-tools-right{flex:0 0 auto}
-  .story-card{max-height:78vh}
-  .story-head{flex-direction:row;align-items:center;gap:.6rem}
-  .story-meta-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
-  .story-pin-toggle{width:auto}
-}
-@media(min-width:48rem) and (max-width:63.9rem){
-  .bio-section-stories{margin-top:1rem;padding:1rem 1.3rem 1.3rem}
-  .stories-tools{flex-direction:row;align-items:center;gap:.6rem}
-  .stories-tools-left{flex:1 1 auto}
-  .stories-tools-right{flex:0 0 auto}
-  .story-card{max-height:22rem}
-  .story-meta-row{grid-template-columns:minmax(0,9.5rem) minmax(0,8.5rem) minmax(0,1.4fr)}
-  .story-pin-toggle{width:auto}
-}
-@media(min-width:64rem){
-  .bio-section-stories{margin-top:1.1rem;padding:1.1rem 1.4rem 1.4rem}
-  .stories-list{gap:1rem}
-  .story-card{max-height:24rem}
-  .story-meta-row{grid-template-columns:minmax(0,9.5rem) minmax(0,8.5rem) minmax(0,1.4fr)}
-  .story-pin-toggle{width:auto}
+.story-prompt-btn i {
+  margin-inline-end: 0.25rem;
 }
