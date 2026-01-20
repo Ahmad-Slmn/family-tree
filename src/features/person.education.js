@@ -49,11 +49,8 @@ import {
   withFieldHead
 } from '../features/bio-sections.utils.js';
 
-import {
-  attachYearModeToggle,
-  getLogicalDateValue,
-  setYearToggleValue
-} from '../ui/modal.yearToggle.js';
+import {attachYearModeToggle, getLogicalDateValue, setYearToggleValue} from '../ui/modal.yearToggle.js';
+
 import { getLinkedEventEdges, upsertSectionEvents, normalizeEventLink } from './person.events.js';
 
 /* ============================================================================
@@ -182,13 +179,12 @@ function normalizeEducation(raw) {
  startDate: raw.startDate || null, // YYYY أو YYYY-MM-DD أو null
 endDate: raw.endDate || null,     // YYYY أو YYYY-MM-DD أو null
 
-    ongoing: !!raw.ongoing,           // ✅ حتى الآن
+    ongoing: !!raw.ongoing,           // حتى الآن
 
     place: safeStr(raw.place),
     grade: safeStr(raw.grade),
     description: safeStr(raw.description),
 
-    // ✅ تم تغيير الاسم إلى files بدل images
     files: Array.isArray(raw.files) ? raw.files.map(String) : [],
 sourceIds: Array.isArray(raw.sourceIds) ? raw.sourceIds.map(String).filter(Boolean) : [],
 
@@ -377,7 +373,7 @@ function classifyEduThumb(thumb, ref) {
     : inferFileKind({ ext, ref: raw });
 
   const key = `${kind || 'other'}|${ext || ''}`;
-  if (thumb.dataset.eduThumbKey === key) return; // ✅ منع إعادة بناء DOM لنفس التصنيف
+  if (thumb.dataset.eduThumbKey === key) return; // منع إعادة بناء DOM لنفس التصنيف
   thumb.dataset.eduThumbKey = key;
 
   thumb.classList.remove(
@@ -470,10 +466,8 @@ export function createEducationSection(person, handlers = {}) {
   let lastEditedId = null;
   let currentSearchQuery = '';
 
-  // ✅ فلاتر جديدة
-  let currentDegreeGroupFilter = ''; // جامعة/مدرسة/دورة/شهادة مهنية
-  let currentFilesFilter = '';       // with/without
-// ✅ Persist filters state (degreeGroup/files/tag/search) across reload
+  let currentDegreeGroupFilter = '';
+  let currentFilesFilter = '';       
 const EDUCATION_FILTERS_STATE_KEY = 'biosec:education:filtersState';
 
 function readEducationFiltersState() {
@@ -500,7 +494,7 @@ function persistEducationFiltersState() {
     tag: (currentTagFilter || '').trim(),
     search: (currentSearchQuery || '').trim(),
 
-    // ✅ حفظ الترتيب
+    // حفظ الترتيب
     sort: (currentSortMode || '').trim()
   });
 }
@@ -512,7 +506,7 @@ function clearEducationFiltersState() {
 
   const draftNewMap = new Map(); // eduId -> true (UI-only)
 
-  // ✅ منع Race conditions
+  // منع Race conditions
   let renderSeq = 0;
 
   function emitEducationToHost() {
@@ -554,7 +548,7 @@ sourceIds: shallowArr(x.sourceIds),
 
 const sortMode = (handlers.getSortMode && handlers.getSortMode()) || 'latest';
 
-// ✅ نخزن قيمة الترتيب الحالية (قابلة للاسترجاع من localStorage)
+// نخزن قيمة الترتيب الحالية (قابلة للاسترجاع من localStorage)
 let currentSortMode = sortMode;
 
 sortEducation(person, currentSortMode);
@@ -572,8 +566,11 @@ sortEducation(person, currentSortMode);
   root.appendChild(titleEl);
 
   const metaEl = el('div', 'biosec-meta education-meta');
-  metaEl.textContent =
-    'وثّق المراحل التعليمية والشهادات والدورات؛ أضف التفاصيل المهمة وارفق شهاداتك ووثائقك لتبقى السيرة أكثر اكتمالًا ودقة.';
+metaEl.textContent =
+  'يساعدك هذا القسم على توثيق المراحل التعليمية والشهادات والدورات بشكل منظم لدعم السيرة بدقة وموثوقية.\n' +
+  'أضف بيانات المرحلة وارفق وثائقك (شهادات/ملفات) واربطها بمصادر التوثيق لتبقى معلوماتك مكتملة وقابلة للرجوع.\n' +
+  'يمكنك أيضًا تضمين المرحلة في الخط الزمني عند الحاجة لعرض مسارك التعليمي بوضوح.';
+
   root.appendChild(metaEl);
 
   function updateCountBadge() {
@@ -588,10 +585,10 @@ sortEducation(person, currentSortMode);
   const tools = el('div', 'biosec-tools education-tools');
   const toolsLeft = el('div', 'biosec-tools-left education-tools-left');
   const toolsRight = el('div', 'biosec-tools-right education-tools-right');
-  // ✅ زر إظهار/إخفاء الفلاتر
+  // زر إظهار/إخفاء الفلاتر
   const filtersToggleBtn = el('button', 'biosec-filters-toggle biosec-btn education-filters-toggle');
   filtersToggleBtn.type = 'button';
-// ✅ زر تصفير الفلاتر (يظهر فقط عند وجود فلاتر مفعّلة)
+// زر تصفير الفلاتر (يظهر فقط عند وجود فلاتر مفعّلة)
 const resetFiltersBtn = el('button', 'biosec-btn biosec-filters-reset education-filters-reset');
 resetFiltersBtn.type = 'button';
 resetFiltersBtn.innerHTML = '<i class="fa-solid fa-rotate-left" aria-hidden="true"></i> <span>إعادة ضبط الفلاتر</span>';
@@ -659,13 +656,13 @@ searchInput.addEventListener('input', () => {
   const raw = searchInput.value || '';
   currentSearchQuery = raw.trim().toLowerCase();
 
-  // ✅ أظهر/أخف زر المسح حسب وجود نص
+  // أظهر/أخف زر المسح حسب وجود نص
   clearSearchBtn.style.display = raw.trim() ? '' : 'none';
 persistEducationFiltersState(); 
   renderList();
 });
 
-// ✅ زر مسح البحث (يظهر فقط عند وجود نص)
+// زر مسح البحث (يظهر فقط عند وجود نص)
 const clearSearchBtn = el('button', 'biosec-search-clear education-search-clear');
 clearSearchBtn.type = 'button';
 clearSearchBtn.title = 'مسح البحث';
@@ -686,7 +683,7 @@ persistEducationFiltersState();
 });
 
 searchWrap.append(searchInput, clearSearchBtn);
-// ✅ Restore filters state on load (degreeGroup/files/tag/search/sort)
+// Restore filters state on load (degreeGroup/files/tag/search/sort)
 {
   const st = readEducationFiltersState();
   if (st) {
@@ -714,7 +711,7 @@ searchWrap.append(searchInput, clearSearchBtn);
       clearSearchBtn.style.display = (st.search || '').trim() ? '' : 'none';
     }
 
-    // ✅ sort
+    // sort
     if (typeof st.sort === 'string') {
       const v = st.sort || 'latest';
       // تأكد أنه ضمن الخيارات المتاحة
@@ -722,7 +719,7 @@ searchWrap.append(searchInput, clearSearchBtn);
       currentSortMode = ok ? v : 'latest';
       sortSelect.value = currentSortMode;
 
-      // ✅ طبّق الفرز فورًا قبل أول render
+      // طبّق الفرز فورًا قبل أول render
       sortEducation(person, currentSortMode);
     }
   }
@@ -744,7 +741,7 @@ filesFilterSelect.addEventListener('change', () => {
   renderList();
 });
 
-// ✅ دالة موحّدة لمعرفة هل الفلاتر مفعّلة (نستخدمها للمنع + لإظهار زر التصفير)
+// دالة موحّدة لمعرفة هل الفلاتر مفعّلة (نستخدمها للمنع + لإظهار زر التصفير)
 function hasActiveFilters() {
   const hasDegreeGroup = !!(degreeGroupSelect.value || '').trim();
   const hasFiles = !!(filesFilterSelect.value || '').trim();
@@ -766,7 +763,7 @@ const filtersCollapse = createFiltersCollapseController({
   }
 });
 
-  // ✅ طبق الحالة الابتدائية (مع منع الوميض)
+  // طبق الحالة الابتدائية (مع منع الوميض)
   filtersCollapse.applyInitialState({ autoOpenIfActive: true });
   syncResetFiltersBtnVisibility();
 function syncResetFiltersBtnVisibility() {
@@ -802,10 +799,10 @@ resetFiltersBtn.addEventListener('click', (e) => {
   resetFiltersToDefault();
 });
 
-// ✅ طبق الحالة الأولية لظهور الزر
+// طبق الحالة الأولية لظهور الزر
 syncResetFiltersBtnVisibility();
 
-  // ✅ فعل زر الإظهار/الإخفاء
+  // فعل زر الإظهار/الإخفاء
 filtersToggleBtn.addEventListener('click', (e) => {
   e.preventDefault();
   e.stopPropagation();
@@ -932,7 +929,7 @@ const timelineState = getLinkedEventEdges(person.events || [], 'education', item
 let timelineEnabled = !!timelineState.enabled;
 
 const fp = `edu_${item.id}`;
-// ✅ timeline toggle (linked events) — shared classes
+// timeline toggle (linked events) — shared classes
 const timelineWrap = el('label', 'biosec-pin-toggle biosec-toggle--timeline');
 
 const timelineCheckbox = el('input');
@@ -986,7 +983,7 @@ let currentSourceIds = shallowArr(original.sourceIds)
         const dateLabel = el('span', 'biosec-preview-date education-preview-date');
         dateLabel.textContent = item.createdAt ? formatCreatedAtLabel(item.createdAt, { prefix: 'أضيفت', formatter: formatFullDateTime })
           : '';
-// ✅ آخر تعديل
+//آخر تعديل
 const updatedLabel = el('span', 'biosec-preview-date education-preview-updated');
 updatedLabel.textContent = item.updatedAt ? formatCreatedAtLabel(item.updatedAt, { prefix: 'آخر تعديل', formatter: formatFullDateTime })
   : '';
@@ -1148,10 +1145,10 @@ function renderPreviewSourceChips() {
   const ids = shallowArr(original.sourceIds);
   if (!ids.length) return null;
 
-  // ✅ wrapper الرئيسي (نفس كلاس التعليم الحالي)
+  // wrapper الرئيسي
   const wrap = el('div', 'biosec-linked-sources education-linked-sources');
 
-  // ✅ header قبل الأزرار (عنوان + أيقونة)
+  // header قبل الأزرار (عنوان + أيقونة)
   const head = el('div', 'biosec-linked-sources-head education-linked-sources-head');
 
   const icon = el('i');
@@ -1176,10 +1173,10 @@ const title = textEl(
   head.append(icon, title);
   wrap.appendChild(head);
 
-  // ✅ الأزرار (chips)
+  // الأزرار (chips)
 ids.forEach((sid) => {
   const src = sourceMap.get(String(sid));
-  if (!src) return; // ✅ تجاهل المصادر المحذوفة
+  if (!src) return; // تجاهل المصادر المحذوفة
 
   const chip = el('button', 'biosec-chip biosec-chip--source');
   chip.type = 'button';
@@ -1313,7 +1310,7 @@ if (!wrap.querySelector('.biosec-chip--source')) return null;
 
         renderPreviewFiles();
 
-        // ✅ ترتيب المعاينة الجديد حسب الهيكل المطلوب
+        // ترتيب المعاينة الجديد حسب الهيكل المطلوب
         previewBox.append(
           previewTitle,          // 1) العنوان
           badgesPrimary,         // 2) الأساسية
@@ -1370,7 +1367,7 @@ function makeEditBlock(title, extraClass = '', icon = '') {
 
         const body = el('div', 'biosec-body education-body');
 
-// ✅ صف واحد فقط للبيانات الأساسية (بدل basicRow)
+// صف واحد فقط للبيانات الأساسية (بدل basicRow)
 const basicRow = el('div', 'biosec-meta-row education-meta-row');
 
 /* ---- degreeType + mode ---- */
@@ -1440,7 +1437,7 @@ endInput.dataset.yearToggle = '1';
 const startWrap = withFieldHead(startInput, { label: 'تاريخ البداية', icon: 'fa-calendar-plus' });
 const endWrap   = withFieldHead(endInput,   { label: 'تاريخ النهاية', icon: 'fa-calendar-check' });
 
-// ✅ كل الحقول الأساسية في صف واحد (حسب الترتيب المطلوب)
+// كل الحقول الأساسية في صف واحد (حسب الترتيب المطلوب)
 basicRow.append(
   // 1) title
   withFieldHead(titleInput, { label: 'عنوان المرحلة', icon: 'fa-solid fa-file-signature' }),
@@ -1500,7 +1497,7 @@ function syncOngoingUI() {
 
 syncOngoingUI();
         
-// ✅ حقول تفاصيل إضافية (لازم تكون مُعرفة قبل ما نستخدمها في extraRow1 و recomputeDirty)
+// حقول تفاصيل إضافية (لازم تكون مُعرفة قبل ما نستخدمها في extraRow1 و recomputeDirty)
 const credentialIdInput = el('input', 'biosec-input education-credentialId-input');
 credentialIdInput.type = 'text';
 credentialIdInput.placeholder = 'رقم/معرّف الشهادة (اختياري)';
@@ -1587,7 +1584,7 @@ languageInput.value = original.language;
 
         addFileLabel.append(addFileIcon, addFileText, fileInput);
         filesRow.appendChild(filesThumbs);
-// ✅ صف تحت زر الإرفاق: (الحد الأقصى + لم تُرفق ملفات بعد) في سطر واحد
+// صف تحت زر الإرفاق: (الحد الأقصى + لم تُرفق ملفات بعد) في سطر واحد
 const filesHintsRow = el('div', 'education-files-hints-row');
 filesHintsRow.style.display = 'flex';
 filesHintsRow.style.alignItems = 'center';
@@ -1602,7 +1599,6 @@ emptyFilesHint.style.marginTop = '0';
 
 filesHintsRow.append(filesLimitHint, emptyFilesHint);
 
-// ✅ الترتيب الجديد:
 // 1) thumbs row
 // 2) زر الإرفاق
 // 3) السطر الذي تحته (limit + empty) في صف واحد
@@ -1837,7 +1833,7 @@ fileInput.name = `${fp}_files`; fileInput.id = `${fp}_files`;
 const basicBlock = makeEditBlock('بينات أساسية', 'education-edit-block--basic', 'fa-circle-info');
 basicBlock.inner.append(basicRow);
 
-// 2) تفاصيل إضافية (✅ هيكل جديد: 5 صفوف)
+// 2) تفاصيل إضافية
 const extraBlock = makeEditBlock('تفاصيل إضافية', 'education-edit-block--extra', 'fa-list-check');
 
 // 2.1) sources block (new structure مثل events)
@@ -1854,7 +1850,6 @@ const linkedSourcesHeader = el('div', 'education-linked-sources-header biosec-li
 
 const linkedSourcesTitle = el('div', 'education-linked-sources-title biosec-linked-sources-title');
 function getEduTypeLabelForSources() {
-  // ✅ نفس منطق المعاينة تقريبًا
   const d = safeStr(original.degreeType);
   const g = safeStr(degreeGroupLabel(original.degreeType));
   const t = safeStr(original.title);
@@ -1889,7 +1884,7 @@ const sourcesCount = el('div', 'education-linked-sources-count biosec-linked-sou
 sourcesCount.textContent = '0 محدد';
 sourcesCount.dataset.active = '0';
 
-// ✅ Search wrap + clear button (مثل biosec-tools-right)
+// Search wrap + clear button (مثل biosec-tools-right)
 const sourcesSearchWrap = el('div', 'biosec-search-wrap biosec-linked-sources-search-wrap education-linked-sources-search-wrap');
 
 const sourcesSearch = document.createElement('input');
@@ -1935,7 +1930,7 @@ linkedSourcesTools.append(sourcesCount, sourcesSearchWrap, btnSelectAll, btnClea
 
 // list wrap
 const linkedSourcesList = el('div', 'education-linked-sources-list biosec-linked-sources-list');
-// ✅ Empty state when search has no matches
+// Empty state when search has no matches
 const noSourcesMatchEl = textEl(
   'div',
   'لا توجد مصادر مطابقة لبحثك.',
@@ -1955,7 +1950,7 @@ function applySourcesFilterEdu() {
   const qRaw = (sourcesSearch.value || '');
   const q = qRaw.trim().toLowerCase();
 
-  // ✅ toggle clear button
+  // toggle clear button
   clearSourcesSearchBtn.style.display = q ? '' : 'none';
 
   let visibleCount = 0;
@@ -1969,7 +1964,7 @@ function applySourcesFilterEdu() {
     if (ok) visibleCount++;
   });
 
-  // ✅ show/hide "no matches" only when searching
+  // show/hide "no matches" only when searching
   if (q && visibleCount === 0) {
     noSourcesMatchEl.style.display = '';
   } else {
@@ -2054,18 +2049,20 @@ linkedSourcesList.appendChild(noSourcesMatchEl);
   bindEducationSourcesDelegationOnce();
 
   if (!sources.length) {
-    linkedSourcesList.appendChild(
-      textEl(
-        'div',
-        'لا توجد مصادر مضافة بعد. أضف مصدرًا من قسم "المصادر" ثم اربطه هنا.',
-        'biosec-empty-mini'
-      )
-    );
-    updateSelectedCountEdu();
+    // لا توجد مصادر: اخفِ بلوك المصادر بالكامل ولا تعرض رسالة داخل القائمة
+    sourcesBlock.block.style.display = 'none';
+
+    // تنظيف بسيط لحالة البحث/النتائج 
+    linkedSourcesList.innerHTML = '';
     noSourcesMatchEl.style.display = 'none';
+    updateSelectedCountEdu();
 
     return;
   }
+
+  // توجد مصادر: أظهر البلوك
+  sourcesBlock.block.style.display = '';
+
 
   for (let i = 0; i < sources.length; i++) {
     const src = sources[i];
@@ -2111,7 +2108,6 @@ sourcesBlock.inner.append(linkedSourcesRow);
 
 // الصف الأول: 6 حقول
 const extraRow1 = el('div', 'biosec-meta-row education-meta-row');
-// الصف الأول: (حسب الترتيب المطلوب)
 extraRow1.append(
   // 1) credentialId
   withFieldHead(credentialIdInput, { label: 'رقم / معرّف الشهادة', icon: 'fa-id-card' }),
@@ -2321,10 +2317,10 @@ const sourcesChanged =
         fieldInput.addEventListener('input', recomputeDirty);
 
 degreeTypeSelect.addEventListener('change', () => {
-  // ✅ حدّث snapshot مؤقتًا للاسم (بدون حفظ)
+  // حدّث snapshot مؤقتًا للاسم (بدون حفظ)
   original.degreeType = safeStr(degreeTypeSelect.value);
 
-  refreshLinkedSourcesHeaderTitle(); // ✅ تحديث النص
+  refreshLinkedSourcesHeaderTitle(); // تحديث النص
   recomputeDirty();
 });
         modeSelect.addEventListener('change', recomputeDirty);
@@ -2471,7 +2467,7 @@ const prevDates = {
           });
 
           const effective = updated || item;
-// ✅ Upsert linked timeline events for education
+// Upsert linked timeline events for education
 upsertSectionEvents(person, handlers, {
   sectionId: 'education',
   item: effective,
@@ -2558,12 +2554,11 @@ timelineInitialEnabled = !!timelineCheckbox.checked;
 original.sourceIds = shallowArr(effective.sourceIds);
 currentSourceIds = shallowArr(original.sourceIds);
 renderLinkedSourcesEdu();
-// ✅ refresh sources chips in preview (بدون انتظار renderList)
+// refresh sources chips in preview (بدون انتظار renderList)
 try {
   previewBox.querySelectorAll('.education-linked-sources').forEach(x => x.remove());
   const chips = renderPreviewSourceChips();
   if (chips) {
-    // نحطه بعد tagsWrap (مثل ترتيبك)
     tagsWrap.insertAdjacentElement('afterend', chips);
   }
 } catch {}
@@ -2591,7 +2586,7 @@ const endB = original.ongoing ? 'حتى الآن' : formatEduDateBadge(original.
             dates.textContent = lbl;
             dateLabel.textContent = lbl;
           }
-// ✅ حدّث آخر تعديل في المعاينة
+// حدّث آخر تعديل في المعاينة
 if (effective.updatedAt) {
   updatedLabel.textContent = formatCreatedAtLabel(effective.updatedAt, { prefix: 'آخر تعديل', formatter: formatFullDateTime });
 }
@@ -2696,7 +2691,7 @@ recomputeDirty();
           });
 
           if (!success) { showError?.('تعذر الحذف. حاول مرة أخرى.'); return; }
-// ✅ remove linked timeline events for this education item
+// remove linked timeline events for this education item
 upsertSectionEvents(person, handlers, {
   sectionId: 'education',
   item: { id: item.id },
@@ -2720,7 +2715,7 @@ upsertSectionEvents(person, handlers, {
       });
 
       autoResizeTextareas(list, '.education-textarea, .education-note-input, .education-highlights-input');
-// ✅ consume pending nav: scroll to specific education card OR first one linked by sourceId
+// consume pending nav: scroll to specific education card OR first one linked by sourceId
 try {
   const nav = (typeof handlers.__consumeBioNav === 'function') ? handlers.__consumeBioNav() : null;
   if (!nav) return;
@@ -2820,8 +2815,8 @@ try {
 sortSelect.addEventListener('change', () => {
   const mode = sortSelect.value || 'latest';
 
-  currentSortMode = mode;            // ✅ تحديث الحالة الحالية
-  persistEducationFiltersState();    // ✅ حفظ
+  currentSortMode = mode;            // تحديث الحالة الحالية
+  persistEducationFiltersState();    // حفظ
 
   sortEducation(person, mode);
   if (typeof handlers.onDirty === 'function') handlers.onDirty(person.education);

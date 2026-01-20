@@ -326,7 +326,7 @@ export function createCareerSection(person, handlers = {}) {
   let filterOrg = '';
   let filterPlace = '';
   
-// ✅ Persist career filters state across reload
+// Persist career filters state across reload
 const CAREER_FILTERS_STATE_KEY = 'biosec:career:filtersState';
 
 function readCareerFiltersState() {
@@ -353,7 +353,7 @@ function persistCareerFiltersState() {
     place: (filterPlace || '').trim(),
     tag: (currentTagFilter || '').trim(),
     search: (currentSearchQuery || '').trim(),
-    sort: (sortSelect?.value || '').trim() // ✅ حفظ الترتيب
+    sort: (sortSelect?.value || '').trim() // حفظ الترتيب
   });
 }
 
@@ -362,7 +362,7 @@ function clearCareerFiltersState() {
 }
 
 // =============================================
-// ✅ career legacy matcher (fallback cleanup)
+// career legacy matcher (fallback cleanup)
 // - يلتقط الشكل الأقدم جدًا: job + (بدأ/انتهى) بدون relatedCareerId
 // - يعمل حتى لو تم حذف العنصر (يعتمد على prevDates)
 // =============================================
@@ -378,14 +378,14 @@ function careerLegacyFallbackMatcher(ev, sid, iid, prevDates = null) {
   if (type !== 'job') return false;
   if (title !== 'بدأ العمل' && title !== 'انتهى العمل') return false;
 
-  // ✅ prevDates (مهم جدًا للتنظيف عند تغيير start/end أو عند الحذف)
+  // prevDates (مهم جدًا للتنظيف عند تغيير start/end أو عند الحذف)
   const extra = Array.isArray(prevDates) ? prevDates.map(s => String(s || '').trim()).filter(Boolean)
     : [];
 
   // حاول نجيب العنصر لو موجود (للوضع الطبيعي أثناء التعديل/الحفظ)
   const item = (person?.career || []).find(x => String(x?.id || '') === String(iid || ''));
 
-  // ✅ لو العنصر غير موجود (مثلاً بعد الحذف): نعتمد فقط على prevDates
+  // لو العنصر غير موجود (مثلاً بعد الحذف): نعتمد فقط على prevDates
   if (!item) {
     if (!extra.length) return false;
     return extra.includes(date);
@@ -406,7 +406,7 @@ function careerLegacyFallbackMatcher(ev, sid, iid, prevDates = null) {
 
 
   // ===============================
-  // ✅ Draft + Empty record helpers
+  // Draft + Empty record helpers
   // ===============================
 
   const CAREER_EMPTY_KEYS = [
@@ -419,7 +419,7 @@ function careerLegacyFallbackMatcher(ev, sid, iid, prevDates = null) {
     return isEmptyRecordByKeys(rec, CAREER_EMPTY_KEYS);
   }
 
-  // ✅ UI-only: tracks "new draft" records without touching the data model
+  // UI-only: tracks "new draft" records without touching the data model
   const draftNewMap = new Map(); // careerId -> true
 
 // ====== التقاط نية التنقّل (Nav intent) + scroll بعد الرسم ======
@@ -447,10 +447,6 @@ function consumePendingNav() {
   if (handlers && handlers.__bioNav) handlers.__bioNav = null;
 }
 
-
-// ===============================
-// ✅ (أ) ضع الهيلبرات هنا بالضبط
-// ===============================
 function findScrollParent(node) {
   let el = node?.parentElement;
   while (el) {
@@ -532,8 +528,11 @@ function scrollToCard(targetEl) {
   root.appendChild(titleEl);
 
   const metaEl = el('div', 'biosec-meta career-meta');
-  metaEl.textContent =
-    'وثّق الوظائف والمناصب بشكل مستقل، مع تواريخ دقيقة ومكان العمل، وأضف ملاحظات ومصادر عند توفرها.';
+metaEl.textContent =
+  'يساعدك قسم "المسار الوظيفي" على توثيق الوظائف والمناصب بدقة لدعم السيرة بصورة موثوقة وقابلة للرجوع.' +
+  '\nأضف المسمّى والجهة والتواريخ والمكان، وسجّل المهارات والإنجازات واربطها بالمصادر عند توفرها.' +
+  '\nيمكنك أيضًا إدراج الوظيفة في الخط الزمني لعرض بداياتها ونهاياتها بشكل واضح.';
+
   root.appendChild(metaEl);
 
   // ملخص ذكي أعلى القسم
@@ -575,7 +574,7 @@ function scrollToCard(targetEl) {
 const filtersToggleBtn = el('button', 'biosec-filters-toggle biosec-add-btn career-filters-toggle');
 filtersToggleBtn.type = 'button';
 filtersToggleBtn.setAttribute('aria-label', 'إظهار/إخفاء الفلاتر');
-// ✅ زر تصفير الفلاتر (داخل toolsLeft)
+// زر تصفير الفلاتر (داخل toolsLeft)
 const resetFiltersBtn = el('button', 'biosec-btn biosec-filters-reset career-filters-reset');
 resetFiltersBtn.type = 'button';
 resetFiltersBtn.innerHTML = '<i class="fa-solid fa-rotate-left" aria-hidden="true"></i> <span>إعادة ضبط الفلاتر</span>';
@@ -603,7 +602,7 @@ resetFiltersBtn.style.display = 'none';
   searchInput.placeholder = 'ابحث في الوظائف (مسمى/جهة/مكان/مهارات)…';
   searchInput.value = '';
   
-  // ✅ زر مسح البحث (يظهر فقط عند وجود نص)
+  // زر مسح البحث (يظهر فقط عند وجود نص)
 const clearSearchBtn = el('button', 'biosec-search-clear career-search-clear');
 clearSearchBtn.type = 'button';
 clearSearchBtn.title = 'مسح البحث';
@@ -627,7 +626,7 @@ searchInput.addEventListener('input', () => {
   const raw = searchInput.value || '';
   currentSearchQuery = raw.trim().toLowerCase();
 
-  // ✅ أظهر/أخف زر المسح حسب وجود نص
+  // أظهر/أخف زر المسح حسب وجود نص
   clearSearchBtn.style.display = raw.trim() ? '' : 'none';
 persistCareerFiltersState();
   renderList();
@@ -657,7 +656,7 @@ statusFilter.addEventListener('change', () => {
   renderList();
 });
 
-// ✅ Restore career filters state on load
+// Restore career filters state on load
 {
   const st = readCareerFiltersState();
   if (st) {
@@ -692,11 +691,11 @@ statusFilter.addEventListener('change', () => {
       clearSearchBtn.style.display = raw.trim() ? '' : 'none';
     }
 
-     // ✅ sort
+     // sort
     if (typeof st.sort === 'string' && st.sort) {
       const v = (st.sort === 'oldest') ? 'oldest' : 'latest';
-      sortMode = v;          // ✅ يؤثر على sortCareer/person + القيمة الابتدائية
-      sortSelect.value = v;  // ✅ UI
+      sortMode = v;          // يؤثر على sortCareer/person + القيمة الابتدائية
+      sortSelect.value = v;  // UI
     }
 
   }
@@ -760,8 +759,8 @@ persistCareerFiltersState();
     renderList();
   });
 
-  // ✅ Controller لإظهار/إخفاء toolsLeft (الفلاتر)
-// ✅ دالة موحّدة: هل هناك فلاتر فعّالة؟ (نستخدمها للمنع + لإظهار زر التصفير)
+  // Controller لإظهار/إخفاء toolsLeft (الفلاتر)
+// دالة موحّدة: هل هناك فلاتر فعّالة؟ (نستخدمها للمنع + لإظهار زر التصفير)
 function hasActiveFilters() {
   const hasTag = !!(currentTagFilter && currentTagFilter.trim());
   const hasStatus = (filterStatus && filterStatus !== 'all');
@@ -770,12 +769,12 @@ function hasActiveFilters() {
   return hasTag || hasStatus || hasOrg || hasPlace;
 }
 
-// ✅ إظهار/إخفاء زر التصفير حسب وجود فلاتر فعّالة
+// إظهار/إخفاء زر التصفير حسب وجود فلاتر فعّالة
 function syncResetFiltersBtnVisibility() {
   resetFiltersBtn.style.display = hasActiveFilters() ? '' : 'none';
 }
 
-// ✅ تصفير الفلاتر (وما يدخل في منع الإخفاء)
+// تصفير الفلاتر (وما يدخل في منع الإخفاء)
 function resetFiltersToDefault() {
   // فلاتر المنع
   currentTagFilter = '';
@@ -792,7 +791,7 @@ function resetFiltersToDefault() {
   searchInput.value = '';
   currentSearchQuery = '';
   clearSearchBtn.style.display = 'none';
-    // ✅ صفّر الترتيب إلى الافتراضي (latest)
+    // صفّر الترتيب إلى الافتراضي (latest)
   sortMode = 'latest';
   sortSelect.value = 'latest';
   sortCareer(person, 'latest');
@@ -808,7 +807,7 @@ resetFiltersBtn.addEventListener('click', (e) => {
   resetFiltersToDefault();
 });
 
-// ✅ Controller لإظهار/إخفاء toolsLeft (الفلاتر)
+// Controller لإظهار/إخفاء toolsLeft (الفلاتر)
 const filtersCtl = createFiltersCollapseController({
   storageKey: 'biosec:career:filtersCollapsed',
   panelEl: toolsLeft,
@@ -826,7 +825,7 @@ const filtersCtl = createFiltersCollapseController({
 // طبّق الحالة الابتدائية (مع auto-open إذا فيه فلاتر فعالة)
 filtersCtl.applyInitialState({ autoOpenIfActive: true });
 
-// ✅ طبق الحالة الأولية لظهور زر التصفير
+// طبق الحالة الأولية لظهور زر التصفير
 syncResetFiltersBtnVisibility();
 
 
@@ -993,8 +992,8 @@ const currentOk =
         tags: shallowArr(item.tags)
       };
       
-      // ===============================
-// ✅ Sources state
+// ===============================
+// Sources state
 // ===============================
 const sources = Array.isArray(person.sources) ? person.sources : [];
 const sourceMap = new Map(sources.map(s => [String(s.id), s]));
@@ -1166,7 +1165,7 @@ head.innerHTML =
   // chips
 ids.forEach((sid) => {
   const s = sourceMap.get(String(sid));
-  if (!s) return; // ✅ تجاهل المصادر المحذوفة
+  if (!s) return; // تجاهل المصادر المحذوفة
 
   const chip = el('button', 'biosec-chip biosec-chip--source career-linked-source-chip');
   chip.type = 'button';
@@ -1178,16 +1177,14 @@ ids.forEach((sid) => {
   box.appendChild(chip);
 });
 
-// ✅ لو كل IDs محذوفة: لا ترجع بلوك فاضي
+// لو كل IDs محذوفة: لا ترجع بلوك فاضي
 if (!box.querySelector('.biosec-chip--source')) return null;
 
 return box;
 
 }
 
-
 let sourcesPreview = renderPreviewLinkedSources();
-
 
 // ====== 1) الأساسيات أولاً (بعناوين + أيقونات) ======
 previewBox.append(
@@ -1271,7 +1268,7 @@ if (sourcesPreview) {
       const editBox = el('div', 'biosec-edit career-edit');
 
       // =========================
-      // ✅ عناوين بصرية للمجموعات
+      // عناوين بصرية للمجموعات
       // =========================
 const basicTitle = el('div', 'biosec-subtitle career-edit-subtitle');
 basicTitle.innerHTML =
@@ -1284,18 +1281,18 @@ extraTitle.innerHTML =
   '<span>تفاصيل إضافية</span>';
 
       // =========================
-      // ✅ Body
+      // Body
       // =========================
       const body = el('div', 'biosec-body career-body');
 
       // =========================
-      // ✅ (1) البيانات الأساسية: صف واحد
+      // (1) البيانات الأساسية: صف واحد
       // (title → org → place → start → end)
       // =========================
       const basicRow = el('div', 'biosec-meta-row career-meta-row');
 
       // --- title ---
-      const titleInput = el('input', 'biosec-title-input career-title-input');
+      const titleInput = el('input', 'biosec-input career-title-input');
       titleInput.type = 'text';
       titleInput.placeholder = 'المسمى الوظيفي (إجباري) مثل: مدير، ضابط، موظف...';
       titleInput.value = original.title;
@@ -1371,11 +1368,10 @@ placeInput.name = `${fp}_place`;
       );
 
       // =========================
-      // ✅ (2) تفاصيل إضافية: 4 صفوف
+      // (2) تفاصيل إضافية: 4 صفوف
       // =========================
 const extraRow1 = el('div', 'biosec-meta-row career-meta-row');
 
-// ✅ (أضف هذا البلوك هنا بالضبط)
 // sector
 const sectorSelect = el('select', 'biosec-input career-sector-select');
 {
@@ -1446,7 +1442,7 @@ sectorSelect.name = `${fp}_sector`;
       skillsInput.name = `${fp}_skills`;
 
 // ===============================
-// ✅ Sources picker (UI مطابق للتعليم + biosec-linked-sources-*)
+// Sources picker (UI مطابق للتعليم + biosec-linked-sources-*)
 // ===============================
 
 // outer meta-field (مثل education)
@@ -1522,7 +1518,7 @@ const emptyMini = el('div',
   'biosec-empty-mini biosec-linked-sources-empty career-linked-sources-empty'
 );
 emptyMini.style.display = 'none';
-emptyMini.textContent = 'لا توجد مصادر مطابقة لبحثك.';
+emptyMini.textContent = '';
 linkedSourcesList.appendChild(emptyMini);
 
 // compose field
@@ -1547,6 +1543,13 @@ function renderLinkedSourcesCareer() {
   const q = (srcSearch.value || '').trim().toLowerCase();
   const all = Array.isArray(person.sources) ? person.sources : [];
 
+  if (!all.length) {
+    sourcesField.style.display = 'none';
+    return;
+  } else {
+    sourcesField.style.display = '';
+  }
+
   const filteredSources = !q ? all : all.filter(s => {
     const text = [
       s?.title, s?.name, s?.label, s?.type, s?.id,
@@ -1555,8 +1558,8 @@ function renderLinkedSourcesCareer() {
     return text.includes(q);
   });
 
-  // empty state (مطابق للتعليم)
-  emptyMini.style.display = filteredSources.length ? 'none' : '';
+  emptyMini.textContent = 'لا توجد مصادر مطابقة لبحثك.';
+  emptyMini.style.display = (q && filteredSources.length === 0) ? '' : 'none';
 
   filteredSources.forEach((src) => {
     const sid = String(src.id);
@@ -1695,14 +1698,14 @@ extraRow1.append(
       togglesRow.appendChild(timelineWrap);
 
       // =========================
-      // ✅ تواريخ + تاريخ الإضافة (اختياري عرض داخل body بدون head)
+      // تواريخ + تاريخ الإضافة (اختياري عرض داخل body بدون head)
       // =========================
       const datesEl = el('div', 'biosec-dates career-dates');
       datesEl.textContent = item.createdAt ? formatCreatedAtLabel(item.createdAt, { prefix: 'أضيفت', formatter: formatFullDateTime })
         : '';
 
       // =========================
-      // ✅ إظهار/إخفاء سبب ترك العمل
+      // إظهار/إخفاء سبب ترك العمل
       // =========================
       function syncEndReasonVisibility() {
         const hasEnd = !!getLogicalDateValue(endInput);
@@ -1716,7 +1719,7 @@ extraRow1.append(
       syncEndReasonVisibility();
 
       // =========================
-      // ✅ بناء body بالترتيب النهائي المطلوب
+      // بناء body بالترتيب النهائي المطلوب
       // =========================
 body.append(
   basicTitle,
@@ -1819,7 +1822,7 @@ sourcesChanged ||
     curSkills.join('|') !== (original.skills || []).join('|') ||
     curHighlights.join('|') !== (original.highlights || []).join('|');
 
-  // ✅ Dirty للـ Timeline داخل الدالة (مع كل تغيّر)
+  // Dirty للـ Timeline داخل الدالة (مع كل تغيّر)
   isDirty = isDirty || (curTimeline !== (timelineInitialEnabled === true));
 
   applyMode();
@@ -1858,7 +1861,7 @@ timelineCheckbox.addEventListener('change', recomputeDirty);
 
 if (isEditing && !isDirty) {
 
-  // ✅ قاعدة موحّدة: أي سجل فارغ عند الإغلاق => احذفه دائمًا
+  // قاعدة موحّدة: أي سجل فارغ عند الإغلاق => احذفه دائمًا
   if (isEmptyCareerRecord(item)) {
     const ok = deleteCareer(person, item.id, {
       onChange: (items, removed) => {
@@ -1870,7 +1873,7 @@ if (isEditing && !isDirty) {
     // تنظيف احتياطي (حتى لو ما كان موجود)
     draftNewMap?.delete?.(item.id);
 
-// ✅ (احتياطي) إزالة أحداث الخط الزمني عبر Generic Link Engine (بدون Legacy)
+// (احتياطي) إزالة أحداث الخط الزمني عبر Generic Link Engine (بدون Legacy)
 if (ok) {
   upsertSectionEvents(person, handlers, {
     sectionId: 'career',
@@ -1887,7 +1890,7 @@ if (ok) {
     return;
   }
 
-  // ✅ غير ذلك: مجرد إغلاق عادي
+  // غير ذلك: مجرد إغلاق عادي
   isEditing = false;
   lastEditedId = null;
   applyMode();
@@ -1982,7 +1985,7 @@ endReason: nd.end ? endReasonInput.value.trim() : '',
           skills: splitCommaTags(skillsInput.value),
           highlights: (highlightsArea.value || '').split('\n').map(s => s.trim()).filter(Boolean)
         };
-// ✅ مرّر التواريخ القديمة (قبل التحديث)
+// مرّر التواريخ القديمة (قبل التحديث)
 const prevDates = [original.start, original.end].filter(Boolean);
 
 
@@ -1995,7 +1998,7 @@ const updated = updateCareer(person, item.id, newData, {
 
 const effective = updated || item;
 
-// ✅ مزامنة أحداث الوظيفة عبر Generic Link Engine
+// مزامنة أحداث الوظيفة عبر Generic Link Engine
 upsertSectionEvents(person, handlers, {
   sectionId: 'career',
   item: effective,
@@ -2046,7 +2049,7 @@ upsertSectionEvents(person, handlers, {
   }
 });
 
-// ✅ تحديث baseline بعد الحفظ
+// تحديث baseline بعد الحفظ
 timelineInitialEnabled = (timelineCheckbox.checked === true);
 
 
@@ -2070,7 +2073,7 @@ timelineInitialEnabled = (timelineCheckbox.checked === true);
         original.startPrecision = safeStr(effective.startPrecision);
         original.tags = shallowArr(effective.tags);
         original.sourceIds = shallowArr(effective.sourceIds);
-// ✅ تحديث Sources UI بعد الحفظ
+// تحديث Sources UI بعد الحفظ
 currentSourceIds = shallowArr(original.sourceIds)
   .map(String)
   .filter(Boolean)
@@ -2099,7 +2102,7 @@ sourcesPreview = renderPreviewLinkedSources();
         isEditing = false;
         lastEditedId = null;
         isDirty = false;
-// ✅ هذا السجل لم يعد “draft”
+// هذا السجل لم يعد “draft”
 draftNewMap?.delete?.(item.id);
 
         renderList();
@@ -2210,7 +2213,7 @@ if (pendingScrollCareerId) {
       requestAnimationFrame(() => scrollToCard(card));
     });
 
-    // ✅ highlight
+    // highlight
     card.classList.add('biosec-card--jump-highlight');
     setTimeout(() => card.classList.remove('biosec-card--jump-highlight'),1500);
   }
@@ -2271,11 +2274,11 @@ draftNewMap.set(rec.id, true);
 
   sortSelect.addEventListener('change', () => {
     const mode = sortSelect.value === 'oldest' ? 'oldest' : 'latest';
-    sortMode = mode; // ✅ تحديث المتغير المحلي
+    sortMode = mode; // تحديث المتغير المحلي
 
     sortCareer(person, mode);
 
-    persistCareerFiltersState(); // ✅ حفظ sort مع بقية الفلاتر
+    persistCareerFiltersState(); // حفظ sort مع بقية الفلاتر
 
     if (typeof handlers.onDirty === 'function') handlers.onDirty(person.career);
     emitCareerToHost();

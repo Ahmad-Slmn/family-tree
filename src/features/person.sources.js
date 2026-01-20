@@ -49,7 +49,8 @@ import {
   findImageIndex,
   makeGroupTitle,
   makeDivider,
-  createFiltersCollapseController
+  createFiltersCollapseController,
+  isEmptyRecordByKeys
 } from '../features/bio-sections.utils.js';
 
 
@@ -255,12 +256,13 @@ const SOURCE_DRAFT_EMPTY_KEYS = [
 ];
 
 function isEmptySourceRecord(rec) {
-  return BioSec.isEmptyRecordByKeys(rec, SOURCE_EMPTY_KEYS);
+  return isEmptyRecordByKeys(rec, SOURCE_EMPTY_KEYS);
 }
 
 function isEmptySourceDraft(rec) {
-  return BioSec.isEmptyRecordByKeys(rec, SOURCE_DRAFT_EMPTY_KEYS);
+  return isEmptyRecordByKeys(rec, SOURCE_DRAFT_EMPTY_KEYS);
 }
+
 
 export function ensureSources(person) {
   if (!person || typeof person !== 'object') return;
@@ -383,7 +385,7 @@ export function createSourcesSection(person, handlers = {}) {
   let viewMode = 'cards';
   let lastEditedId = null;
 
-    // ✅ Persist filters state across reload (per person)
+    // Persist filters state across reload (per person)
   const SOURCES_FILTERS_STATE_KEY = `biosec:sources:filtersState:${personId || 'global'}`;
 
   function readSourcesFiltersState() {
@@ -416,7 +418,7 @@ export function createSourcesSection(person, handlers = {}) {
       advConfidence: (advConfidence || '').trim(),
       advVerifiedMode: (advVerifiedMode || 'all').trim(),
 
-      // ✅ Optional UX state
+      // Optional UX state
       viewMode: (viewMode || 'cards').trim(),
       sortMode: (sortSelect?.value || '').trim()
     });
@@ -460,7 +462,6 @@ export function createSourcesSection(person, handlers = {}) {
 
       confidentiality: safeStr(s.confidentiality),
 
-      // جديد
       validUntil: s.validUntil || null,
       expiryAlertDays: Number.isFinite(Number(s.expiryAlertDays)) ? Number(s.expiryAlertDays) : DEFAULT_EXPIRY_ALERT_DAYS,
       holderName: safeStr(s.holderName),
@@ -500,8 +501,10 @@ export function createSourcesSection(person, handlers = {}) {
   root.appendChild(titleEl);
 
   const metaEl = el('div', 'biosec-meta sources-meta');
- metaEl.textContent =
-  'وثّق السيرة بإرفاق الوثائق الداعمة: الميلاد، الهوية، الزواج، الملكيات… باستخدام وسوم وفلاتر مرنة وتنبيهات انتهاء الصلاحية.';
+metaEl.textContent =
+  'يُعد هذا القسم المرجع الأساسي لتوثيق السيرة بالمستندات الداعمة (هوية، ميلاد، زواج، ملكيات وغيرها) مع حفظ بياناتها ومرفقاتها بشكل منظم.\n' +
+  'استخدم الوسوم والبحث المتقدم والفلاتر لتسهيل الوصول، وفعّل التنبيهات لمتابعة صلاحية الوثائق وتفادي انتهاءها.\n' +
+  'ابدأ بإضافة أول وثيقة الآن لتعزيز موثوقية السيرة وربطها بالأحداث والتعليم والوظائف والقصص عند الحاجة.';
 
   root.appendChild(metaEl);
 
@@ -553,7 +556,7 @@ filtersToggleBtn.innerHTML = '';
   searchInput.type = 'search';
   searchInput.name = 'sources_search';
   searchInput.placeholder = 'بحث سريع (عنوان/جهة/رقم/وصف)...';
-  // ✅ زر مسح البحث (يظهر فقط عند وجود نص)
+  // زر مسح البحث (يظهر فقط عند وجود نص)
 const clearSearchBtn = el('button', 'biosec-search-clear sources-search-clear');
 clearSearchBtn.type = 'button';
 clearSearchBtn.title = 'مسح البحث';
@@ -613,7 +616,7 @@ searchWrap.append(searchInput, clearSearchBtn);
     const o = el('option'); o.value = v; o.textContent = t; advConfidenceSelect.appendChild(o);
   });
 
-  // ✅ بدل checkbox: select بثلاث خيارات (يبقى نفس الاسم/الكلاس المطلوب)
+  // select بثلاث خيارات (يبقى نفس الاسم/الكلاس المطلوب)
   const advVerifiedSelect = el('select', 'biosec-select sources-adv-verified');
   advVerifiedSelect.name = 'sources_adv_verified_mode';
   [
@@ -632,7 +635,7 @@ advClearBtn.innerHTML =
 advClearBtn.removeAttribute('title');
 advClearBtn.setAttribute('aria-label', 'إعدة ضبط الفلاتر إلى الوضع الإفتراضي');
 
-    // ✅ Restore filters state on load
+    // Restore filters state on load
   {
     const st = readSourcesFiltersState();
     if (st) {
@@ -683,15 +686,15 @@ advClearBtn.setAttribute('aria-label', 'إعدة ضبط الفلاتر إلى ا
         advVerifiedSelect.value = advVerifiedMode;
       }
 
-      // ✅ Optional UX: view + sort
+      // Optional UX: view + sort
       if (typeof st.viewMode === 'string') {
         viewMode = (st.viewMode === 'table') ? 'table' : 'cards';
       }
       if (typeof st.sortMode === 'string' && st.sortMode) {
         const v = (st.sortMode === 'oldest') ? 'oldest' : 'latest';
-        sortMode = v;          // ✅ حدّث المتغير
-        sortSelect.value = v;  // ✅ حدّث الـ UI
-        sortSources(person, v); // ✅ طبّق الفرز فعلياً
+        sortMode = v;          // حدّث المتغير
+        sortSelect.value = v;  // حدّث الـ UI
+        sortSources(person, v); // طبّق الفرز فعلياً
       }
 
     }
@@ -723,7 +726,7 @@ function hasActiveFilters() {
 
 }
 
-// ✅ إظهار/إخفاء زر "إعادة ضبط الفلاتر" حسب وجود فلاتر مفعّلة
+// إظهار/إخفاء زر "إعادة ضبط الفلاتر" حسب وجود فلاتر مفعّلة
 function syncClearFiltersBtnVisibility() {
   advClearBtn.style.display = hasActiveFilters() ? '' : 'none';
 }
@@ -742,7 +745,7 @@ function syncClearFiltersBtnVisibility() {
   });
   
 filtersCtrl.applyInitialState({ autoOpenIfActive: true });
-// ✅ طبّق الحالة الأولية لزر إعادة ضبط الفلاتر
+// طبّق الحالة الأولية لزر إعادة ضبط الفلاتر
 syncClearFiltersBtnVisibility();
 
   // 5) Listener واحد فقط
@@ -829,7 +832,7 @@ toolsLeft.append(
     child: advVerifiedSelect
   }),
 
-  // 5) مسح الفلاتر (آخر شيء)
+  // 5) إعادة ضبط الفلاتر
   wrapToolsLeftItem({
     title: '',
     icon: '',
@@ -843,7 +846,7 @@ toolsRight.append(filtersToggleBtn, searchWrap, viewToggleWrap, addBtn);
   header.appendChild(tools);
   root.appendChild(header);
 
-// ✅ طبّق viewMode المسترجع (لو كان table مثلاً)
+// طبّق viewMode المسترجع (لو كان table مثلاً)
 viewBtnCards.classList.toggle('is-active', viewMode === 'cards');
 viewBtnTable.classList.toggle('is-active', viewMode === 'table');
 
@@ -919,19 +922,19 @@ viewBtnTable.classList.toggle('is-active', viewMode === 'table');
 btnAll.onclick = () => {
   expiryFocusMode = 'all';
   syncClearFiltersBtnVisibility();
-  persistSourcesFiltersState(); // ✅
+  persistSourcesFiltersState();
   renderList();
 };
 btnExpired.onclick = () => {
   expiryFocusMode = 'expired';
   syncClearFiltersBtnVisibility();
-  persistSourcesFiltersState(); // ✅
+  persistSourcesFiltersState();
   renderList();
 };
 btnNear.onclick = () => {
   expiryFocusMode = 'near';
   syncClearFiltersBtnVisibility();
-  persistSourcesFiltersState(); // ✅
+  persistSourcesFiltersState();
   renderList();
 };
 
@@ -1377,8 +1380,6 @@ rowTitle.setAttribute('data-label', 'العنوان / النوع');
 
 /* ===== فتح البطاقة عند الضغط (FIX: await + scroll/highlight بدون nav) ===== */
 const openRow = async () => {
-  // ✅ افتح في وضع البطاقات عبر setViewMode لتحديث الـ toggle
-  // ✅ ولا تجعلها “تعديل” => lastEditedId يجب أن يكون null
   lastEditedId = null;
 
   await setViewMode('cards');
@@ -1446,7 +1447,6 @@ row.append(rowTitle, rowMeta1, rowMeta2, rowActions);
   list.appendChild(table);
   return;
 }
-
 
     /* ----------------------------
        وضع البطاقات
@@ -1557,7 +1557,7 @@ let currentFiles = Array.isArray(original.files) ? [...original.files] : [];
       let pendingDeletedFiles = [];
 
 /* ----------------------------
-   المعاينة (هيكل أوضح)
+   المعاينة
 ----------------------------- */
 
 const previewBox = el('div', 'biosec-preview source-preview');
@@ -1639,7 +1639,6 @@ if (isIdType) {
 /** 3) بادجات الحالة فقط (Status chips) بالترتيب: expiry → verified → confidentiality → confidence */
 const statusChips = el('div', 'source-status-chips');
 
-// expiry (اختياري كـ chip ثانية أيضًا — لو تبيها “فقط عند العنوان” احذف هذا الجزء)
 {
   const st = getExpiryStatus(original, original.expiryAlertDays || DEFAULT_EXPIRY_ALERT_DAYS);
   if (st.status === 'expired' || st.status === 'near') {
@@ -1816,7 +1815,7 @@ const createdLabel = el('span', 'biosec-preview-date source-preview-date');
 createdLabel.textContent = src.createdAt ? formatCreatedAtLabel(src.createdAt, 'أضيفت', formatFullDateTime)
   : '';
 
-// ✅ جديد: آخر تعديل
+// آخر تعديل
 const updatedLabel = el('span', 'biosec-preview-date source-preview-date source-preview-date--updated');
 updatedLabel.textContent = src.updatedAt ? `آخر تعديل: ${formatFullDateTime(src.updatedAt)}`
   : '';
@@ -1838,7 +1837,6 @@ if (lenInfo.level === 0) {
   lengthLabel.append(meter, txtSpan);
 }
 
-// ✅ ضفنا updatedLabel بين createdLabel و lengthLabel
 previewMeta.append(createdLabel, lengthLabel, updatedLabel);
 
 /* إعادة استخدام دالة العرض الحالية للمرفقات */
@@ -2118,7 +2116,7 @@ const detailsRow = el('div', 'biosec-meta-row source-meta-row source-meta-row--d
       verifiedAtInput.name = `source_verified_at_${src.id}`;
       verifiedAtInput.value = original.verifiedAt || '';
 
-// ✅ حالة التحقق (Checkbox فقط)
+// حالة التحقق (Checkbox فقط)
 const verifiedWrap = el('div', 'biosec-meta-field source-details-field');
 
 const verifiedLabel = el('div', 'source-details-label');
@@ -2132,7 +2130,7 @@ verifiedInlineTop.append(verifiedChkLabel);
 
 verifiedWrap.append(verifiedLabel, verifiedInlineTop);
 
-// ✅ حقول منفصلة (ليتم ترتيبها بعد السرية)
+// حقول منفصلة (ليتم ترتيبها بعد السرية)
 const verifiedByWrap = el('div', 'biosec-meta-field source-details-field');
 const verifiedByLabel = el('div', 'biosec-meta-label source-details-label');
 verifiedByLabel.innerHTML =
@@ -2160,21 +2158,21 @@ verifiedAtWrap.append(verifiedAtLabel, verifiedAtInput);
       alertDaysInput.placeholder = String(DEFAULT_EXPIRY_ALERT_DAYS);
       alertDaysInput.value = String(original.expiryAlertDays || DEFAULT_EXPIRY_ALERT_DAYS);
 
-// ✅ تاريخ الانتهاء (حقل عادي مثل البقية)
+// تاريخ الانتهاء
 const validUntilWrap = el('div', 'biosec-meta-field source-details-field');
 const validUntilLabel = el('div', 'biosec-meta-label source-details-label');
 validUntilLabel.innerHTML =
   '<span class="source-details-icon"><i class="fa-solid fa-calendar-xmark" aria-hidden="true"></i></span> تاريخ الانتهاء';
 validUntilWrap.append(validUntilLabel, validUntilInput);
 
-// ✅ تنبيه قبل أيام (حقل عادي مثل البقية)
+// تنبيه قبل أيام
 const alertDaysWrap = el('div', 'biosec-meta-field source-details-field');
 const alertDaysLabel = el('div', 'biosec-meta-label source-details-label');
 alertDaysLabel.innerHTML =
   '<span class="source-details-icon"><i class="fa-solid fa-bell" aria-hidden="true"></i></span> تنبيه قبل (أيام)';
 alertDaysWrap.append(alertDaysLabel, alertDaysInput);
 
-      // جديد: حقول الهوية/الميلاد (ديناميكي حسب النوع)
+      // حقول الهوية/الميلاد (ديناميكي حسب النوع)
       const holderNameInput = el('input', 'biosec-input source-holder-name-input');
       holderNameInput.name = 'source-holder-name-input';
       holderNameInput.type = 'text';
@@ -2193,7 +2191,6 @@ alertDaysWrap.append(alertDaysLabel, alertDaysInput);
       civilRegistryInput.placeholder = 'رقم السجل المدني';
       civilRegistryInput.value = original.civilRegistryNo;
 
-// ✅ حقول هوية/ميلاد بدون Grid (مثل بقية الحقول)
 const holderNameWrap = el('div', 'biosec-meta-field source-details-field');
 const holderNameLabel = el('div', 'biosec-meta-label source-details-label');
 holderNameLabel.innerHTML =
@@ -2729,7 +2726,6 @@ body.append(
         const curVerifiedBy = verifiedByInput.value.trim();
         const curVerifiedAt = verifiedAtInput.value || null;
 
-        // جديد
         const curValidUntil = validUntilInput.value || null;
         const curAlertDays = Number(alertDaysInput.value || DEFAULT_EXPIRY_ALERT_DAYS) || DEFAULT_EXPIRY_ALERT_DAYS;
 
@@ -2922,21 +2918,20 @@ body.append(
             verifiedBy: verifiedByInput.value.trim(),
             verifiedAt: verifiedAtInput.value || null,
 
-            // جديد
             validUntil: validUntilInput.value || null,
             expiryAlertDays: Number(alertDaysInput.value || DEFAULT_EXPIRY_ALERT_DAYS) || DEFAULT_EXPIRY_ALERT_DAYS,
             holderName: holderNameInput.value.trim(),
             nationalId: nationalIdInput.value.trim(),
             civilRegistryNo: civilRegistryInput.value.trim()
           },
-          {
-            onChange: (sources, changed) => {
-              if (typeof handlers.onDirty === 'function') handlers.onDirty(sources, changed);
-              emitSourcesToHost();
-            },
-            by: actor
-          }
-        );
+  {
+    onChange: (sources, changed) => {
+      if (typeof handlers.onDirty === 'function') handlers.onDirty(sources, changed);
+      emitSourcesToHost();
+    },
+    by: actor
+  }
+);
 
         const effective = updated || src;
 
@@ -3007,7 +3002,7 @@ body.append(
   createdLabel.textContent = lbl;
 }
 
-// ✅ جديد: تحديث “آخر تعديل” بعد الحفظ
+// تحديث “آخر تعديل” بعد الحفظ
 if (effective.updatedAt) {
 updatedLabel.textContent = `آخر تعديل: ${formatFullDateTime(effective.updatedAt)}`;
 }
@@ -3168,7 +3163,7 @@ updatedLabel.textContent = `آخر تعديل: ${formatFullDateTime(effective.up
 
     // إعادة وضع شريط الانتهاء لو كان مفعلاً
     expiryFocusMode = 'all';
-    // ✅ صفّر الترتيب إلى الافتراضي (latest)
+    // صفّر الترتيب إلى الافتراضي (latest)
     sortMode = 'latest';
     sortSelect.value = 'latest';
     sortSources(person, 'latest');
@@ -3217,8 +3212,6 @@ updatedLabel.textContent = `آخر تعديل: ${formatFullDateTime(effective.up
         verifiedBy: '',
         verifiedAt: null,
         confidentiality: '',
-
-        // جديد
         validUntil: null,
         expiryAlertDays: DEFAULT_EXPIRY_ALERT_DAYS,
         holderName: '',
@@ -3226,13 +3219,13 @@ updatedLabel.textContent = `آخر تعديل: ${formatFullDateTime(effective.up
         civilRegistryNo: '',
         history: []
       },
-      {
-        onChange: (sources, changed) => {
-          if (typeof handlers.onDirty === 'function') handlers.onDirty(sources, changed);
-          emitSourcesToHost();
-        },
-        by: actor
-      }
+ {
+  onChange: (sources, changed) => {
+    if (typeof handlers.onDirty === 'function') handlers.onDirty(sources, changed);
+  },
+  by: actor
+}
+
     );
 
     if (!src) {
@@ -3254,7 +3247,7 @@ updatedLabel.textContent = `آخر تعديل: ${formatFullDateTime(effective.up
 
   sortSelect.addEventListener('change', () => {
     const mode = sortSelect.value === 'oldest' ? 'oldest' : 'latest';
-    sortMode = mode; // ✅
+    sortMode = mode;
 
     sortSources(person, mode);
     if (typeof handlers.onDirty === 'function') handlers.onDirty(person.sources);
@@ -3275,7 +3268,7 @@ searchInput.addEventListener('input', () => {
   const raw = searchInput.value || '';
   currentSearchTerm = raw;
 
-  // ✅ أظهر/أخف زر المسح حسب وجود نص
+  // أظهر/أخف زر المسح حسب وجود نص
   clearSearchBtn.style.display = raw.trim() ? '' : 'none';
 persistSourcesFiltersState();
   renderList();
@@ -3302,7 +3295,5 @@ async function setViewMode(mode) {
 
   // تشغيل أولي
   renderList();
-  emitSourcesToHost();
-
   return root;
 }

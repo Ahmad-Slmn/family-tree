@@ -1,30 +1,35 @@
 // bio-sections.utils.js
 // أدوات مشتركة لأقسام السيرة:
-// - إدارة مراجع الملفات (tmp:/idb:/ready-url)
-// - كاش معاينة ObjectURL لملفات tmp قبل الحفظ
-// - ترقية tmp -> idb بشكل موحّد
-// - أدوات واجهة عامة (تاريخ/طول نص/سلايدر)
-// - أدوات الملفات (تصنيف/تحقق/فتح/تحميل)
+// 1) أساسيات (نص/مصفوفات/وقت)
+// 2) DOM helpers (تغليف حقول ومعاينات + autoResize)
+// 3) إدارة مراجع الملفات (ready/tmp/idb) + كاش tmp + ترقية tmp->idb
+// 4) أدوات UI عامة (تاريخ/طول نص/سلايدر/أنواع)
+// 5) أدوات ملفات (امتداد/MIME/تصنيف/فتح/تحقق/ترتيب/اسم تحميل)
+// 6) Controller: إظهار/إخفاء الفلاتر مع حفظ الحالة
 
-//
-// 1) أساسيات صغيرة
-//
+/* ------------------------------------------------------------------ */
+/* 1) أساسيات صغيرة: توحيد التحويلات لتقليل التكرار                    */
+/* ------------------------------------------------------------------ */
 export const nowIso = () => new Date().toISOString();
 export const safeStr = (v) => String(v ?? '').trim();
 export const shallowArr = (v) => (Array.isArray(v) ? v.slice() : []);
 
+const asArr = (v) => (Array.isArray(v) ? v : []);
+const asStr = (v) => safeStr(v);
+const uniq = (arr) => Array.from(new Set(asArr(arr)));
+
 export function splitCommaTags(s) {
   return String(s ?? '')
     .split(',')
-    .map((t) => String(t).trim())
+    .map((t) => asStr(t))
     .filter(Boolean);
 }
 
-
+/** يتحقق إن كان السجل "فارغ" بناءً على مفاتيح محددة (مفيد لمنع حفظ عناصر بلا محتوى) */
 export function isEmptyRecordByKeys(rec, keys = []) {
   if (!rec) return true;
 
-  for (const k of keys) {
+  for (const k of asArr(keys)) {
     const v = rec?.[k];
 
     if (Array.isArray(v)) {
@@ -33,7 +38,7 @@ export function isEmptyRecordByKeys(rec, keys = []) {
     }
 
     if (typeof v === 'string') {
-      if (safeStr(v)) return false;
+      if (asStr(v)) return false;
       continue;
     }
 
@@ -43,25 +48,34 @@ export function isEmptyRecordByKeys(rec, keys = []) {
   return true;
 }
 
+/* ------------------------------------------------------------------ */
+/* 2) قواعد refs (ready/tmp/idb)                                       */
+/* ------------------------------------------------------------------ */
 export const isReadyUrl = (ref) => /^(data:|blob:|https?:)/.test(String(ref ?? ''));
 export const isTmpRef = (ref) => String(ref ?? '').startsWith('tmp:');
 export const isIdbRef = (ref) => String(ref ?? '').toLowerCase().startsWith('idb:');
 
-// يبني عنصر label + icon + title فوق أي حقل
-export function wrapField(fieldEl, {
-  title = '',
-  icon = '',              // مثال: 'fa-briefcase'
-  className = 'biosec-meta-field',
-  labelClass = 'biosec-meta-label',
-  iconClass = 'biosec-meta-icon',
-} = {}) {
+/* ------------------------------------------------------------------ */
+/* 3) DOM helpers: تغليف حقول + تغليف Preview + Auto resize textarea   */
+/* ------------------------------------------------------------------ */
+
+/** تغليف أي حقل بـ label + icon (للاستخدام العام في meta fields) */
+export function wrapField(
+  fieldEl,
+  {
+    title = '',
+    icon = '',
+    className = 'biosec-meta-field',
+    labelClass = 'biosec-meta-label',
+    iconClass = 'biosec-meta-icon',
+  } = {}
+) {
   const wrap = document.createElement('div');
   wrap.className = className;
 
   if (title) {
     const lab = document.createElement('label');
     lab.className = labelClass;
-
     if (fieldEl?.id) lab.setAttribute('for', fieldEl.id);
 
     if (icon) {
@@ -82,7 +96,7 @@ export function wrapField(fieldEl, {
   return wrap;
 }
 
-// ✅ Field wrapper (Head: Label + Icon) - موحّد لكل الأقسام
+/** غلاف موحد لعنوان الحقل: (Label + Icon) داخل biosec-field */
 export function withFieldHead(node, { label = '', icon = 'fa-circle-info' } = {}) {
   const wrap = document.createElement('div');
   wrap.className = 'biosec-field';
@@ -104,15 +118,18 @@ export function withFieldHead(node, { label = '', icon = 'fa-circle-info' } = {}
   return wrap;
 }
 
-// يبني بلوك معاينة: عنوان + أيقونة فوق أي عنصر (لـ Preview)
-export function wrapPreviewBlock(contentEl, {
-  title = '',
-  icon = '',                 // مثال: 'fa-calendar-days'
-  className = 'biosec-preview-block',
-  headerClass = 'biosec-preview-block-header',
-  titleClass = 'biosec-preview-block-title',
-  iconClass = 'biosec-preview-block-icon',
-} = {}) {
+/** تغليف بلوك معاينة: عنوان + أيقونة فوق المحتوى (لـ Preview) */
+export function wrapPreviewBlock(
+  contentEl,
+  {
+    title = '',
+    icon = '',
+    className = 'biosec-preview-block',
+    headerClass = 'biosec-preview-block-header',
+    titleClass = 'biosec-preview-block-title',
+    iconClass = 'biosec-preview-block-icon',
+  } = {}
+) {
   const wrap = document.createElement('div');
   wrap.className = className;
 
@@ -139,23 +156,44 @@ export function wrapPreviewBlock(contentEl, {
   return wrap;
 }
 
-//
-// 2) كاش مؤقت لملفات tmp: (مع ObjectURL للمعاينة)
-// - add(file): يرجع tmpRef
-// - get(tmpRef): يرجع { file, url, meta }
-// - revoke(tmpRef): يلغي ObjectURL ويحذف السجل
-// - cleanup(refs): ينظف أي tmp refs ضمن قائمة
-//
+/** توسعة textarea حسب المحتوى؛ مع حد أدنى (dataset/css/fallback) لمنع القفز */
+export function autoResizeTextareas(root, selector) {
+  if (!root) return;
+
+  root.querySelectorAll(selector).forEach((ta) => {
+    const resize = () => {
+      const dsMin = Number(ta.dataset.minHeight || 0);
+      const cssMin = parseFloat(window.getComputedStyle(ta).minHeight || '0') || 0;
+      const fallback = ta.classList.contains('biosec-textarea') ? 94 : 0;
+      const min = Math.max(dsMin, cssMin, fallback);
+
+      ta.style.height = 'auto';
+      ta.style.height = Math.max(ta.scrollHeight, min) + 'px';
+    };
+
+    resize();
+
+    // مهم: إزالة listener القديم لتجنب التكرار عند إعادة بناء DOM
+    ta.removeEventListener('input', ta._autoResizeHandler || (() => {}));
+    ta._autoResizeHandler = resize;
+    ta.addEventListener('input', resize);
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* 4) كاش tmp: ObjectURL (مع إدارة revoke)                             */
+/* ------------------------------------------------------------------ */
+
+const genId = (prefix) =>
+  (window.crypto?.randomUUID ? `${prefix}${window.crypto.randomUUID()}` :
+    `${prefix}${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`);
+
+/** كاش لملفات tmp مع ObjectURL للمعاينة (يجب revoke عند الإزالة لتفادي تسريب الذاكرة) */
 export function createTempObjectURLCache({ prefix = 'tmp:' } = {}) {
   const map = new Map(); // tmpRef -> { file, url, meta }
 
-  const genTmpRef = () => {
-    if (window.crypto?.randomUUID) return prefix + window.crypto.randomUUID();
-    return prefix + Math.random().toString(36).slice(2) + Date.now().toString(36);
-  };
-
   const add = (file, meta = null) => {
-    const tmpRef = genTmpRef();
+    const tmpRef = genId(prefix);
     const url = URL.createObjectURL(file);
     map.set(tmpRef, { file, url, meta });
     return tmpRef;
@@ -171,8 +209,7 @@ export function createTempObjectURLCache({ prefix = 'tmp:' } = {}) {
   };
 
   const cleanup = (refs = []) => {
-    const list = Array.isArray(refs) ? refs : [];
-    for (const r of list) {
+    for (const r of asArr(refs)) {
       const s = String(r ?? '');
       if (isTmpRef(s)) revoke(s);
     }
@@ -183,11 +220,12 @@ export function createTempObjectURLCache({ prefix = 'tmp:' } = {}) {
   return { add, revoke, cleanup, get, _map: map };
 }
 
-//
-// 3) أدوات واجهة صغيرة للمصادر (تجميع/فواصل)
-//
+/* ------------------------------------------------------------------ */
+/* 5) أدوات صغيرة للمصادر: index + عناصر DOM للفواصل/العناوين          */
+/* ------------------------------------------------------------------ */
+
 export function findImageIndex(imagesOnly, ref) {
-  const list = Array.isArray(imagesOnly) ? imagesOnly : [];
+  const list = asArr(imagesOnly);
   const r = String(ref ?? '');
   for (let i = 0; i < list.length; i++) {
     if (String(list[i]) === r) return i;
@@ -208,12 +246,13 @@ export function makeDivider(className = 'source-files-group-divider') {
   return el;
 }
 
-//
-// 4) Factory موحّد لكل قسم: tempCache + resolver + (اختياري) metaCache
-// - metaCache مفيد للمصادر لتخزين ميتاداتا tmp/idb داخل Map خارجي
-//
+/* ------------------------------------------------------------------ */
+/* 6) Factory موحّد: tempCache + resolver (+ metaCache اختياري)         */
+/* ------------------------------------------------------------------ */
+
 export function createSectionTempAndResolver({ prefix = 'tmp:', getIdbUrl, metaCache = null } = {}) {
   const tempCache = createTempObjectURLCache({ prefix });
+  const resolve = createRefResolver({ tempCache, getIdbUrl });
 
   const addTemp = (file, meta = null) => {
     const tmpRef = tempCache.add(file, meta);
@@ -228,23 +267,19 @@ export function createSectionTempAndResolver({ prefix = 'tmp:', getIdbUrl, metaC
   };
 
   const cleanupTmp = (refs = []) => {
-    const list = Array.isArray(refs) ? refs : [];
-    for (const r of list) {
+    for (const r of asArr(refs)) {
       const s = String(r ?? '');
       if (isTmpRef(s)) revokeTemp(s);
     }
   };
 
-  const resolve = createRefResolver({ tempCache, getIdbUrl });
-
   return { tempCache, addTemp, revokeTemp, cleanupTmp, resolve };
 }
 
-//
-// 5) ترقية مراجع tmp -> idb (قبل تثبيت البيانات)
-// - يحافظ على ترتيب القائمة
-// - إذا فشل أي عنصر: يوقف ويرجع ok:false (سلوك موحد)
-//
+/* ------------------------------------------------------------------ */
+/* 7) ترقية tmp -> idb: يحافظ على ترتيب refs ويوقف عند أول فشل          */
+/* ------------------------------------------------------------------ */
+
 export async function upgradeTmpRefs(
   refs,
   { tempCache, isTmpRefFn = isTmpRef, putFn, onAfterPut, onFail, revokeFn } = {}
@@ -260,27 +295,34 @@ export async function upgradeTmpRefs(
       continue;
     }
 
-    const rec = tempCache?.get?.(ref);
-    if (!rec?.file) {
+    const rec = tempCache && tempCache.get ? tempCache.get(ref) : null;
+    if (!rec || !rec.file) {
       const err = new Error('Missing tmp file record');
       if (typeof onFail === 'function') onFail(ref, err);
       return { ok: false, refs: out, error: err };
     }
 
     try {
-      const idbRef = await putFn?.(rec, ref);
+      const idbRef = (typeof putFn === 'function') ? await putFn(rec, ref) : null;
+
       if (idbRef) {
         const s = String(idbRef);
         out.push(s);
-        if (typeof onAfterPut === 'function') await onAfterPut(s, rec, ref);
+
+        if (typeof onAfterPut === 'function') {
+          await onAfterPut(s, rec, ref);
+        }
       }
     } catch (e) {
       if (typeof onFail === 'function') onFail(ref, e);
       return { ok: false, refs: out, error: e };
     } finally {
       try {
-        if (typeof revokeFn === 'function') revokeFn(ref);
-        else tempCache?.revoke?.(ref);
+        if (typeof revokeFn === 'function') {
+          revokeFn(ref);
+        } else if (tempCache && typeof tempCache.revoke === 'function') {
+          tempCache.revoke(ref);
+        }
       } catch {}
     }
   }
@@ -288,10 +330,12 @@ export async function upgradeTmpRefs(
   return { ok: true, refs: out, error: null };
 }
 
-//
-// 6) توحيد عرض بطاقة (Preview/Edit) + نص زر الحفظ + زر الإلغاء
-// - مفيد لأقسام البطاقات (قصص/مصادر)
-//
+
+/* ------------------------------------------------------------------ */
+/* 8) توحيد وضع البطاقة (Preview/Edit) + نصوص الأزرار                   */
+/* ------------------------------------------------------------------ */
+
+/** ينسّق وضع البطاقة ويحدد زر الحفظ/الإغلاق بناءً على (editing + dirty) */
 export function applyCardEditMode({
   card,
   isEditing,
@@ -316,7 +360,7 @@ export function applyCardEditMode({
   if (previewBox) previewBox.style.display = toEdit ? 'none' : '';
   if (editBox) editBox.style.display = toEdit ? '' : '';
 
-  // ملاحظة: بعض الأقسام تستخدم datesEl داخل edit header (إخفائه عند التحرير)
+  // بعض الأقسام تعرض dates في preview فقط
   if (datesEl) datesEl.style.display = toEdit ? 'none' : '';
 
   const L = { edit: 'تعديل', close: 'إغلاق', save: 'حفظ', ...labels };
@@ -329,58 +373,13 @@ export function applyCardEditMode({
     saveBtn.innerHTML = `<i class="fa-solid ${icon}" aria-hidden="true"></i><span>${text}</span>`;
   }
 
-  if (cancelBtn) cancelBtn.style.display = toEdit && isDirty ? '' : 'none';
+  if (cancelBtn) cancelBtn.style.display = (toEdit && isDirty) ? '' : 'none';
 }
 
+/* ------------------------------------------------------------------ */
+/* 9) Resolver موحّد للمراجع: ready/tmp/idb                             */
+/* ------------------------------------------------------------------ */
 
-//
-// 7) ميتاداتا ملفات tmp للمصادر (اسم/نوع/امتداد/تصنيف)
-//
-export function makeTempMetaFromFile(file) {
-  const mime = String(file?.type ?? '').toLowerCase();
-  const name = String(file?.name ?? '');
-  const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : mimeToExt(mime);
-  const kind = inferFileKind({ mime, ext });
-  return { mime, name, ext, kind };
-}
-
-//
-// 8) DOM: توسيع textarea تلقائياً حسب المحتوى
-//
-export function autoResizeTextareas(root, selector) {
-  if (!root) return;
-  const areas = root.querySelectorAll(selector);
-
-  areas.forEach((ta) => {
-    const resize = () => {
-      const dsMin = Number(ta.dataset.minHeight || 0);
-
-      const cssMinStr = window.getComputedStyle(ta).minHeight || '0px';
-      const cssMin = parseFloat(cssMinStr) || 0;
-
-      // الافتراضي العام لو العنصر biosec-textarea
-      const fallback = ta.classList.contains('biosec-textarea') ? 94 : 0;
-
-      // خذ الأكبر
-      const min = Math.max(dsMin, cssMin, fallback);
-
-      ta.style.height = 'auto';
-      const next = Math.max(ta.scrollHeight, min);
-      ta.style.height = next + 'px';
-    };
-
-    resize();
-
-    ta.removeEventListener('input', ta._autoResizeHandler || (() => {}));
-    ta._autoResizeHandler = resize;
-    ta.addEventListener('input', resize);
-  });
-}
-
-
-//
-// 9) Resolver موحّد للمراجع: ready/tmp/idb
-//
 export async function resolveRefUrl(ref, { tempCache, getIdbUrl } = {}) {
   if (!ref) return null;
   const s = String(ref);
@@ -397,7 +396,7 @@ export async function resolveRefUrl(ref, { tempCache, getIdbUrl } = {}) {
     }
   }
 
-  // fallback: قد يكون نص/مسار/معرّف آخر
+  // fallback: قد يكون مسار/نص/معرّف آخر
   return s;
 }
 
@@ -406,15 +405,16 @@ export const createRefResolver =
   (ref) =>
     resolveRefUrl(ref, { tempCache, getIdbUrl });
 
-//
-// 10) UI عامة: تاريخ الإنشاء + مؤشر طول النص + فتح سلايدر بعد الحل
-//
+/* ------------------------------------------------------------------ */
+/* 10) UI عامة: تاريخ + طول النص + فتح سلايدر بعد الحل                  */
+/* ------------------------------------------------------------------ */
+
 export function formatCreatedAtLabel(iso, { prefix = 'أضيفت', formatter = null } = {}) {
   if (!iso) return '';
   const p = (prefix == null || prefix === '') ? 'أضيفت' : prefix;
 
   try {
-    const body = (typeof formatter === 'function') ? formatter(iso)
+    const body = typeof formatter === 'function'  ? formatter(iso)
       : new Date(iso).toLocaleString('ar');
 
     return body ? `${p} في ${body}` : '';
@@ -422,7 +422,6 @@ export function formatCreatedAtLabel(iso, { prefix = 'أضيفت', formatter = n
     return '';
   }
 }
-
 
 export function getTextLengthInfo(len, thresholds = {}, labels = {}) {
   const n = Number(len || 0);
@@ -437,29 +436,30 @@ export function getTextLengthInfo(len, thresholds = {}, labels = {}) {
 }
 
 export async function openResolvedSlider({ viewer, refs, startIndex = 0, resolveUrl } = {}) {
-  const list = Array.isArray(refs) ? refs : [];
   const urls = [];
-
-  for (const r of list) {
+  for (const r of asArr(refs)) {
     const u = await resolveUrl?.(r);
     if (u) urls.push(u);
   }
-
   if (urls.length) viewer?.open?.(urls, startIndex);
 }
 
-//
-// 11) مساعدات الأنواع: labels/options + بناء select + إعادة بناء حسب المستخدم فعلياً
-//
-export function createTypeHelpers({ labels = {}, options = [], allValue = 'all', allLabel = 'كل الأنواع' } = {}) {
-  const labelsMap = labels || {};
-  const opts = Array.isArray(options) ? options.slice() : [];
+/* ------------------------------------------------------------------ */
+/* 11) مساعدات الأنواع: labels/options + fill + rebuild حسب المستخدم     */
+/* ------------------------------------------------------------------ */
 
-  // ترتيب الأكواد حسب ترتيبها في options (للحفاظ على نفس ترتيب المشروع)
+export function createTypeHelpers({
+  labels = {},
+  options = [],
+  allValue = 'all',
+  allLabel = 'كل الأنواع'
+} = {}) {
+  const labelsMap = labels || {};
+  const opts = asArr(options).slice();
+
+  // ترتيب ثابت حسب options (حتى لا يتغير ترتيب المشروع)
   const order = Object.fromEntries(
-    opts
-      .filter(([val]) => val && val !== allValue)
-      .map(([val], i) => [val, i])
+    opts.filter(([val]) => val && val !== allValue).map(([val], i) => [val, i])
   );
 
   const getLabel = (code) => labelsMap[code] || '';
@@ -478,13 +478,11 @@ export function createTypeHelpers({ labels = {}, options = [], allValue = 'all',
   const rebuildSelectFromUsed = (selectEl, usedCodes, currentValue, locale = 'ar') => {
     if (!selectEl) return allValue;
 
-    const used = Array.from(
-      new Set(Array.from(usedCodes || []).map(safeStr).filter(Boolean))
-    );
+    const used = uniq(asArr(usedCodes).map(asStr).filter(Boolean));
 
     used.sort((a, b) => {
-      const ia = order[a] !== undefined ? order[a] : 999;
-      const ib = order[b] !== undefined ? order[b] : 999;
+      const ia = order[a] ?? 999;
+      const ib = order[b] ?? 999;
       if (ia !== ib) return ia - ib;
       return String(a).localeCompare(String(b), locale);
     });
@@ -499,7 +497,6 @@ export function createTypeHelpers({ labels = {}, options = [], allValue = 'all',
       selectEl.appendChild(optAll);
     }
 
-    // الأنواع المستخدمة فقط
     for (const code of used) {
       const opt = document.createElement('option');
       opt.value = code;
@@ -507,8 +504,8 @@ export function createTypeHelpers({ labels = {}, options = [], allValue = 'all',
       selectEl.appendChild(opt);
     }
 
-    const prev = safeStr(currentValue) || allValue;
-    const next = prev && prev !== allValue && used.includes(prev) ? prev : allValue;
+    const prev = asStr(currentValue) || allValue;
+    const next = (prev && prev !== allValue && used.includes(prev)) ? prev : allValue;
     selectEl.value = next;
     return next;
   };
@@ -516,9 +513,10 @@ export function createTypeHelpers({ labels = {}, options = [], allValue = 'all',
   return { getLabel, fillSelect, rebuildSelectFromUsed };
 }
 
-//
-// 12) أدوات ملفات (امتداد/تحويل MIME/تصنيف/فتح/تحقق/ترتيب/اسم تحميل)
-//
+/* ------------------------------------------------------------------ */
+/* 12) أدوات ملفات: ext/MIME/kind/open/validate/sort/download name      */
+/* ------------------------------------------------------------------ */
+
 export function getRefExt(ref) {
   const s = String(ref ?? '');
   const m = s.match(/\.([a-zA-Z0-9]+)(?:\?|#|$)/);
@@ -540,14 +538,13 @@ export function mimeToExt(mime = '') {
   return '';
 }
 
-// يرجع نوع الملف: image | audio | pdf | word | excel | other
+/** يرجع نوع الملف: image | audio | pdf | word | excel | other */
 export function inferFileKind({ mime = '', ext = '', ref = '' } = {}) {
   const m = String(mime ?? '').toLowerCase();
   const e = String(ext ?? '').toLowerCase();
   const r = String(ref ?? '').toLowerCase();
 
   const imgRe = /\.(jpe?g|png|gif|webp|bmp|svg|heic|heif)(?:\?|#|$)/;
-
   if (
     m.startsWith('image/') ||
     r.startsWith('data:image/') ||
@@ -570,18 +567,13 @@ export function inferFileKind({ mime = '', ext = '', ref = '' } = {}) {
     e === 'pdf'
   ) return 'pdf';
 
-  if (m.includes('word') || /(doc|docx|rtf|odt)$/.test(e) || /\.(doc|docx|rtf|odt)(?:\?|#|$)/.test(r)) {
-    return 'word';
-  }
-
-  if (m.includes('excel') || /(xls|xlsx|csv)$/.test(e) || /\.(xls|xlsx|csv)(?:\?|#|$)/.test(r)) {
-    return 'excel';
-  }
+  if (m.includes('word') || /(doc|docx|rtf|odt)$/.test(e) || /\.(doc|docx|rtf|odt)(?:\?|#|$)/.test(r)) return 'word';
+  if (m.includes('excel') || /(xls|xlsx|csv)$/.test(e) || /\.(xls|xlsx|csv)(?:\?|#|$)/.test(r)) return 'excel';
 
   return 'other';
 }
 
-// فتح تبويب بدون أن يتأثر بالـ popup blockers (لا تستخدم await قبل window.open)
+/** فتح تبويب بدون أن يتأثر بالـ popup blockers (لا تضع await قبل window.open) */
 export function openInNewTabSafe(urlPromise) {
   const w = window.open('about:blank', '_blank');
   if (w) w.opener = null;
@@ -599,7 +591,7 @@ export function openInNewTabSafe(urlPromise) {
     });
 }
 
-// التحقق من الملف قبل الإضافة (حجم + MIME + امتداد كخطة بديلة)
+/** التحقق قبل الإضافة: الحجم + MIME (و ext كخطة بديلة) */
 export function isAllowedFile(
   file,
   { maxSizeMB = 20, allowedMime = [], allowedExt = [], allowImages = true, fallbackExtWhenMimeMissing = true } = {}
@@ -612,23 +604,23 @@ export function isAllowedFile(
   const type = String(file.type ?? '').toLowerCase();
   if (allowImages && type.startsWith('image/')) return { ok: true };
 
-  const allowedMimeSet = new Set((allowedMime || []).map((s) => String(s).toLowerCase()));
+  const allowedMimeSet = new Set(asArr(allowedMime).map((s) => String(s).toLowerCase()));
   if (type && allowedMimeSet.has(type)) return { ok: true };
 
   if (!fallbackExtWhenMimeMissing) return { ok: false, reason: 'نوع الملف غير مدعوم.' };
 
   const name = String(file.name ?? '').toLowerCase();
   const ext = name.includes('.') ? name.split('.').pop() : '';
-  const allowedExtSet = new Set((allowedExt || []).map((s) => String(s).toLowerCase()));
+  const allowedExtSet = new Set(asArr(allowedExt).map((s) => String(s).toLowerCase()));
 
   if (ext && allowedExtSet.has(ext)) return { ok: true };
 
   return { ok: false, reason: 'نوع الملف غير مدعوم. ارفع صورة أو PDF أو Word/Excel.' };
 }
 
-// ترتيب refs: صور أولاً ثم باقي الأنواع (مع الحفاظ على ترتيب كل مجموعة)
+/** ترتيب refs: الصور أولاً ثم باقي الأنواع (مع الحفاظ على ترتيب كل مجموعة) */
 export function groupRefsByKind(refs, getKind) {
-  const list = Array.isArray(refs) ? refs.slice() : refs ? [refs] : [];
+  const list = Array.isArray(refs) ? refs.slice() : (refs ? [refs] : []);
   const images = [];
   const others = [];
 
@@ -639,39 +631,44 @@ export function groupRefsByKind(refs, getKind) {
   return images.concat(others);
 }
 
-// بناء اسم ملف للتحميل (يدعم meta.name و meta.ext عند ملفات idb)
+/** بناء اسم ملف للتحميل (يدعم meta.name/meta.ext لملفات idb) */
 export function buildDownloadName(baseTitle, ref, mime, index, total, meta = {}) {
   const isSingle = Number(total || 0) === 1;
 
   const baseFromName =
-    meta?.name && String(meta.name).trim() ? String(meta.name).replace(/\.[^/.]+$/, '') : '';
+    meta?.name && String(meta.name).trim() ? String(meta.name).replace(/\.[^/.]+$/, '')
+      : '';
 
   const safeBase = baseFromName || safeStr(baseTitle || 'الوثيقة') || 'الوثيقة';
 
-  const extFromCache = meta?.ext || '';
-  const extFromRef = getRefExt(ref);
-  const extFromMime = mimeToExt(mime);
-
-  const ext = String(extFromCache || extFromRef || extFromMime || '').replace(/^\./, '');
+  const ext = String(meta?.ext || getRefExt(ref) || mimeToExt(mime) || '').replace(/^\./, '');
   const suffix = isSingle ? '' : ` (${Number(index || 0) + 1})`;
 
   return ext ? `${safeBase}${suffix}.${ext}` : `${safeBase}${suffix}`;
 }
 
-// bio-sections.utils.js
+/** استخراج ميتاداتا tmp للمصادر (اسم/نوع/امتداد/تصنيف) */
+export function makeTempMetaFromFile(file) {
+  const mime = String(file?.type ?? '').toLowerCase();
+  const name = String(file?.name ?? '');
+  const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : mimeToExt(mime);
+  const kind = inferFileKind({ mime, ext });
+  return { mime, name, ext, kind };
+}
+
+/* ------------------------------------------------------------------ */
+/* 13) Controller: طيّ/فتح الفلاتر مع حفظ الحالة في localStorage        */
+/* ------------------------------------------------------------------ */
 
 export function createFiltersCollapseController({
   storageKey,
-  panelEl,          // العنصر الذي يحتوي الفلاتر (مثل toolsLeft)
-  toggleBtnEl,      // زر الإظهار/الإخفاء
-  hasActiveFilters, // دالة ترجع true إذا فيه فلاتر مفعلة
-  labels = {
-    show: 'إظهار الفلاتر',
-    hide: 'إخفاء الفلاتر'
-  },
+  panelEl,
+  toggleBtnEl,
+  hasActiveFilters,
+  labels = { show: 'إظهار الفلاتر', hide: 'إخفاء الفلاتر' },
   iconHtml = '<i class="fa-solid fa-sliders" aria-hidden="true"></i>',
-defaultCollapsed = false, // الافتراضي: ظاهر
-  onBlockedHide,          // (اختياري) لما يمنع الإخفاء بسبب فلاتر فعالة
+  defaultCollapsed = false,
+  onBlockedHide,
 } = {}) {
   if (!panelEl || !toggleBtnEl) {
     throw new Error('createFiltersCollapseController: panelEl & toggleBtnEl are required');
@@ -680,135 +677,73 @@ defaultCollapsed = false, // الافتراضي: ظاهر
   const readFromStorage = () => {
     try {
       const v = localStorage.getItem(storageKey);
-      if (v === null) return !!defaultCollapsed;
-      return v === '1';
+      return v === null ? !!defaultCollapsed : (v === '1');
     } catch {
       return !!defaultCollapsed;
     }
   };
 
   const writeToStorage = (val) => {
-    try {
-      localStorage.setItem(storageKey, val ? '1' : '0');
-    } catch { /* ignore */ }
+    try { localStorage.setItem(storageKey, val ? '1' : '0'); } catch {}
   };
 
   let collapsed = readFromStorage();
-
-  // ✅ علاج سباق transition: نخزن cleanup للـ listener الحالي
   let transitionCleanup = null;
 
-  function updateToggleBtnUI() {
+  const updateToggleBtnUI = () => {
     toggleBtnEl.classList.toggle('is-collapsed', collapsed);
     toggleBtnEl.setAttribute('aria-pressed', String(collapsed));
     toggleBtnEl.innerHTML = `${iconHtml}<span>${collapsed ? labels.show : labels.hide}</span>`;
-  }
+  };
 
-  function setCollapsed(next, opts = {}) {
-    const immediate = !!opts.immediate;
+  const clearTransitionListener = () => {
+    if (typeof transitionCleanup === 'function') transitionCleanup();
+    transitionCleanup = null;
+  };
 
-    collapsed = !!next;
-    writeToStorage(collapsed);
+  const bindTransitionEnd = (cb) => {
+    const onEnd = (e) => {
+      if (e.propertyName !== 'max-height') return;
+      cb?.();
+      panelEl.removeEventListener('transitionend', onEnd);
+    };
+    panelEl.addEventListener('transitionend', onEnd);
+    transitionCleanup = () => panelEl.removeEventListener('transitionend', onEnd);
+  };
 
+function setCollapsed(next, { immediate = false } = {}) {
+  collapsed = !!next;
+  writeToStorage(collapsed);
+
+  clearTransitionListener();
+
+  if (immediate) {
+    panelEl.style.transition = 'none';
     panelEl.classList.toggle('is-collapsed', collapsed);
     updateToggleBtnUI();
-
-    // ✅ ألغي أي listener قديم قبل ما أبدأ حركة جديدة
-    if (typeof transitionCleanup === 'function') {
-      transitionCleanup();
-      transitionCleanup = null;
-    }
-
-    // ✅ تطبيق فوري لمنع الوميض عند التحميل
-    if (immediate) {
-      panelEl.style.transition = 'none';
-      panelEl.style.maxHeight = '';
-      panelEl.style.opacity = '';
-      panelEl.style.transform = '';
-
-      panelEl.style.display = collapsed ? 'none' : '';
-
-      requestAnimationFrame(() => {
-        panelEl.style.transition = '';
-      });
-      return;
-    }
-
-    // مهم: خليها ظاهرة أثناء الحساب
-    panelEl.style.display = '';
-
-    if (!collapsed) {
-      // فتح
-      const h = panelEl.scrollHeight;
-
-      panelEl.style.maxHeight = '0px';
-      panelEl.style.opacity = '0';
-      panelEl.style.transform = 'translateY(-6px)';
-
-      requestAnimationFrame(() => {
-        if (collapsed) return;
-        panelEl.style.maxHeight = h + 'px';
-        panelEl.style.opacity = '1';
-        panelEl.style.transform = 'translateY(0)';
-      });
-
-      const onEnd = (e) => {
-        if (e.propertyName !== 'max-height') return;
-        if (collapsed) return;
-        panelEl.style.maxHeight = 'none';
-        panelEl.removeEventListener('transitionend', onEnd);
-      };
-
-      panelEl.addEventListener('transitionend', onEnd);
-      transitionCleanup = () => panelEl.removeEventListener('transitionend', onEnd);
-
-    } else {
-      // إغلاق
-      const h = panelEl.scrollHeight;
-
-      panelEl.style.maxHeight = h + 'px';
-      panelEl.style.opacity = '1';
-      panelEl.style.transform = 'translateY(0)';
-
-      requestAnimationFrame(() => {
-        if (!collapsed) return;
-        panelEl.style.maxHeight = '0px';
-        panelEl.style.opacity = '0';
-        panelEl.style.transform = 'translateY(-6px)';
-      });
-
-      const onEnd = (e) => {
-        if (e.propertyName !== 'max-height') return;
-        if (!collapsed) return;
-        panelEl.style.display = 'none';
-        panelEl.removeEventListener('transitionend', onEnd);
-      };
-
-      panelEl.addEventListener('transitionend', onEnd);
-      transitionCleanup = () => panelEl.removeEventListener('transitionend', onEnd);
-    }
+    // إعادة تفعيل transition بعد إطار
+    requestAnimationFrame(() => { panelEl.style.transition = ''; });
+    return;
   }
 
-  function toggle() {
-    // لو مخفي: افتح دائمًا
-    if (collapsed) {
-      setCollapsed(false);
-      return;
-    }
+  panelEl.classList.toggle('is-collapsed', collapsed);
+  updateToggleBtnUI();
+}
 
-    // لو ظاهر: لا تخفي إذا فيه فلاتر مفعلة
+  function toggle() {
+    if (collapsed) return setCollapsed(false);
+
+    // لا نخفي لو فيه فلاتر فعالة (حتى لا يضيع على المستخدم أنها مفعلة)
     const active = typeof hasActiveFilters === 'function' ? !!hasActiveFilters() : false;
     if (active) {
-      if (typeof onBlockedHide === 'function') onBlockedHide();
+      onBlockedHide?.();
       return;
     }
 
     setCollapsed(true);
   }
 
-  function getCollapsed() {
-    return collapsed;
-  }
+  const getCollapsed = () => collapsed;
 
   function applyInitialState({ autoOpenIfActive = true } = {}) {
     setCollapsed(collapsed, { immediate: true });
@@ -820,12 +755,10 @@ defaultCollapsed = false, // الافتراضي: ظاهر
   }
 
   function destroy() {
-    if (typeof transitionCleanup === 'function') transitionCleanup();
-    transitionCleanup = null;
+    clearTransitionListener();
   }
 
-  // تهيئة UI للزر مباشرة
   updateToggleBtnUI();
-
-  return { setCollapsed, toggle, getCollapsed, applyInitialState, destroy };
+ 
+ return { setCollapsed, toggle, getCollapsed, applyInitialState, destroy };
 }

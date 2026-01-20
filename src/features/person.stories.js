@@ -1,5 +1,5 @@
 // person.stories.js
-// إدارة "القصص والمذكّرات" (منطق + واجهة) — نسخة جديدة تعتمد files بدل images
+// إدارة "القصص والمذكّرات" (منطق + واجهة)
 
 import {
   el,
@@ -40,7 +40,7 @@ import {
   createSectionTempAndResolver,
   upgradeTmpRefs,
 
-  // files helpers (مثل قسم المصادر)
+  // files helpers
   makeTempMetaFromFile,
   inferFileKind,
   groupRefsByKind,
@@ -56,11 +56,8 @@ import {
   createFiltersCollapseController
 } from '../features/bio-sections.utils.js';
 
-import {
-  attachYearModeToggle,
-  getLogicalDateValue,
-  setYearToggleValue
-} from '../ui/modal.yearToggle.js';
+import {attachYearModeToggle, getLogicalDateValue, setYearToggleValue} from '../ui/modal.yearToggle.js';
+
 import { getLinkedEventEdges, upsertSectionEvents, normalizeEventLink } from './person.events.js';
 
 const storyFileMetaCache = new Map(); // ref -> { kind, ext, mime, name? }
@@ -192,7 +189,7 @@ const STORY_VISIBILITY_OPTIONS = [
 ];
 
 // ----------------------------------------------------------------------------
-// 3) منطق البيانات (Normalize + CRUD) — files بدل images + حقول جديدة
+// 3) منطق البيانات (Normalize + CRUD) 
 // ----------------------------------------------------------------------------
 function normalizeStory(raw) {
   const now = nowIso();
@@ -202,9 +199,8 @@ function normalizeStory(raw) {
     title: safeStr(raw.title),
     text: safeStr(raw.text),
 
-    // ✅ جديد: files بدل images
     files: Array.isArray(raw.files) ? raw.files.map(String) : [],
-    // ✅ ربط القصة بالمصادر
+    // ربط القصة بالمصادر
     sourceIds: Array.isArray(raw.sourceIds) ? raw.sourceIds.map(String).filter(Boolean) : [],
 
     type: safeStr(raw.type),
@@ -219,7 +215,7 @@ function normalizeStory(raw) {
 
     pinned: !!raw.pinned,
 
-    // ✅ ربط القصة بالتايملاين
+    // ربط القصة بالتايملاين
     toTimeline: !!raw.toTimeline,
 
     note: safeStr(raw.note),
@@ -269,7 +265,7 @@ export function deleteStory(person, storyId, { onChange } = {}) {
   return true;
 }
 
-// ✅ إضافة فرز حسب تاريخ الحدث (مع fallback)
+// إضافة فرز حسب تاريخ الحدث (مع fallback)
 export function sortStories(person, mode = 'latest') {
   ensureStories(person);
 
@@ -315,7 +311,7 @@ const getEvent = (s) => {
 }
 
 // ----------------------------------------------------------------------------
-// 4) سجل فارغ + Draft Empty — files بدل images
+// 4) سجل فارغ + Draft Empty
 // ----------------------------------------------------------------------------
 const STORY_EMPTY_KEYS = [
   'title',
@@ -421,7 +417,7 @@ function makeStoryTimelineEvent(story, storyTypeLabel = '') {
     certainty: '',
     media: [],
 
-    // ✅ الربط الموحّد مثل التعليم
+    // الربط الموحّد
     ...normalizeEventLink({ sectionId: 'stories', itemId: String(story.id || ''), edge: 'timeline', key: 'auto' })
   };
 }
@@ -433,7 +429,7 @@ function makeStoryTimelineEvent(story, storyTypeLabel = '') {
 export function createStoriesSection(person, handlers = {}) {
   ensureStories(person);
   // ===============================
-  // ✅ Sources helpers 
+  // Sources helpers 
   // ===============================
   const sources = Array.isArray(person?.sources) ? person.sources : [];
   const sourceMap = new Map(sources.map(s => [String(s.id), s]));
@@ -457,7 +453,7 @@ export function createStoriesSection(person, handlers = {}) {
 let lastEditedId = null;
 let lastFocusId = null;
 
-// ✅ Persist stories filters state across reload
+// Persist stories filters state across reload
 const STORIES_FILTERS_STATE_KEY = 'biosec:stories:filtersState';
 
 function readStoriesFiltersState() {
@@ -486,7 +482,7 @@ function persistStoriesFiltersState() {
     pinned: (pinnedFilter || '').trim(),
     tag: (currentTagFilter || '').trim(),
     search: (currentSearchQuery || '').trim(),
-    // ✅ اختياري (مفيد): حفظ ترتيب العرض الحالي
+    // حفظ ترتيب العرض الحالي
     sort: (sortSelect?.value || '').trim()
   });
 }
@@ -549,8 +545,12 @@ function clearStoriesFiltersState() {
   root.appendChild(titleEl);
 
   const metaEl = el('div', 'biosec-meta stories-meta');
-  metaEl.textContent =
-    'حوِّل الذكريات إلى قصص حيّة تحفظ أثره للأبناء والأحفاد؛ دوّن المواقف المؤثّرة والطرائف والنجاحات والتحوّلات، ثم أرفق الملفات المناسبة.';
+  
+metaEl.textContent =
+  'يوثّق هذا القسم "القصص والمذكّرات" بوصفها مصدرًا أساسيًا لحفظ السيرة ونقلها للأبناء والأحفاد بصورة دقيقة ومنظّمة.\n' +
+  'أضف القصة مع تاريخها ومكانها ووسومها، وأرفق ما يدعمها من صور أو وثائق واربطها بالمصادر لزيادة الموثوقية.\n' +
+  'يمكنك أيضًا إدراج القصة ضمن الخط الزمني لعرض المحطات المهمة بوضوح.';
+
   root.appendChild(metaEl);
 
   function updateStoriesCountBadge() {
@@ -566,12 +566,9 @@ function clearStoriesFiltersState() {
   const tools = el('div', 'biosec-tools stories-tools');
   const toolsLeft = el('div', 'biosec-tools-left stories-tools-left');
   const toolsRight = el('div', 'biosec-tools-right stories-tools-right');
-  // زر إظهار/إخفاء الفلاتر
   const filtersToggleBtn = el('button', 'biosec-filters-toggle biosec-add-btn stories-filters-toggle');
   filtersToggleBtn.type = 'button';
   filtersToggleBtn.setAttribute('aria-label', 'إظهار/إخفاء الفلاتر');
-// ✅ زر إعادة ضبط الفلاتر (يظهر فقط عند وجود فلاتر مفعّلة)
-// مكانه: toolsLeft (لوحة الفلاتر نفسها)
 const resetFiltersBtn = el('button', 'biosec-btn biosec-filters-reset stories-filters-reset');
 resetFiltersBtn.type = 'button';
 resetFiltersBtn.innerHTML =
@@ -604,7 +601,7 @@ resetFiltersBtn.style.display = 'none';
   });
   visibilityFilterSelect.value = 'all';
 
-  // ✅ sort: إضافة event_latest/event_oldest
+  // sort: إضافة event_latest/event_oldest
   const sortSelect = el('select', 'biosec-sort stories-sort');
   sortSelect.name = 'stories_sort';
   [
@@ -621,7 +618,6 @@ resetFiltersBtn.style.display = 'none';
   });
   sortSelect.value = sortMode;
 
-// ✅ pinned filter (select بدل زر)
 const pinnedFilterSelect = el('select', 'biosec-type-filter stories-pin-filter');
 pinnedFilterSelect.name = 'stories_pinned_filter';
 
@@ -639,7 +635,7 @@ pinnedFilterSelect.name = 'stories_pinned_filter';
 pinnedFilterSelect.value = 'all';
 pinnedFilterSelect.title = 'تصفية القصص حسب التمييز (Pinned)';
 
-  // ✅ files filter
+  // files filter
   const filesFilterSelect = el('select', 'biosec-type-filter stories-files-filter');
   filesFilterSelect.name = 'stories_files_filter';
   [
@@ -654,7 +650,7 @@ pinnedFilterSelect.title = 'تصفية القصص حسب التمييز (Pinned)
   });
   filesFilterSelect.value = 'all';
 
-  // ✅ search (عنوان + نص + مكان + وسوم)
+  // search (عنوان + نص + مكان + وسوم)
   const searchWrap = el('div', 'biosec-search-wrap stories-search-wrap');
   const searchInput = el('input', 'biosec-search-input stories-search-input');
   searchInput.type = 'search';
@@ -665,13 +661,13 @@ searchInput.addEventListener('input', () => {
   const raw = searchInput.value || '';
   currentSearchQuery = raw.trim().toLowerCase();
 
-  // ✅ أظهر/أخف زر المسح حسب وجود نص
+  // أظهر/أخف زر المسح حسب وجود نص
   clearSearchBtn.style.display = raw.trim() ? '' : 'none';
 persistStoriesFiltersState(); 
   renderList();
 });
 
-  // ✅ زر مسح البحث (يظهر فقط عند وجود نص)
+  // زر مسح البحث (يظهر فقط عند وجود نص)
 const clearSearchBtn = el('button', 'biosec-search-clear stories-search-clear');
 clearSearchBtn.type = 'button';
 clearSearchBtn.title = 'مسح البحث';
@@ -692,7 +688,7 @@ persistStoriesFiltersState();
 });
 
 searchWrap.append(searchInput, clearSearchBtn);
-// ✅ Restore stories filters state on load
+// Restore stories filters state on load
 {
   const st = readStoriesFiltersState();
   if (st) {
@@ -738,7 +734,7 @@ searchWrap.append(searchInput, clearSearchBtn);
       clearSearchBtn.style.display = (st.search || '').trim() ? '' : 'none';
     }
 
-    // ✅ sort (اختياري)
+    // sort
     if (typeof st.sort === 'string' && st.sort) {
       sortSelect.value = st.sort;
       // مهم: طبّق الفرز على البيانات فورًا
@@ -766,13 +762,13 @@ function withToolHead(node, { label, icon }) {
   addBtn.type = 'button';
 
 toolsLeft.append(
-  // ✅ ترتيب UX: فلاتر المحتوى أولاً
+  // ترتيب UX: فلاتر المحتوى أولاً
   withToolHead(typeFilterSelect,       { label: 'نوع القصة',     icon: 'fa-tag' }),
   withToolHead(moodFilterSelect,       { label: 'مشاعر القصة',   icon: 'fa-face-smile' }),
   withToolHead(visibilityFilterSelect, { label: 'الخصوصية',      icon: 'fa-user-shield' }),
   withToolHead(filesFilterSelect,      { label: 'الملفات',       icon: 'fa-paperclip' }),
 
-  // ✅ ثم التحكمات العامة
+  // ثم التحكمات العامة
   withToolHead(pinnedFilterSelect,     { label: 'الحالة',       icon: 'fa-solid fa-thumbtack' }),
   withToolHead(sortSelect,             { label: 'الترتيب',       icon: 'fa-arrow-up-wide-short' }),
   resetFiltersBtn,
@@ -781,9 +777,9 @@ toolsLeft.append(
 
 toolsRight.append(searchWrap, addBtn, filtersToggleBtn);
   
-// ✅ دالة موحّدة لمعرفة هل الفلاتر مفعّلة (نستخدمها للمنع + لإظهار زر إعادة الضبط)
+// دالة موحّدة لمعرفة هل الفلاتر مفعّلة (نستخدمها للمنع + لإظهار زر إعادة الضبط)
 function hasActiveFilters() {
-  // ✅ ممنوع إدخال البحث هنا — البحث صار خارج لوحة الفلاتر
+  // ممنوع إدخال البحث هنا — البحث صار خارج لوحة الفلاتر
   const hasTag = !!(currentTagFilter && currentTagFilter.trim());
   const hasType = (currentTypeFilter && currentTypeFilter !== 'all');
   const hasMood = (currentMoodFilter && currentMoodFilter !== 'all');
@@ -818,7 +814,7 @@ syncResetFiltersBtnVisibility();
 }
 
 function resetFiltersToDefault() {
-  // ✅ فلاتر toolsLeft (لوحة الفلاتر)
+  // فلاتر toolsLeft (لوحة الفلاتر)
   typeFilterSelect.value = 'all';
   moodFilterSelect.value = 'all';
   visibilityFilterSelect.value = 'all';
@@ -826,22 +822,22 @@ function resetFiltersToDefault() {
   pinnedFilterSelect.value = 'all';
   sortSelect.value = sortMode || 'latest';
 
-  // ✅ القيم المنطقية المرتبطة
+  // القيم المنطقية المرتبطة
   currentTypeFilter = 'all';
   currentMoodFilter = 'all';
   currentVisibilityFilter = 'all';
   filesFilter = 'all';
   pinnedFilter = 'all';
 
-  // ✅ فلتر الوسوم
+  // فلتر الوسوم
   currentTagFilter = '';
 
-  // ✅ (مهم) تصفير البحث أيضًا
+  // تصفير البحث أيضًا
   searchInput.value = '';
   currentSearchQuery = '';
   clearSearchBtn.style.display = 'none';
 
-  clearStoriesFiltersState(); // ✅
+  clearStoriesFiltersState();
   syncResetFiltersBtnVisibility();
   renderList();
 }
@@ -852,7 +848,7 @@ resetFiltersBtn.addEventListener('click', (e) => {
   resetFiltersToDefault();
 });
 
-// ✅ طبّق الحالة الأولية لظهور الزر
+// طبّق الحالة الأولية لظهور الزر
 syncResetFiltersBtnVisibility();
 
 // اربط النقر
@@ -879,7 +875,7 @@ function updatePinnedFilterUI() {
       : 'ابدأ بتوثيق أول موقف أو ذكرى لهذا الشخص';
   }
 
-  // helper صغير: يبني label + icon فوق الحقل (بدون تكرار JSX)
+  // helper صغير: يبني label + icon فوق الحقل
 function wrapFieldWithLabel(fieldEl, title, icon) {
   const wrap = el('div', 'biosec-meta-field story-meta-field');
   const lab = el('div', 'biosec-meta-label story-meta-label');
@@ -894,7 +890,7 @@ function wrapFieldWithLabel(fieldEl, title, icon) {
 function renderList() {
   const seq = ++renderSeq;
 
-  // ✅ التقط nav مرة واحدة فورًا (قبل أي await) حتى لا يضيع
+  // التقط nav مرة واحدة فورًا (قبل أي await) حتى لا يضيع
   let nav = null;
   try {
     nav = (typeof handlers?.__consumeBioNav === 'function') ? handlers.__consumeBioNav() : null;
@@ -905,18 +901,17 @@ function renderList() {
   const navSourceId = nav?.sourceId ? String(nav.sourceId) : null;
 
   (async () => {
-    // ✅ سخّن meta cache لكل refs في القصص قبل بناء القائمة
+    // سخّن meta cache لكل refs في القصص قبل بناء القائمة
     await warmStoryMetaCache(collectAllStoryRefs(person));
     if (seq !== renderSeq) return;
 
     list.innerHTML = '';
     ensureStories(person);
 
-    // ✅ (ضع هنا نفس كود renderList الحالي بدون تغيير)
     updateStoriesCountBadge();
     updateAddButtonLabel();
-updatePinnedFilterUI();
-syncResetFiltersBtnVisibility();
+    updatePinnedFilterUI();
+    syncResetFiltersBtnVisibility();
 
     // إعادة بناء فلتر النوع حسب الأنواع المستخدمة فعليًا
     {
@@ -1010,7 +1005,7 @@ const pinOk =
         note: safeStr(story.note)
       };
 const fallbackMatcher = (ev, sid, iid) => {
-  // ✅ تنظيف/التقاط legacy القديم الخاص بالقصص
+  // تنظيف/التقاط legacy القديم الخاص بالقصص
   const legacyKind = safeStr(ev?.kind || '');
   const legacyStoryId = safeStr(ev?.storyId || '');
   const rs = safeStr(ev?.relatedSectionId || '');
@@ -1052,7 +1047,7 @@ let currentSourceIds = shallowArr(original.sourceIds)
       dateLabel.textContent = story.createdAt ? formatCreatedAtLabel(story.createdAt, { prefix: 'أضيفت', formatter: formatFullDateTime })
         : '';
 
-      // ✅ آخر تعديل (يظهر فقط إذا اختلف عن تاريخ الإنشاء)
+      // آخر تعديل (يظهر فقط إذا اختلف عن تاريخ الإنشاء)
 const updatedLabel = el('span', 'biosec-preview-updated story-preview-updated');
 
 if (story.updatedAt && story.updatedAt !== story.createdAt) {
@@ -1173,7 +1168,7 @@ if (timelineEnabled) {
         });
       }
       // ===============================
-      // ✅ Preview linked sources (مثل التعليم)
+      // Preview linked sources
       // ===============================
       function renderPreviewLinkedSourcesStory() {
         const ids = shallowArr(original.sourceIds).map(String).filter(Boolean);
@@ -1192,7 +1187,7 @@ if (timelineEnabled) {
 
 ids.forEach((sid) => {
   const src = sourceMap.get(String(sid));
-  if (!src) return; // ✅ تجاهل المصدر المحذوف
+  if (!src) return; // تجاهل المصدر المحذوف
 
   const chip = el('button', 'biosec-chip biosec-chip--source stories-linked-source-chip');
   chip.type = 'button';
@@ -1311,7 +1306,7 @@ function renderPreviewFiles() {
   const seq = ++previewSeq;
 
   (async () => {
-    // ✅ سخّن meta لملفات هذه القصة قبل التصنيف
+    // سخّن meta لملفات هذه القصة قبل التصنيف
     await warmStoryMetaCache(original.files || []);
     if (seq !== previewSeq) return;
 
@@ -1338,7 +1333,6 @@ function renderPreviewFiles() {
 
       classifyStoryThumb(thumb, ref);
 
-      // ✅ هذا السطر كما هو عندك — الآن بعد warm سيصير صحيح
       const kind = getKindForRef(ref);
 
       const isDoc = (kind === 'word' || kind === 'excel');
@@ -1390,7 +1384,7 @@ actionBtn.textContent =
     return;
   }
 
-  // ✅ افتح/اعرض الملف عبر resolver بشكل آمن (بدون تمرير Promise)
+  // افتح/اعرض الملف عبر resolver بشكل آمن (بدون تمرير Promise)
   openOrDownloadStoryRef(ref, { preferDownload: false, baseTitle: derivedTitle || 'قصة', index: idx, total: totalRefs });
 };
 
@@ -1515,7 +1509,7 @@ STORY_VISIBILITY_OPTIONS.filter(([v]) => v !== 'all').forEach(([v, t]) => {
 });
 visibilitySelect.value = original.visibility || 'family';
 
-// ✅ صف واحد فقط
+// صف واحد فقط
 metaRow.append(
   wrapFieldWithLabel(titleInput, 'عنوان القصة', 'fa-pen-nib'),
   wrapFieldWithLabel(typeSelect, 'نوع القصة', 'fa-tag'),
@@ -1555,14 +1549,14 @@ const tagsInput = el('input', 'biosec-input biosec-tags-input story-tags-input')
       tagsInput.placeholder = 'وسوم القصة (افصل بينها بفواصل مثل: عام, الطفولة, الدراسة, طرائف)';
       tagsInput.value = original.tags.join(', ');
 
-      // ✅ الراوي/المصدر
+      // الراوي/المصدر
       const narratorInput = el('input', 'biosec-input story-narrator-input');
       narratorInput.type = 'text';
       narratorInput.name = `story_narrator_${story.id}`;
       narratorInput.placeholder = 'الراوي/المصدر (مثال: قالها فلان / من مذكراته / مقابلة...)';
       narratorInput.value = original.narrator;
 
-      // ✅ قسم التفاصيل الإضافية (من نص القصة إلى الراوي)
+      // قسم التفاصيل الإضافية (من نص القصة إلى الراوي)
 const storyTextField = (() => {
   const fieldWrap = withFieldHead(textArea, { label: 'نص القصة', icon: 'fa-align-right' });
 
@@ -1605,7 +1599,7 @@ extraSection.append(
 );
 
 // ===============================
-// ✅ Stories linked sources picker
+// Stories linked sources picker
 // ===============================
 const sourcesField = el('div', 'biosec-meta-field story-meta-field story-meta-field--sources');
 const sourcesLabel = el('div', 'biosec-field-label story-field-label story-field-label--sources');
@@ -1667,6 +1661,8 @@ emptyMini.textContent = 'لا توجد مصادر مطابقة لبحثك.';
 linkedSourcesList.appendChild(emptyMini);
 
 sourcesField.append(srcHead, srcTools, linkedSourcesList);
+// إخفاء مبدئي إذا ما فيه أي مصادر
+sourcesField.style.display = (Array.isArray(person?.sources) && person.sources.length) ? '' : 'none';
 
 function setSourcesCountLabel() {
   const n = Array.isArray(currentSourceIds) ? currentSourceIds.length : 0;
@@ -1693,7 +1689,20 @@ function renderLinkedSourcesStory() {
     return text.includes(q);
   });
 
-  emptyMini.style.display = filtered.length ? 'none' : '';
+  if (!all.length) {
+    sourcesField.style.display = 'none';
+    return;
+  }
+
+  sourcesField.style.display = '';
+
+  // ميّز بين “لا نتائج للبحث” ووجود نتائج
+  if (!filtered.length) {
+    emptyMini.textContent = 'لا توجد مصادر مطابقة لبحثك.';
+    emptyMini.style.display = '';
+  } else {
+    emptyMini.style.display = 'none';
+  }
 
   filtered.forEach((src) => {
     const sid = String(src.id);
@@ -1715,6 +1724,7 @@ function renderLinkedSourcesStory() {
   srcSearchClear.style.display = (srcSearch.value || '').trim() ? '' : 'none';
   setSourcesCountLabel();
 }
+
 
 // delegation
 linkedSourcesList.addEventListener('change', (e) => {
@@ -1765,7 +1775,7 @@ btnInvert.addEventListener('click', () => {
 
 renderLinkedSourcesStory();
 
-// ✅ ربط بالخط الزمني (كلاسات عامة قابلة لإعادة الاستخدام)
+// ربط بالخط الزمني (كلاسات عامة قابلة لإعادة الاستخدام)
 const timelineWrap = el('label', 'biosec-pin-toggle biosec-toggle--timeline');
 const timelineCheckbox = el('input');
 timelineCheckbox.type = 'checkbox';
@@ -1774,7 +1784,7 @@ timelineCheckbox.checked = timelineEnabled;
 const timelineText = textEl('span', 'إضافة إلى الخط الزمني');
 timelineWrap.append(timelineCheckbox, timelineText);
 
-// ✅ مميّزة (كلاسات عامة قابلة لإعادة الاستخدام)
+// مميّزة (كلاسات عامة قابلة لإعادة الاستخدام)
 const pinWrap = el('label', 'biosec-pin-toggle biosec-toggle--pinned');
 const pinCheckbox = el('input');
 pinCheckbox.type = 'checkbox';
@@ -1783,12 +1793,12 @@ pinCheckbox.checked = original.pinned;
 const pinText = textEl('span', 'تعيين هذه القصة كمميّزة');
 pinWrap.append(pinCheckbox, pinText);
 
-// ✅ اجمع زر الخط الزمني + زر المميّزة داخل صف واحد (نحافظ على الهيكل)
+// اجمع زر الخط الزمني + زر المميّزة داخل صف واحد (نحافظ على الهيكل)
 const togglesRow = el('div', 'biosec-toggles-row story-toggles-row');
 togglesRow.append(pinWrap, timelineWrap);
 
       // ----------------------------------------------------------------------------
-      // files block (بدل images)
+      // files block
       // ----------------------------------------------------------------------------
       const filesBlock = el('div', 'biosec-images-block story-files-block');
       const emptyFilesHint = el('div', 'biosec-images-empty-hint story-files-empty-hint');
@@ -1894,7 +1904,7 @@ const openIt = () => {
     return;
   }
 
-  // ✅ فتح آمن بدون Promise
+  // فتح آمن بدون Promise
   openOrDownloadStoryRef(ref, { preferDownload: false, baseTitle: base, index: idx, total: totalRefs });
 };
 
@@ -2109,7 +2119,7 @@ eventInput.addEventListener('change', () => { recomputeDirty(); });
 
         if (isEditing && !isDirty) {
           const isDraft = draftNewMap.has(story.id);
-          const isEmptyDraft = isEmptyStoryDraft(story); // ✅ قياس مباشر
+          const isEmptyDraft = isEmptyStoryDraft(story); // قياس مباشر
 
           if (isDraft && isEmptyDraft) {
             pendingDeletedFiles = [];
@@ -2218,7 +2228,7 @@ sourceIds: shallowArr(currentSourceIds)
         const effective = updated || story;
 const prevDates = { eventDate: original.eventDate || null };
 
-// ✅ Upsert linked timeline event for story
+// Upsert linked timeline event for story
 upsertSectionEvents(person, handlers, {
   sectionId: 'stories',
   item: effective,
@@ -2231,7 +2241,7 @@ upsertSectionEvents(person, handlers, {
   }
 });
 
-// ✅ حدّث baseline بعد الحفظ
+// حدّث baseline بعد الحفظ
 timelineInitialEnabled = !!timelineCheckbox.checked && !!effective?.eventDate;
 timelineEnabled = timelineInitialEnabled;
 
@@ -2268,7 +2278,7 @@ renderLinkedSourcesStory();
         previewTitle.textContent = original.title || inferTitleFromText(original.text) || 'قصة بدون عنوان';
         previewText.textContent = original.text || 'لم تتم إضافة نص لهذه القصة حتى الآن. يمكنك فتح وضع التحرير لكتابته.';
         renderPreviewFiles();
-// ✅ تحديث بلوك المصادر في المعاينة بعد الحفظ
+// تحديث بلوك المصادر في المعاينة بعد الحفظ
 previewBox.querySelectorAll('.stories-linked-sources').forEach(x => x.remove());
 const chips = renderPreviewLinkedSourcesStory();
 if (chips) tagsWrap.insertAdjacentElement('afterend', chips);
@@ -2295,7 +2305,7 @@ if (chips) tagsWrap.insertAdjacentElement('afterend', chips);
   dateLabel.textContent = labelText;
 }
 
-        // ✅ تحديث تاريخ آخر تعديل في المعاينة
+        //  تحديث تاريخ آخر تعديل في المعاينة
 if (effective.updatedAt && effective.updatedAt !== effective.createdAt) {
   updatedLabel.textContent =
     formatCreatedAtLabel(effective.updatedAt, {
@@ -2422,7 +2432,7 @@ timelineCheckbox.checked = (timelineInitialEnabled === true);
         if (lastEditedId === story.id) lastEditedId = null;
         draftNewMap.delete(story.id);
 
-// ✅ remove linked timeline events for this story
+// remove linked timeline events for this story
 upsertSectionEvents(person, handlers, {
   sectionId: 'stories',
   item: { id: story.id },
@@ -2439,7 +2449,7 @@ upsertSectionEvents(person, handlers, {
     });
     autoResizeTextareas(list, '.story-textarea, .story-note-input');
 
-    // ✅ بعد ما تنبني البطاقات: scroll + highlight
+    // بعد ما تنبني البطاقات: scroll + highlight
     if (navItemId) {
       const card = list.querySelector(`.story-card[data-story-id="${String(navItemId)}"]`);
       if (card) {
@@ -2581,7 +2591,7 @@ pinnedFilterSelect.addEventListener('change', () => {
 renderList();
 
 requestAnimationFrame(() => {
-  // ✅ لا تسوي scroll للـ lastEditedId إذا كان فيه nav تم استخدامه داخل renderList
+  // لا تسوي scroll للـ lastEditedId إذا كان فيه nav تم استخدامه داخل renderList
   if (!lastEditedId) return;
 
   const card = root.querySelector(`.story-card[data-story-id="${lastEditedId}"]`);
@@ -2590,7 +2600,5 @@ requestAnimationFrame(() => {
   }
 });
 
-
 return root;
-
 }

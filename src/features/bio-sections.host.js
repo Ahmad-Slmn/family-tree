@@ -1,11 +1,5 @@
 // src/features/bio-sections.host.js
-// وظيفة الملف:
-// - يعمل كجسر (Host) بين أقسام السيرة في الواجهة وطبقة البيانات (Model)
-// - يستقبل بيانات الأقسام من الـ UI (قصص، مصادر، تعليم، أحداث)
-// - يطبّع البيانات (تنظيف النصوص، ضمان المعرّفات، تواريخ الإنشاء والتحديث)
-// - يحدّث بيانات الشخص داخل العائلة النشطة
-// - ينفّذ commit على العائلة لحفظ التغييرات
-// - لا يحتوي أي منطق واجهة (UI) أو تعامل مع DOM
+// Host بين UI و Model: يطبّع بيانات الأقسام ثم يحفظها داخل العائلة النشطة (commit)
 
 export function makeBioSectionHost({ Model, findPersonByIdInFamily } = {}) {
   if (!Model) throw new Error('makeBioSectionHost: Model is required');
@@ -13,249 +7,226 @@ export function makeBioSectionHost({ Model, findPersonByIdInFamily } = {}) {
     throw new Error('makeBioSectionHost: findPersonByIdInFamily is required');
   }
 
-  /* -----------------------------------------------------------------------
-     أدوات مساعدة للتطبيع
-  ----------------------------------------------------------------------- */
+  /* أدوات تطبيع صغيرة لتقليل التكرار بدون تغيير السلوك */
   const nowIso = () => new Date().toISOString();
   const str = (v) => String(v ?? '').trim();
 
-  /* -----------------------------------------------------------------------
-     أدوات مساعدة للوصول الآمن للعائلة والشخص
-  ----------------------------------------------------------------------- */
+  const asArray = (v) => (Array.isArray(v) ? v : []);
+  const cloneArray = (v) => asArray(v).slice();
+
+  const toStrList = (v) => asArray(v).map(str).filter(Boolean);
+  const toIdList = (v) => asArray(v).map(String).filter(Boolean);
+
+  // توليد id: نفس منطقك (UUID إن توفر وإلا fallback)
+  const makeId = (prefix, id) =>
+    id || (crypto?.randomUUID?.() || `${prefix}_${Math.random().toString(36).slice(2)}`);
+
+  // ضمان timestamps مع الحفاظ على الموجود إن كان موجودًا
+  const withTimestamps = (obj, src) => {
+    const now = nowIso();
+    const createdAt = src?.createdAt || now;
+    const updatedAt = src?.updatedAt || createdAt;
+    return { ...obj, createdAt, updatedAt };
+  };
+
   const getActiveFamily = () => {
     const famKey = Model.getSelectedKey();
     const fam = Model.getFamilies()?.[famKey];
     return { famKey, fam };
   };
 
-  const getPerson = (fam, personId) => {
-    if (!fam || personId == null) return null;
-    return findPersonByIdInFamily(fam, personId);
-  };
+  const getPerson = (fam, personId) =>
+    (!fam || personId == null) ? null : findPersonByIdInFamily(fam, personId);
 
   const commit = (famKey) => {
-    if (!famKey) return;
-    Model.commitFamily(famKey);
+    if (famKey) Model.commitFamily(famKey);
   };
 
+  // غلاف موحد: يقلل تكرار (getActiveFamily/getPerson/commit)
+  const updatePersonSection = (personId, updater) => {
+    const { famKey, fam } = getActiveFamily();
+    if (!fam || !personId) return;
+
+    const person = getPerson(fam, personId);
+    if (!person) return;
+
+    updater(person, famKey);
+    commit(famKey);
+  };
+
+  /* إزالة sourceId من جميع الأقسام (يُستخدم عند حذف مصدر) */
+  function removeSourceIdEverywhere(person, sourceId) {
+    const sid = String(sourceId || '').trim();
+    if (!sid || !person) return false;
+
+    let changed = false;
+
+    const stripFromList = (arr, key) => {
+      if (!Array.isArray(arr)) return;
+      for (const it of arr) {
+        if (!it || !Array.isArray(it[key])) continue;
+
+        const before = it[key].length;
+        it[key] = it[key].map(String).filter((x) => x && x !== sid);
+        if (it[key].length !== before) changed = true;
+      }
+    };
+
+    stripFromList(person.education, 'sourceIds');
+    stripFromList(person.career, 'sourceIds');
+    stripFromList(person.events, 'sourceIds');
+    stripFromList(person.stories, 'sourceIds');
+
+    return changed;
+  }
+
   /* -----------------------------------------------------------------------
-     1) القصص (Stories)
-     - تطبيع كامل للحقول + ضمان id + createdAt/updatedAt
+     1) Stories: تطبيع كامل + sourceIds/tags + timestamps
   ----------------------------------------------------------------------- */
   function onUpdateStories(personId, stories) {
-    const { famKey, fam } = getActiveFamily();
-    if (!fam || !personId) return;
+    updatePersonSection(personId, (person) => {
+      const list = asArray(stories);
 
-    const person = getPerson(fam, personId);
-    if (!person) return;
+      person.stories = list.map((s) => withTimestamps({
+        id: makeId('s', s?.id),
+        title: str(s?.title),
+        text: str(s?.text),
 
-    const list = Array.isArray(stories) ? stories : [];
+        files: cloneArray(s?.files),
+        type: str(s?.type),
+        eventDate: s?.eventDate || null,
+        place: str(s?.place),
+        tags: toStrList(s?.tags),
 
-    person.stories = list.map((s) => {
-      const now = nowIso();
-      const createdAt = s?.createdAt || now;
-      const updatedAt = s?.updatedAt || createdAt;
+        mood: str(s?.mood),
+        visibility: str(s?.visibility),
+        narrator: str(s?.narrator),
+        toTimeline: !!s?.toTimeline,
 
-return {
-  id: s?.id || (crypto?.randomUUID?.() || ('s_' + Math.random().toString(36).slice(2))),
-  title: str(s?.title),
-  text: str(s?.text),
-  files: Array.isArray(s?.files) ? s.files.slice() : [],
-  type: str(s?.type),
-  eventDate: s?.eventDate || null,
-  place: str(s?.place),
-  tags: Array.isArray(s?.tags) ? s.tags.map(t => str(t)).filter(Boolean) : [],
-
-  mood: str(s?.mood),
-  visibility: str(s?.visibility),
-  narrator: str(s?.narrator),
-  toTimeline: !!s?.toTimeline,
-
-  note: str(s?.note),
-  pinned: !!s?.pinned,
-  sourceIds: Array.isArray(s?.sourceIds) ? s.sourceIds.map(String).filter(Boolean) : [],
-  createdAt,
-  updatedAt
-};
-
+        note: str(s?.note),
+        pinned: !!s?.pinned,
+        sourceIds: toIdList(s?.sourceIds)
+      }, s));
     });
-
-    commit(famKey);
   }
 
   /* -----------------------------------------------------------------------
-     2) المصادر (Sources)
-     - الحفاظ على باقي خصائص المصدر كما هي + ضمان id + createdAt/updatedAt
+     2) Sources: الحفاظ على بقية خصائص المصدر + ضمان حقول الهوية/الصلاحية + history
+     - بعد التحديث: أي مصدر حذفناه، نشيل id تبعه من كل الأقسام الأخرى
   ----------------------------------------------------------------------- */
-function onUpdateSources(personId, sources) {
-  const { famKey, fam } = getActiveFamily();
-  if (!fam || !personId) return;
+  function onUpdateSources(personId, sources) {
+    updatePersonSection(personId, (person) => {
+      const list = asArray(sources);
 
-  const person = getPerson(fam, personId);
-  if (!person) return;
+      const oldIds = new Set(asArray(person.sources).map((s) => String(s.id)));
+      const newIds = new Set(list.map((s) => String(s?.id || '')).filter(Boolean));
 
-  const list = Array.isArray(sources) ? sources : [];
-const oldIds = new Set((Array.isArray(person.sources) ? person.sources : []).map(s => String(s.id)));
-const newIds = new Set(list.map(s => String(s?.id || '')).filter(Boolean));
+      const normalizeHistory = (raw) => asArray(raw)
+        .map((h) => ({ at: h?.at || null, by: str(h?.by), action: str(h?.action) }))
+        .filter((x) => x.at && x.action);
 
-  const normalizeHistory = (raw) => {
-    const arr = Array.isArray(raw) ? raw : [];
-    return arr
-      .map(h => ({
-        at: h?.at || null,
-        by: str(h?.by),
-        action: str(h?.action)
-      }))
-      .filter(x => x.at && x.action);
-  };
+      person.sources = list.map((src) => withTimestamps({
+        ...src,
+        id: makeId('src', src?.id),
 
-  person.sources = list.map((src) => {
-    const now = nowIso();
-    const createdAt = src?.createdAt || now;
-    const updatedAt = src?.updatedAt || createdAt;
+        validUntil: src?.validUntil || null,
+        expiryAlertDays: Number.isFinite(Number(src?.expiryAlertDays)) ? Number(src.expiryAlertDays)
+          : 30,
 
-    return {
-      ...src,
-      id: src?.id || (crypto?.randomUUID?.() || ('src_' + Math.random().toString(36).slice(2))),
+        holderName: str(src?.holderName),
+        nationalId: str(src?.nationalId),
+        civilRegistryNo: str(src?.civilRegistryNo),
 
-      // ضمان حقول جديدة
-      validUntil: src?.validUntil || null,
-      expiryAlertDays: Number.isFinite(Number(src?.expiryAlertDays)) ? Number(src.expiryAlertDays) : 30,
+        history: normalizeHistory(src?.history)
+      }, src));
 
-      holderName: str(src?.holderName),
-      nationalId: str(src?.nationalId),
-      civilRegistryNo: str(src?.civilRegistryNo),
-
-      history: normalizeHistory(src?.history),
-
-      createdAt,
-      updatedAt
-    };
-  });
-for (const id of oldIds) {
-  if (!newIds.has(id)) {
-    removeSourceIdEverywhere(person, id);
+      for (const id of oldIds) {
+        if (!newIds.has(id)) removeSourceIdEverywhere(person, id);
+      }
+    });
   }
-}
-  commit(famKey);
-}
 
   /* -----------------------------------------------------------------------
-     3) التعليم (Education)
-     - تطبيع كامل للحقول + ضمان id + createdAt/updatedAt
+     3) Education: تطبيع كامل + ongoing يحكم endDate + arrays + timestamps
   ----------------------------------------------------------------------- */
-function onUpdateEducation(personId, education) {
-  const { famKey, fam } = getActiveFamily();
-  if (!fam || !personId) return;
+  function onUpdateEducation(personId, education) {
+    updatePersonSection(personId, (person) => {
+      const list = asArray(education);
 
-  const person = getPerson(fam, personId);
-  if (!person) return;
+      person.education = list.map((e) => {
+        const ongoing = !!e?.ongoing;
 
-  const list = Array.isArray(education) ? education : [];
+        return withTimestamps({
+          id: makeId('e', e?.id),
 
-  person.education = list.map((e) => {
-    const now = nowIso();
-    const createdAt = e?.createdAt || now;
-    const updatedAt = e?.updatedAt || createdAt;
+          title: str(e?.title),
+          institution: str(e?.institution),
+          field: str(e?.field),
 
-    const highlights =
-      Array.isArray(e?.highlights) ? e.highlights.map(str).filter(Boolean) : [];
+          degreeType: str(e?.degreeType),
+          credentialId: str(e?.credentialId),
+          issuer: str(e?.issuer),
+          accreditation: str(e?.accreditation),
+          verificationUrl: str(e?.verificationUrl),
+          language: str(e?.language),
+          mode: str(e?.mode),
+          highlights: toStrList(e?.highlights),
 
-    const ongoing = !!e?.ongoing;
+          startDate: e?.startDate || null,
+          endDate: ongoing ? null : (e?.endDate || null),
+          ongoing,
 
-    return {
-      id: e?.id || (crypto?.randomUUID?.() || ('e_' + Math.random().toString(36).slice(2))),
+          place: str(e?.place),
+          grade: str(e?.grade),
+          description: str(e?.description),
 
-      title: str(e?.title),
-      institution: str(e?.institution),
-      field: str(e?.field),
+          files: cloneArray(e?.files),
+          tags: toStrList(e?.tags),
 
-      degreeType: str(e?.degreeType),
-      credentialId: str(e?.credentialId),
-      issuer: str(e?.issuer),
-      accreditation: str(e?.accreditation),
-      verificationUrl: str(e?.verificationUrl),
-      language: str(e?.language),
-      mode: str(e?.mode),
-      highlights,
+          pinned: !!e?.pinned,
+          note: str(e?.note),
+          sourceIds: toIdList(e?.sourceIds)
+        }, e);
+      });
+    });
+  }
 
-      startDate: e?.startDate || null,
-      endDate: ongoing ? null : (e?.endDate || null),
-      ongoing,
-
-      place: str(e?.place),
-      grade: str(e?.grade),
-      description: str(e?.description),
-
-      files: Array.isArray(e?.files) ? e.files.slice() : [],
-
-      tags: Array.isArray(e?.tags) ? e.tags.map(t => str(t)).filter(Boolean) : [],
-      pinned: !!e?.pinned,
-      note: str(e?.note),
-  sourceIds: Array.isArray(e?.sourceIds) ? e.sourceIds.map(String).filter(Boolean) : [],
-
-      createdAt,
-      updatedAt
-    };
-  });
-
-  commit(famKey);
-}
-
-    /* -----------------------------------------------------------------------
-     4) المسار الوظيفي (Career)
-     - تطبيع كامل للحقول + ضمان id + createdAt/updatedAt
+  /* -----------------------------------------------------------------------
+     4) Career: تطبيع كامل + arrays + timestamps
   ----------------------------------------------------------------------- */
   function onUpdateCareer(personId, career) {
-    const { famKey, fam } = getActiveFamily();
-    if (!fam || !personId) return;
+    updatePersonSection(personId, (person) => {
+      const list = asArray(career);
 
-    const person = getPerson(fam, personId);
-    if (!person) return;
+      person.career = list.map((c) => withTimestamps({
+        id: makeId('car', c?.id),
 
-    const list = Array.isArray(career) ? career : [];
+        title: str(c?.title),
+        org: str(c?.org),
+        orgType: str(c?.orgType),
 
-person.career = list.map((c) => {
-  const now = nowIso();
-  const createdAt = c?.createdAt || now;
-  const updatedAt = c?.updatedAt || createdAt;
+        start: str(c?.start),
+        end: (c?.end == null ? '' : str(c?.end)),
+        place: str(c?.place),
+        note: str(c?.note),
 
-  return {
-    id: c?.id || (crypto?.randomUUID?.() || ('car_' + Math.random().toString(36).slice(2))),
+        sector: str(c?.sector),
+        employmentType: str(c?.employmentType),
+        rank: str(c?.rank),
+        endReason: str(c?.endReason),
 
-    title: str(c?.title),
-    org: str(c?.org),
-    orgType: str(c?.orgType), 
-    start: str(c?.start),
-    end: (c?.end == null ? '' : str(c?.end)),
-    place: str(c?.place),
-    note: str(c?.note),
+        highlights: toStrList(c?.highlights),
+        skills: toStrList(c?.skills),
+        startPrecision: str(c?.startPrecision),
 
-    sector: str(c?.sector),
-    employmentType: str(c?.employmentType),
-    rank: str(c?.rank),
-    endReason: str(c?.endReason),
-    highlights: Array.isArray(c?.highlights) ? c.highlights.map(str).filter(Boolean) : [],
-    skills: Array.isArray(c?.skills) ? c.skills.map(str).filter(Boolean) : [],
-
-    startPrecision: str(c?.startPrecision),
-
-sourceIds: Array.isArray(c?.sourceIds) ? c.sourceIds.map(String).filter(Boolean) : [],
-    tags: Array.isArray(c?.tags) ? c.tags.map(t => str(t)).filter(Boolean) : [],
-
-    createdAt,
-    updatedAt
-  };
-});
-
-
-    commit(famKey);
+        sourceIds: toIdList(c?.sourceIds),
+        tags: toStrList(c?.tags)
+      }, c));
+    });
   }
 
-
   /* -----------------------------------------------------------------------
-     5) الأحداث (Events)
-     - نسخ بسيط للأحداث كما هي (بدون تطبيع) لأن مصدرها غالبًا UI/Editor جاهز
+     5) Events: نفس منطقك (نسخ كما هو) + فقط ضمان sourceIds
   ----------------------------------------------------------------------- */
   function onUpdateEvents(personWithEvents) {
     if (!personWithEvents || !personWithEvents._id) return;
@@ -266,44 +237,14 @@ sourceIds: Array.isArray(c?.sourceIds) ? c.sourceIds.map(String).filter(Boolean)
     const person = getPerson(fam, personWithEvents._id);
     if (!person) return;
 
-    const list = Array.isArray(personWithEvents.events) ? personWithEvents.events : [];
-person.events = list.map(ev => ({
-  ...ev,
-  sourceIds: Array.isArray(ev?.sourceIds) ? ev.sourceIds.map(String).filter(Boolean) : []
-}));
+    person.events = asArray(personWithEvents.events).map((ev) => ({
+      ...ev,
+      sourceIds: toIdList(ev?.sourceIds)
+    }));
 
     commit(famKey);
   }
 
-  function removeSourceIdEverywhere(person, sourceId) {
-  const sid = String(sourceId || '').trim();
-  if (!sid || !person) return false;
-
-  let changed = false;
-
-  const stripFromList = (arr, key) => {
-    if (!Array.isArray(arr)) return;
-    for (const it of arr) {
-      if (!it || !Array.isArray(it[key])) continue;
-
-      const beforeLen = it[key].length;
-      it[key] = it[key].map(String).filter(x => x && x !== sid);
-
-      if (it[key].length !== beforeLen) changed = true;
-    }
-  };
-
-  stripFromList(person.education, 'sourceIds');
-  stripFromList(person.career, 'sourceIds');
-  stripFromList(person.events, 'sourceIds');
-  stripFromList(person.stories, 'sourceIds');
-
-  return changed;
-}
-
-  /* -----------------------------------------------------------------------
-     واجهة موحدة ليتم دمجها داخل handlers في app.js
-  ----------------------------------------------------------------------- */
   return {
     onUpdateStories,
     onUpdateSources,
@@ -311,7 +252,7 @@ person.events = list.map(ev => ({
     onUpdateCareer,
     onUpdateEvents,
 
-    // اسم متوافق مع الاسم الحالي الموجود في handlers
+    // اسم متوافق مع handlers الحالية
     onEventsChange: onUpdateEvents
   };
 }

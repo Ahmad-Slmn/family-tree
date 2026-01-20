@@ -66,8 +66,7 @@
   border-color:color-mix(in oklab,var(--arrow-color) 30%,var(--surface-border));
 }
 
-/* input المصادر في وضع التحرير
-   لأنه ليس داخل .biosec-meta-row فممكن يطلع بدون ستايل متناسق */
+/* input المصادر في وضع التحرير */
 .bio-section-career .career-sources-input{
   width:100%;
   padding:.32rem .65rem;
@@ -227,7 +226,7 @@
 
 /* محتوى البلوك (أي شيء داخل البلوك) */
 .bio-section-career .biosec-preview-block > :last-child{
-  margin:0; /* مهم لأن previewText هو <p> وله margin افتراضي */
+  margin:0;
 }
 
 /* تحسينات خاصة لبعض محتويات البلوك */
@@ -249,4 +248,3 @@
   flex-wrap:wrap;
   gap:.35rem;
 }
-
